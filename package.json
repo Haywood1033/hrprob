@@ -1,0 +1,8 @@
+{
+  "name": "hrprob",
+  "version": "1.0.0",
+  "description": "MLB HR Probability Engine",
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  }
+}
