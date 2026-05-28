@@ -1,4 +1,4 @@
-// api/streaks.js — last 14 games stats using game log endpoint
+// api/streaks.js — HR streak based on last 20 plate appearances
 const CACHE_TTL = 30 * 60 * 1000;
 let cache = { data: null, timestamp: null };
 
@@ -12,9 +12,7 @@ async function searchPlayer(name) {
   return d.people?.[0]?.id || null;
 }
 
-async function getGameLog(playerId) {
-  // Fetch full season game log — returns one entry per game with PA
-  // Use a high limit to ensure we get all games
+async function getLast20PA(playerId) {
   const r = await fetch(
     `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=hitting&sportId=1&limit=200`,
     { headers: { 'User-Agent': 'Mozilla/5.0' } }
@@ -25,36 +23,51 @@ async function getGameLog(playerId) {
   const splits = d.stats?.[0]?.splits || [];
   if (!splits.length) return null;
 
-  // Filter to only games with at least 1 PA and sort by date ascending
-  const gameSplits = splits
-    .filter(s => (s.stat?.plateAppearances || s.stat?.atBats || 0) > 0)
-    .sort((a, b) => new Date(a.date) - new Date(b.date));
+  // Sort by date descending — most recent first
+  const sorted = splits
+    .filter(s => (s.stat?.plateAppearances || 0) > 0)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
 
-  // Take last 14 games with PA
-  const last14 = gameSplits.slice(-14);
-
-  let hr=0, h=0, ab=0, tb=0, bb=0;
-  for (const s of last14) {
+  // Walk back through games until we accumulate 20 PA
+  let hr=0, h=0, ab=0, tb=0, bb=0, pa=0, games=0;
+  for (const s of sorted) {
+    const gamePa = s.stat?.plateAppearances || 0;
+    if (pa + gamePa > 20) {
+      // Take partial game to hit exactly 20 PA — use proportional stats
+      const fraction = (20 - pa) / gamePa;
+      hr += Math.round((s.stat?.homeRuns    || 0) * fraction);
+      h  += Math.round((s.stat?.hits        || 0) * fraction);
+      ab += Math.round((s.stat?.atBats      || 0) * fraction);
+      tb += Math.round((s.stat?.totalBases  || 0) * fraction);
+      bb += Math.round((s.stat?.baseOnBalls || 0) * fraction);
+      pa = 20;
+      games++;
+      break;
+    }
     hr += s.stat?.homeRuns    || 0;
     h  += s.stat?.hits        || 0;
     ab += s.stat?.atBats      || 0;
     tb += s.stat?.totalBases  || 0;
     bb += s.stat?.baseOnBalls || 0;
+    pa += gamePa;
+    games++;
+    if (pa >= 20) break;
   }
 
-  const games = last14.length;
+  if (pa === 0) return null;
+
   const avg = ab > 0 ? +(h/ab).toFixed(3)  : 0;
   const slg = ab > 0 ? +(tb/ab).toFixed(3) : 0;
   const obp = (ab+bb) > 0 ? +((h+bb)/(ab+bb)).toFixed(3) : 0;
 
-  // Flame tiers based on 14-game HR count
+  // Flame tiers for last 20 PA
   let flame = '';
-  if      (hr >= 4)                  flame = '🔥🔥';
-  else if (hr >= 2)                  flame = '🔥';
-  else if (ab >= 30 && slg < 0.300)  flame = '❄️';
+  if      (hr >= 4)               flame = '🔥🔥';
+  else if (hr >= 2)               flame = '🔥';
+  else if (pa >= 18 && slg < 0.250) flame = '❄️';
 
-  console.log(`${playerId}: ${games} games, ${hr} HR, ${ab} AB, total splits: ${splits.length}`);
-  return { hr, avg, slg, obp, ab, games, flame };
+  console.log(`${playerId}: ${games} games, ${pa} PA, ${hr} HR, slg=${slg}, flame=${flame}`);
+  return { hr, avg, slg, obp, pa, games, flame };
 }
 
 module.exports = async function handler(req, res) {
@@ -82,7 +95,7 @@ module.exports = async function handler(req, res) {
       try {
         const id = await searchPlayer(name);
         if (!id) return;
-        const stats = await getGameLog(id);
+        const stats = await getLast20PA(id);
         if (stats) results[name] = stats;
       } catch(e) { console.warn(`Streak ${name}:`, e.message); }
     }));
