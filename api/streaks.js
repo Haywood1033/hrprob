@@ -13,9 +13,10 @@ async function searchPlayer(name) {
 }
 
 async function getGameLog(playerId) {
-  // gameLog endpoint returns one entry per game played this season
+  // Fetch full season game log — returns one entry per game with PA
+  // Use a high limit to ensure we get all games
   const r = await fetch(
-    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=hitting&sportId=1`,
+    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=hitting&sportId=1&limit=200`,
     { headers: { 'User-Agent': 'Mozilla/5.0' } }
   );
   if (!r.ok) return null;
@@ -24,8 +25,13 @@ async function getGameLog(playerId) {
   const splits = d.stats?.[0]?.splits || [];
   if (!splits.length) return null;
 
-  // Take last 14 games only
-  const last14 = splits.slice(-14);
+  // Filter to only games with at least 1 PA and sort by date ascending
+  const gameSplits = splits
+    .filter(s => (s.stat?.plateAppearances || s.stat?.atBats || 0) > 0)
+    .sort((a, b) => new Date(a.date) - new Date(b.date));
+
+  // Take last 14 games with PA
+  const last14 = gameSplits.slice(-14);
 
   let hr=0, h=0, ab=0, tb=0, bb=0;
   for (const s of last14) {
@@ -37,16 +43,17 @@ async function getGameLog(playerId) {
   }
 
   const games = last14.length;
-  const avg = ab > 0 ? +(h/ab).toFixed(3)   : 0;
-  const slg = ab > 0 ? +(tb/ab).toFixed(3)  : 0;
+  const avg = ab > 0 ? +(h/ab).toFixed(3)  : 0;
+  const slg = ab > 0 ? +(tb/ab).toFixed(3) : 0;
   const obp = (ab+bb) > 0 ? +((h+bb)/(ab+bb)).toFixed(3) : 0;
 
-  // Flame tiers
+  // Flame tiers based on 14-game HR count
   let flame = '';
   if      (hr >= 4)                  flame = '🔥🔥';
   else if (hr >= 2)                  flame = '🔥';
   else if (ab >= 30 && slg < 0.300)  flame = '❄️';
 
+  console.log(`${playerId}: ${games} games, ${hr} HR, ${ab} AB, total splits: ${splits.length}`);
   return { hr, avg, slg, obp, ab, games, flame };
 }
 
