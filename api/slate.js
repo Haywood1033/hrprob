@@ -22,19 +22,39 @@ async function fetchActiveRoster(teamName) {
   if (!teamId) return null;
   try {
     const r = await fetch(
-      `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=active&hydrate=person(batSide)`,
+      `https://statsapi.mlb.com/api/v1/teams/${teamId}/roster?rosterType=active&hydrate=person`,
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     );
     if (!r.ok) return null;
     const d = await r.json();
     const roster = d.roster || [];
-    // Return batters only (position players), exclude pitchers
+
+    // For batSide we need to fetch person details separately
+    // The roster endpoint doesn't reliably return batSide even with hydrate
+    // Use the people endpoint to get batSide for all players at once
+    const ids = roster
+      .filter(p => p.position?.type !== 'Pitcher' && p.person?.id)
+      .map(p => p.person.id);
+
+    if (!ids.length) return null;
+
+    // Fetch all player details in one call
+    const pr = await fetch(
+      `https://statsapi.mlb.com/api/v1/people?personIds=${ids.join(',')}&hydrate=currentTeam`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    );
+    const pd = pr.ok ? await pr.json() : { people: [] };
+    const personMap = {};
+    for (const p of (pd.people || [])) {
+      personMap[p.id] = p.batSide?.code || 'R';
+    }
+
     return roster
       .filter(p => p.position?.type !== 'Pitcher')
       .map(p => ({
         name:    p.person?.fullName || '',
         id:      p.person?.id,
-        batSide: HAND_MAP[p.person?.batSide?.code] || 'R',
+        batSide: HAND_MAP[personMap[p.person?.id]] || HAND_MAP[p.person?.batSide?.code] || 'R',
         pos:     p.position?.abbreviation || '?',
         source:  'projected',
       }))
