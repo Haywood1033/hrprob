@@ -12,10 +12,12 @@ async function searchPlayer(name) {
   );
   if (!r.ok) return null;
   const d = await r.json();
-  return d.people?.[0]?.id || null;
+  const p = d.people?.[0];
+  if (!p) return null;
+  return { id: p.id, batSide: p.batSide?.code || 'R' };
 }
 
-async function getPlatoonSplits(playerId) {
+async function getPlatoonSplits(playerId) {  // playerId is just the numeric ID
   // MLB Stats API statSplits — returns vs RHP and vs LHP splits for current season
   const r = await fetch(
     `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=hitting&sportId=1&sitCodes=vr,vl`,
@@ -81,10 +83,15 @@ module.exports = async function handler(req, res) {
     const batch = names.slice(i, i + 5);
     await Promise.allSettled(batch.map(async name => {
       try {
-        const id = await searchPlayer(name);
-        if (!id) return;
-        const splits = await getPlatoonSplits(id);
-        if (splits) results[name] = splits;
+        const person = await searchPlayer(name);
+        if (!person) return;
+        const splits = await getPlatoonSplits(person.id);
+        if (splits) {
+          results[name] = { ...splits, batSide: person.batSide };
+        } else {
+          // Still return batSide even if no split data
+          results[name] = { batSide: person.batSide, vsRHP: null, vsLHP: null };
+        }
       } catch(e) {
         console.warn(`Splits ${name}:`, e.message);
       }
