@@ -7,7 +7,7 @@ const { fetchAllWeather } = require('../lib/weather.js');
 let cache = { data: null, timestamp: null, date: null };
 
 const TEAM_IDS = {
-  Angels:108, Athletics:133, Orioles:110, 'Red Sox':111, Cubs:112,
+  Angels:108, Diamondbacks:109, Athletics:133, Orioles:110, 'Red Sox':111, Cubs:112,
   Reds:113, Guardians:114, Rockies:115, Tigers:116, Astros:117,
   Royals:118, Dodgers:119, Nationals:120, Mets:121, Pirates:134,
   Padres:135, Mariners:136, Giants:137, Cardinals:138, Rays:139,
