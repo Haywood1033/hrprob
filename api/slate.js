@@ -97,13 +97,16 @@ module.exports = async function handler(req, res) {
   // Step 2: get all teams in today's games
   const teams = [...new Set(pitchers.flatMap(g => [g.awayTeam, g.homeTeam]))];
 
-  // Step 3: run lineups, rosters, weather in parallel
-  const [mlbLineups, rotoLineups, weather, ...rosterResults] = await Promise.all([
+  // Step 3: run lineups and rosters in parallel first
+  const [mlbLineups, rotoLineups, ...rosterResults] = await Promise.all([
     safe(fetchMLBLineups(today),  7000),
     safe(fetchRotoWireLineups(),  7000),
-    safe(fetchAllWeather(today),  8000),
     ...teams.map(team => safe(fetchActiveRoster(team), 6000)),
   ]);
+
+  // Step 4: fetch weather only for today's home team parks (cuts calls in half)
+  const homeTeams = pitchers.map(g => g.homeTeam).filter(Boolean);
+  const weather = await safe(fetchAllWeather(today, homeTeams), 9000);
 
   // Build rosters map
   const rosters = {};
