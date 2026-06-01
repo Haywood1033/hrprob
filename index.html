@@ -1895,11 +1895,11 @@ function renderForecast() {
               <div style="font-size:10px;color:var(--t3);margin-top:2px">Avg first inning run probability</div>
             </div>
             <div>
-              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--green)">${f1Games.filter(d=>d.eitherF1>=0.55).length}</div>
+              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--green)">${f1Games.filter(d=>Math.round(d.eitherF1*100)>=55).length}</div>
               <div style="font-size:10px;color:var(--t3);margin-top:2px">High probability games (55%+)</div>
             </div>
             <div>
-              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--amber)">${f1Games.filter(d=>d.eitherF1<0.40).length}</div>
+              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--amber)">${f1Games.filter(d=>Math.round(d.eitherF1*100)<40).length}</div>
               <div style="font-size:10px;color:var(--t3);margin-top:2px">Pitcher-dominated games (&lt;40%)</div>
             </div>
           </div>
