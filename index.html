@@ -792,6 +792,41 @@ function hrProb(b,park,wx,pit,order){
     p *= (bats === ph) ? 0.93 : 1.05;
   }
 
+  // ── PITCHER PLATOON SPLITS ────────────────────────────────────
+  // Adjust xERA/HR9 based on pitcher's actual performance vs this batter's hand
+  // This replaces the single xERA value with a platoon-adjusted quality metric
+  const pitName = pit.name || pit._name;
+  const pitSplits = pitName ? PITCHER_SPLITS[pitName] : null;
+
+  if (pitSplits) {
+    // Which side does this batter hit from vs this pitcher?
+    // LHB vs RHP pitcher → use pitcher's vsLHB splits
+    // RHB vs RHP pitcher → use pitcher's vsRHB splits
+    const pitSplitKey = bats === 'L' ? 'vsLHB' : bats === 'R' ? 'vsRHB' : null;
+    const pitThisSplit = pitSplitKey ? pitSplits[pitSplitKey] : null;
+    const pitOppKey    = bats === 'L' ? 'vsRHB' : 'vsLHB';
+    const pitOppSplit  = pitSplits[pitOppKey];
+
+    if (pitThisSplit && pitThisSplit.bf >= 20) {
+      // Pitcher FIP vs this hand — relative to their overall FIP
+      const pitFipThis = pitThisSplit.fip || 4.50;
+      const pitFipOpp  = pitOppSplit?.fip  || 4.50;
+      const pitFipAvg  = pitOppSplit ? (pitFipThis + pitFipOpp) / 2 : 4.50;
+
+      // How much worse/better is the pitcher vs this batter hand vs their average?
+      // FIP difference: positive = pitcher is worse vs this hand = batter advantage
+      const fipDiff = pitFipThis - pitFipAvg;
+      p += fipDiff * 0.008; // ~0.8% per FIP point of pitcher disadvantage
+
+      // Also adjust for pitcher HR/9 vs this hand specifically
+      const pitHr9This = pitThisSplit.hr9 || 1.20;
+      const pitHr9Avg  = pitOppSplit ? (pitHr9This + (pitOppSplit.hr9||1.20)) / 2 : 1.20;
+      p += (pitHr9This - pitHr9Avg) * 0.012; // additional HR/9 adjustment
+
+      console.debug(`Pitcher splits: ${pitName} vs ${bats}HB — FIP ${pitFipThis} (avg ${pitFipAvg.toFixed(2)}), HR/9 ${pitHr9This}`);
+    }
+  }
+
   // ── BATTING ORDER POSITION ────────────────────────────────────
   // Cleanup hitters (3-5) get slightly more AB with men on
   // Leadoff (1-2) and bottom (7-9) slight adjustment
@@ -2332,7 +2367,8 @@ function populatePitcherIds(pitchers) {
 
 // ── HOT STREAK DATA (MLB Stats API, last 14 games) ───────────────
 const STREAK = {};
-const SPLITS = {};   // real platoon splits from /api/splits
+const SPLITS = {};         // batter platoon splits from /api/splits
+const PITCHER_SPLITS = {}; // pitcher platoon splits from /api/splits
 const ROSTERS = {};   // active rosters from /api/slate — current 26-man        // {name: {hr, avg, slg, ab, games, flame}}
 window._debug = {get STREAK(){return STREAK;}, get BATTER(){return BATTER;}, get PITCHER(){return PITCHER;}, get games(){return games;}, get allRows(){return allRows;}};
 const STREAK_ID_CACHE = {};
@@ -2546,14 +2582,17 @@ async function loadSplitsData() {
   }
   if (!top60.length) return;
 
-  console.log(`Fetching platoon splits for ${top60.length} players…`);
+  // Also send today's starting pitchers for platoon split fetching
+  const pitcherNames = [...new Set(games.flatMap(g => [g.ap?.name, g.hp?.name]).filter(Boolean))];
+
+  console.log(`Fetching platoon splits for ${top60.length} batters + ${pitcherNames.length} pitchers…`);
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 45000);
+    const t = setTimeout(() => ctrl.abort(), 55000); // extra time for pitchers
     const r = await fetch('/api/splits', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: top60 }),
+      body: JSON.stringify({ names: top60, pitchers: pitcherNames }),
       signal: ctrl.signal,
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2563,13 +2602,19 @@ async function loadSplitsData() {
         SPLITS[name] = splits;
       }
       const withBoth = Object.values(SPLITS).filter(s=>s.vsRHP&&s.vsLHP).length;
-      console.log(`Splits loaded: ${Object.keys(SPLITS).length} players, ${withBoth} with both sides`);
-      // Correct bat side on rows using confirmed data from MLB Stats API
+      console.log(`Batter splits loaded: ${Object.keys(SPLITS).length} players, ${withBoth} with both sides`);
       for (const r of allRows) {
         if (SPLITS[r.name]?.batSide) r.bats = SPLITS[r.name].batSide;
       }
-      rebuild(); renderAll();
     }
+    if (d.pitcherSplits) {
+      for (const [name, splits] of Object.entries(d.pitcherSplits)) {
+        PITCHER_SPLITS[name] = splits;
+      }
+      const pitWithBoth = Object.values(PITCHER_SPLITS).filter(s=>s.vsLHB&&s.vsRHB).length;
+      console.log(`Pitcher splits loaded: ${Object.keys(PITCHER_SPLITS).length} pitchers, ${pitWithBoth} with both sides`);
+    }
+    rebuild(); renderAll();
   } catch(e) {
     console.warn('Splits fetch failed:', e.message);
   }
@@ -2637,6 +2682,22 @@ function expand(i){
         <div style="font-size:13px;font-family:var(--mono);color:var(--t1);font-weight:600">${r.pitName||'—'}</div>
         <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:2px">xERA ${(pit.xera||pit.era||4.5).toFixed(2)} · HR/9 ${(pit.hr9||1.2).toFixed(2)}</div>
         <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Whiff ${(pit.whiff||22).toFixed(1)}%</div>
+        ${(() => {
+          const ps = PITCHER_SPLITS[r.pitName];
+          const bSide = r.bats || 'R';
+          const splitKey = bSide === 'L' ? 'vsLHB' : 'vsRHB';
+          const s = ps?.[splitKey];
+          if (!s || s.bf < 20) return ps ? '<div style="font-size:10px;color:var(--t3);margin-top:3px">Pitcher splits loading…</div>' : '';
+          const oppKey = bSide === 'L' ? 'vsRHB' : 'vsLHB';
+          const opp = ps?.[oppKey];
+          const fipColor = s.fip > (opp?.fip||4.5) ? 'var(--red)' : 'var(--green)';
+          return `<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--bg3)">
+            <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">vs ${bSide}HB this season</div>
+            <div style="font-size:11px;font-family:var(--mono);color:${fipColor}">FIP ${s.fip}</div>
+            <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">HR/9 ${s.hr9} · ${s.bf} BF</div>
+            ${opp ? `<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs ${bSide==='L'?'R':'L'}HB: FIP ${opp.fip}</div>` : ''}
+          </div>`;
+        })()}
       </div>
       <div style="padding:10px 14px;border-right:1px solid var(--bd)">
         <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Platoon</div>
