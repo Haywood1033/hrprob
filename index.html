@@ -1516,6 +1516,14 @@ function renderForecast() {
         const icons=[(park.f||1)>=1.05?'📈':'',windOut?'💨':'',ou>=9.5?'🔥':''].filter(Boolean).join('');
         return '<div class="fcast-bar-row"><div class="fcast-bar-label">'+g.away+' @ '+g.home+'</div><div class="fcast-bar-track"><div class="fcast-bar-fill" style="width:'+pct+'%;background:'+bc+'"></div></div><div class="fcast-bar-val">'+exp.toFixed(1)+'</div><div class="fcast-bar-icons">'+icons+'</div></div>';
       }).join('')}
+      <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--bd)">
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);color:var(--t3)"><span>📈</span> Hitter-friendly park (PF ≥ 1.05)</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);color:var(--t3)"><span>💨</span> Wind blowing out</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);color:var(--t3)"><span>🔥</span> High O/U total (9.5+)</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);color:var(--t3)"><span style="width:10px;height:4px;background:var(--green);display:inline-block;border-radius:2px"></span> Elite park (PF ≥ 1.15)</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);color:var(--t3)"><span style="width:10px;height:4px;background:var(--teal);display:inline-block;border-radius:2px"></span> Hitter park</div>
+        <div style="display:flex;align-items:center;gap:5px;font-size:10px;font-family:var(--mono);color:var(--t3)"><span style="width:10px;height:4px;background:var(--t3);display:inline-block;border-radius:2px"></span> Neutral / pitcher park</div>
+      </div>
     </div>
 
     <div class="fcast-section">
