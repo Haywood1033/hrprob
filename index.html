@@ -948,6 +948,19 @@ function parseStatcastCSV(csv,type){
 
 function getBatter(name){
   if(BATTER[name])return BATTER[name];
+  // Direct alias — Jr./Sr. suffix often dropped by MLB lineup API
+  const aliases = {
+    'Ronald Acuña':    'Ronald Acuña Jr.',
+    'Vladimir Guerrero': 'Vladimir Guerrero Jr.',
+    'Fernando Tatis':  'Fernando Tatis Jr.',
+    'Bobby Witt':      'Bobby Witt Jr.',
+    'Bo Jackson':      'Bo Jackson Jr.',
+    'Cal Ripken':      'Cal Ripken Jr.',
+  };
+  if (aliases[name] && BATTER[aliases[name]]) return BATTER[aliases[name]];
+  // Also try adding Jr. if not found
+  if (!name.includes('Jr.') && BATTER[name+' Jr.']) return BATTER[name+' Jr.'];
+  if (!name.includes('Sr.') && BATTER[name+' Sr.']) return BATTER[name+' Sr.'];
   // Fuzzy match — handles accent variations, Jr./Sr. etc
   const n=name.toLowerCase().replace(/[^a-z ]/g,'');
   for(const[k,v]of Object.entries(BATTER)){
@@ -1765,12 +1778,14 @@ function rebuild(){
 
       batters.forEach((p,i)=>{
         const bs=getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0};
-        bs._name=p.name; const hrp=hrProbWithStreak(bs,park,wx,pit,p.battingOrder||(i+1));
+        // Use canonical name (with Jr./Sr. if applicable) for display and lookups
+        const canonName = (!p.name.includes('Jr.') && BATTER[p.name+' Jr.']) ? p.name+' Jr.' : p.name;
+        bs._name=canonName; const hrp=hrProbWithStreak(bs,park,wx,pit,p.battingOrder||(i+1));
         const bookOdds = HR_ODDS[p.name] || null;
         const ev = calcEV(hrp, bookOdds);
         const gameOdds = GAME_ODDS[g.away+'@'+g.home] || null;
         allRows.push({
-          name:p.name,team,bats:getBatSide(p.name, p.batSide, bs),
+          name:canonName,team,bats:getBatSide(canonName, p.batSide, bs),
           order:p.battingOrder||(i+1),
           source:p.source||(confirmed?'confirmed':'projected'),
           ev:bs.ev||88.5,barrel:bs.ba||8,hh:bs.hh||37,
