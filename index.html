@@ -2556,7 +2556,7 @@ function renderGames(){
   const grid=document.getElementById('ggrid');
   if(!allRows.length){grid.innerHTML='<div class="empty"><h3>Loading…</h3></div>';return;}
 
-  grid.innerHTML='<div class="ggrid-inner">' + games.map(g=>{
+  grid.innerHTML= games.map(g=>{
     const park=getPark(g.home)||{};
     const wx=WX[g.home]||{};
     const ap=getPitcher(g.ap.name)||{};
@@ -2614,7 +2614,7 @@ function renderGames(){
         ${teamSection(homeRows,g.home,g.ap.name,ap)}
       </div>
     </div>`;
-  }).join('') + '</div>';
+  }).join('');
 }
 
 
