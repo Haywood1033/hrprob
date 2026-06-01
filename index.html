@@ -1602,6 +1602,14 @@ function computeAccuracy(records, window='all') {
 let histWindow = 'all';
 
 
+function toggleFcastHot(header) {
+  const body = document.getElementById('fcast-hot-body');
+  const chevron = document.getElementById('fcast-hot-chevron');
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  chevron.textContent = open ? '▼' : '▲';
+}
+
 function renderForecast() {
   const grid = document.getElementById('fcast-grid');
   if (!allRows.length) {
@@ -1719,6 +1727,55 @@ function renderForecast() {
           <div class="fcast-bar-icons">${icons}</div>
         </div>`;
       }).join('')}
+    </div>
+
+    <!-- HOT BATTERS -->
+    <div class="fcast-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleFcastHot(this)">
+        <div class="fcast-section-title" style="margin-bottom:0">Hot Batters · ${hotCount} with active streak</div>
+        <div style="font-size:12px;color:var(--t3);font-family:var(--mono)" id="fcast-hot-chevron">▼</div>
+      </div>
+      <div id="fcast-hot-body" style="display:none;margin-top:14px">
+        ${(() => {
+          const scorching = players.filter(r => STREAK[r.name]?.flame === '🔥🔥').sort((a,b)=>b.hrp-a.hrp);
+          const hot       = players.filter(r => STREAK[r.name]?.flame === '🔥').sort((a,b)=>b.hrp-a.hrp);
+          if (!scorching.length && !hot.length) return '<div style="font-size:12px;color:var(--t3)">Streak data loading…</div>';
+          const renderGroup = (players, label, flame, color) => {
+            if (!players.length) return '';
+            return `
+            <div style="margin-bottom:14px">
+              <div style="font-size:9px;font-family:var(--mono);color:${color};text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">${flame} ${label} — ${players.length} players</div>
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px">
+                ${players.map(r => {
+                  const s = STREAK[r.name];
+                  const ci = getCI(r.hrp, getBatter(r.name)?.pa||0);
+                  return `<div style="
+                    background:var(--bg3);border:1px solid var(--bd);border-radius:6px;
+                    padding:10px 12px;display:flex;gap:10px;align-items:center;
+                  ">
+                    <div style="font-size:20px;line-height:1;flex-shrink:0">${flame}</div>
+                    <div style="min-width:0;flex:1">
+                      <div style="font-size:13px;font-weight:600;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+                      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px">${r.team} · vs ${r.pitName}</div>
+                      <div style="display:flex;gap:8px;margin-top:4px;align-items:center;flex-wrap:wrap">
+                        <span style="font-size:12px;font-family:var(--mono);font-weight:700;color:var(--teal)">${r.hrp.toFixed(1)}%</span>
+                        <span style="font-size:10px;font-family:var(--mono);color:var(--amber)">${s.hr} HR · .${Math.round(s.avg*1000).toString().padStart(3,'0')} AVG</span>
+                        <span style="font-size:10px;font-family:var(--mono);color:var(--t3)">SLG .${Math.round(s.slg*1000).toString().padStart(3,'0')}</span>
+                        ${r.bookOdds ? `<span style="font-size:10px;font-family:var(--mono);color:${(r.evEdge||0)>2?'var(--green)':'var(--t3)'}">${r.bookOdds>0?'+':''}${r.bookOdds}</span>` : ''}
+                      </div>
+                    </div>
+                    <div style="flex-shrink:0;text-align:right">
+                      ${ciBadge(r.hrp, getBatter(r.name)?.pa||0, true)}
+                    </div>
+                  </div>`;
+                }).join('')}
+              </div>
+            </div>`;
+          };
+          return renderGroup(scorching, 'Scorching', '🔥🔥', 'var(--amber)') +
+                 renderGroup(hot, 'Hot', '🔥', 'var(--red)');
+        })()}
+      </div>
     </div>
 
     <!-- PROBABILITY TIER BREAKDOWN -->
