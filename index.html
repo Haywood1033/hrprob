@@ -365,7 +365,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .fcast-section{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:16px 20px;margin-bottom:12px}
 .fcast-section-title{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px}
 .fcast-bar-row{display:flex;align-items:center;gap:10px;padding:5px 0}
-.fcast-bar-label{font-size:11px;font-family:var(--mono);color:var(--t2);width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
+.fcast-bar-label{font-size:11px;font-family:var(--mono);color:var(--t2);width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0}
 .fcast-bar-track{flex:1;height:6px;background:var(--bd);border-radius:3px;overflow:hidden}
 .fcast-bar-fill{height:100%;border-radius:3px;transition:width .5s ease}
 .fcast-bar-val{font-size:11px;font-family:var(--mono);color:var(--t1);width:30px;text-align:right;flex-shrink:0;font-weight:600}
@@ -1713,7 +1713,7 @@ function renderForecast() {
         const barColor = (park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t3)';
         const icons = [(park.f||1)>=1.05?'📈':'', windOut?'💨':'', ou>=9.5?'🔥':''].filter(Boolean).join('');
         return `<div class="fcast-bar-row">
-          <div class="fcast-bar-label">${g.away}@${g.home}</div>
+          <div class="fcast-bar-label">${g.away} @ ${g.home}</div>
           <div class="fcast-bar-track"><div class="fcast-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
           <div class="fcast-bar-val">${exp.toFixed(1)}</div>
           <div class="fcast-bar-icons">${icons}</div>
