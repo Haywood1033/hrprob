@@ -1963,6 +1963,40 @@ function renderHistory() {
   const totalHits    = Object.values(tiers).reduce((a,t)=>a+t.hits,0);
   const totalPred    = Object.values(tiers).reduce((a,t)=>a+t.predictions.length,0);
 
+  // No completed results yet — show today's pending predictions instead
+  if (totalTracked === 0) {
+    const etNow  = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+    const today  = new Date(etNow).toLocaleDateString('en-CA');
+    const todayRec = historyRecords.find(r => r.date === today);
+    grid.innerHTML = `<div style="padding:20px">
+      <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:20px;margin-bottom:12px">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--teal);margin-bottom:6px">📊 ACCURACY TRACKING ACTIVE</div>
+        <div style="font-size:13px;color:var(--t2);line-height:1.6">
+          Today's predictions are saved. Results will be fetched automatically tomorrow morning from MLB box scores.
+        </div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:8px">
+          ${todayRec ? `${todayRec.predictions.length} players tracked · ${todayRec.date}` : 'Saving today\'s predictions…'}
+        </div>
+      </div>
+      ${todayRec ? `
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Today's Predictions (${todayRec.date})</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">
+        ${['20%+','15-19%','10-14%','5-9%'].map(tier => {
+          const ps = todayRec.predictions.filter(p => p.tier === tier);
+          if (!ps.length) return '';
+          return `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:12px 14px">
+            <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">${tier}</div>
+            ${ps.map(p => `<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;font-family:var(--mono)">
+              <span style="color:var(--t2)">${p.name}</span>
+              <span style="color:var(--teal)">${p.hrp}%</span>
+            </div>`).join('')}
+          </div>`;
+        }).join('')}
+      </div>` : ''}
+    </div>`;
+    return;
+  }
+
   // Window selector
   let html = `
   <div style="display:flex;gap:8px;margin-bottom:16px">
