@@ -107,7 +107,7 @@ thead th{
   color:var(--t3);letter-spacing:.1em;text-transform:uppercase;
   border-bottom:1px solid var(--bd);
   background:var(--bg2);position:sticky;
-  top:calc(var(--hdr-h) + var(--tab-h));
+  top:0;
   cursor:pointer;white-space:nowrap;user-select:none;
 }
 thead th:hover{color:var(--t2)}
@@ -2156,7 +2156,15 @@ async function loadSplitsData() {
 }
 
 function expand(i){
-  document.querySelectorAll('[id^="xe"]').forEach(e=>e.remove());
+  // Toggle: clicking the same row closes it
+  const existing = document.getElementById('xe'+i);
+  if (existing) { existing.remove(); document.getElementById('pr'+i)?.classList.remove('expanded'); return; }
+  document.querySelectorAll('[id^="xe"]').forEach(e=>{
+    const idx = e.id.replace('xe','');
+    document.getElementById('pr'+idx)?.classList.remove('expanded');
+    e.remove();
+  });
+  document.getElementById('pr'+i)?.classList.add('expanded');
   const rows=filtered(); const r=rows[i];
   const xe=document.createElement('tr'); xe.id='xe'+i; xe.className='xrow';
   const w=r.wx||{};
