@@ -1602,6 +1602,14 @@ function computeAccuracy(records, window='all') {
 let histWindow = 'all';
 
 
+function toggleFcastF1(header) {
+  const body = document.getElementById('fcast-f1-body');
+  const chevron = document.getElementById('fcast-f1-chevron');
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  chevron.textContent = open ? '▼' : '▲';
+}
+
 function toggleFcastHot(header) {
   const body = document.getElementById('fcast-hot-body');
   const chevron = document.getElementById('fcast-hot-chevron');
@@ -1795,6 +1803,133 @@ function renderForecast() {
             <div class="fcast-tier-players">${top3 || '—'}</div>
           </div>`;
         }).join('')}
+      </div>
+    </div>
+
+    <!-- FIRST INNING RUN SCORING -->
+    <div class="fcast-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleFcastF1(this)">
+        <div class="fcast-section-title" style="margin-bottom:0">First Inning Run Scoring</div>
+        <div style="font-size:12px;color:var(--t3);font-family:var(--mono)" id="fcast-f1-chevron">▼</div>
+      </div>
+      <div id="fcast-f1-body" style="display:none;margin-top:14px">
+        ${(() => {
+          // Model: P(team scores in 1st inning)
+          // Factors: pitcher xERA, whiff%, HR/9, top-3 batter quality, park, weather
+          // Base rate: ~26% per team per inning historically (run expectancy)
+          const BASE_RATE = 0.26;
+
+          const f1Games = games.map(g => {
+            const park = getPark(g.home) || {f:1.0};
+            const wx   = WX[g.home] || {};
+
+            // Get top 3 batters for each team (leadoff through 3-hole)
+            const awayBatters = allRows
+              .filter(r => r.gamePk === g.pk && r.team === g.away)
+              .sort((a,b) => a.order - b.order).slice(0,3);
+            const homeBatters = allRows
+              .filter(r => r.gamePk === g.pk && r.team === g.home)
+              .sort((a,b) => a.order - b.order).slice(0,3);
+
+            // Pitcher quality factor — xERA is best available proxy for first-inning quality
+            // Higher xERA = worse pitcher = more likely to give up a run
+            const calcF1Prob = (pit, batters, isHome) => {
+              let p = BASE_RATE;
+
+              // Pitcher adjustment — xERA relative to league avg 4.50
+              const xe = pit.xera || pit.era || 4.50;
+              p += (xe - 4.50) * 0.022;  // +2.2% per ERA point above avg
+
+              // Whiff% — high K pitchers suppress early offense
+              const whiff = pit.whiff || 22;
+              p -= (whiff - 22) * 0.003; // -0.3% per whiff% point above avg
+
+              // HR/9 — pitchers who give up HRs inflate first inning risk
+              const hr9 = pit.hr9 || 1.20;
+              p += (hr9 - 1.20) * 0.025;
+
+              // Top-3 batter quality — xwOBA of leadoff through 3-hole
+              if (batters.length > 0) {
+                const avgXwoba = batters.reduce((s,r) => s + (r.xwoba||0.310), 0) / batters.length;
+                p += (avgXwoba - 0.310) * 0.35; // scaled contribution
+              }
+
+              // Park factor — hitter friendly parks inflate run scoring
+              p *= (park.f || 1.0);
+
+              // Weather — wind blowing out inflates scoring
+              if (park.roof !== 'dome' && park.roof !== 'retractable' && wx.ws) {
+                const orient = park.orient || 180;
+                const diff = ((wx.wd - orient) % 360 + 360) % 360;
+                if (diff < 45 || diff > 315) p += wx.ws * 0.0006; // wind out
+                else if (diff > 135 && diff < 225) p -= wx.ws * 0.0004; // wind in
+                p += ((wx.t || 70) - 70) * 0.0003; // temperature
+              }
+
+              // Elevation bonus
+              p += Math.min(0.015, ((park.elev||0) - 500) / 120000);
+
+              return Math.max(0.08, Math.min(0.65, p));
+            };
+
+            // Away team bats first — faces home pitcher (g.hp)
+            const homePit = {...g.hp, ...(getPitcher(g.hp.name)||{})};
+            const awayPit = {...g.ap, ...(getPitcher(g.ap.name)||{})};
+
+            const awayF1 = calcF1Prob(homePit, awayBatters, false); // away bats vs home pitcher
+            const homeF1 = calcF1Prob(awayPit, homeBatters, true);  // home bats vs away pitcher
+
+            // Either team scores = 1 - P(neither scores)
+            const eitherF1 = 1 - (1 - awayF1) * (1 - homeF1);
+
+            return { g, awayF1, homeF1, eitherF1, homePit, awayPit, park, awayBatters, homeBatters };
+          }).sort((a,b) => b.eitherF1 - a.eitherF1);
+
+          // Summary stat
+          const avgEither = f1Games.reduce((s,d) => s + d.eitherF1, 0) / f1Games.length;
+
+          return `
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--bd)">
+            <div>
+              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--teal)">${(avgEither*100).toFixed(0)}%</div>
+              <div style="font-size:10px;color:var(--t3);margin-top:2px">Avg first inning run probability</div>
+            </div>
+            <div>
+              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--green)">${f1Games.filter(d=>d.eitherF1>=0.55).length}</div>
+              <div style="font-size:10px;color:var(--t3);margin-top:2px">High probability games (55%+)</div>
+            </div>
+            <div>
+              <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--amber)">${f1Games.filter(d=>d.eitherF1<0.40).length}</div>
+              <div style="font-size:10px;color:var(--t3);margin-top:2px">Pitcher-dominated games (&lt;40%)</div>
+            </div>
+          </div>
+
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">By Game — Either Team Scores in 1st</div>
+          ${f1Games.map(({g, awayF1, homeF1, eitherF1, park}) => {
+            const pct = Math.min(100, eitherF1*100);
+            const barColor = eitherF1>=0.55?'var(--green)':eitherF1>=0.45?'var(--teal)':'var(--t3)';
+            const edge = (park.f||1)>=1.05 ? '📈' : '';
+            return `<div class="fcast-bar-row" style="margin-bottom:2px">
+              <div class="fcast-bar-label">${g.away} @ ${g.home}</div>
+              <div class="fcast-bar-track" style="height:8px"><div class="fcast-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+              <div class="fcast-bar-val">${(eitherF1*100).toFixed(0)}%</div>
+              <div class="fcast-bar-icons">${edge}</div>
+            </div>
+            <div style="display:flex;gap:16px;padding:2px 0 8px 0;border-bottom:1px solid var(--bg3);margin-bottom:2px">
+              <div style="font-size:10px;font-family:var(--mono);color:var(--t3);width:150px;flex-shrink:0"></div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--t2)">
+                ${g.away} <span style="color:var(--teal)">${(awayF1*100).toFixed(0)}%</span>
+                <span style="color:var(--bd);margin:0 6px">·</span>
+                ${g.home} <span style="color:var(--teal)">${(homeF1*100).toFixed(0)}%</span>
+                <span style="color:var(--bd);margin:0 6px">·</span>
+                <span style="color:var(--t3)">vs ${g.hp.name} / ${g.ap.name}</span>
+              </div>
+            </div>`;
+          }).join('')}
+          <div style="margin-top:12px;padding:10px 12px;background:var(--bg3);border-radius:6px;font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">
+            Model uses pitcher xERA, whiff%, HR/9, top-3 batter xwOBA, park factor, and weather. Base rate 26% per team per inning. First-inning specific splits not yet available — this is a general quality-based estimate.
+          </div>`;
+        })()}
       </div>
     </div>
 
