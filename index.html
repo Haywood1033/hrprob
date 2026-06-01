@@ -1244,6 +1244,11 @@ let historyLoaded  = false;
 
 // Save today's predictions to /api/history
 async function saveToHistory() {
+  if (allRows.length < 10) {
+    console.log('saveToHistory: allRows not ready yet, retrying in 5s…');
+    setTimeout(saveToHistory, 5000);
+    return;
+  }
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
@@ -2598,7 +2603,7 @@ async function init(){
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       setTimeout(loadStreakData, 1000); // load hot streaks after rows built
-  setTimeout(saveToHistory, 3000);  // save today's predictions to /api/history
+  setTimeout(saveToHistory, 8000);  // save today's predictions to /api/history (after streaks+splits load)
   setTimeout(loadSplitsData, 2000); // load real platoon splits
     })
     .catch(e=>{ clearTimeout(statTimer); console.error('Statcast error:',e); if(!statReady){statReady=true;rebuild();renderAll();} });
