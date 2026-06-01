@@ -2379,7 +2379,122 @@ function renderGames(){
   const grid=document.getElementById('ggrid');
   if(!allRows.length){grid.innerHTML='<div class="empty"><h3>Loading…</h3></div>';return;}
 
-  grid.innerHTML=games.map(g=>{
+  // ── SUMMARY STRIP ───────────────────────────────────────────
+  // Expected total HRs = sum of all individual probabilities (expected value)
+  const seen = new Map();
+  for (const r of allRows) {
+    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
+  }
+  const uniquePlayers = [...seen.values()];
+  const expectedTotal = uniquePlayers.reduce((sum, r) => sum + r.hrp/100, 0);
+
+  // 90% confidence range using variance of independent Bernoulli trials
+  // Var = sum of p*(1-p), SD = sqrt(Var)
+  const variance = uniquePlayers.reduce((sum, r) => {
+    const p = r.hrp/100;
+    return sum + p*(1-p);
+  }, 0);
+  const sd = Math.sqrt(variance);
+  const rangeLow  = Math.max(0, expectedTotal - 1.645*sd).toFixed(0);
+  const rangeHigh = (expectedTotal + 1.645*sd).toFixed(0);
+
+  // Per-game breakdown
+  const perGame = games.map(g => {
+    const rows = uniquePlayers.filter(r => r.gamePk === g.pk);
+    const exp  = rows.reduce((s, r) => s + r.hrp/100, 0);
+    const park = getPark(g.home)||{};
+    const wx   = WX[g.home]||{};
+    const orient = park.orient||180;
+    const diff = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : 180;
+    const windOut = diff < 45 || diff > 315;
+    return { g, exp, park, windOut, ou: GAME_ODDS[g.away+'@'+g.home]?.ou||0 };
+  }).sort((a,b) => b.exp - a.exp);
+
+  // Top environment stacks — hitter park + wind out
+  const topEnv = perGame.filter(d => (d.park.f||1) >= 1.05 && d.windOut);
+
+  // How many players have +EV odds
+  const evCount = uniquePlayers.filter(r => r.evEdge > 2).length;
+
+  const summaryHTML = `
+  <div style="
+    background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);
+    border:1px solid var(--bd);border-radius:8px;
+    margin:14px 16px 0;padding:16px 20px;
+    box-shadow:var(--glow-teal);
+  ">
+    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px">
+      Today's HR Forecast · ${games.length} Games · ${uniquePlayers.length} Batters
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:16px;margin-bottom:16px">
+
+      <div>
+        <div style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--teal);line-height:1">
+          ${expectedTotal.toFixed(1)}
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-top:3px">Expected HRs</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t2);margin-top:2px">
+          Range ${rangeLow}–${rangeHigh} <span style="color:var(--t3)">(90% CI)</span>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--green);line-height:1">
+          ${evCount}
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-top:3px">+EV Plays</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t2);margin-top:2px">
+          ${evCount > 0 ? 'Model edge vs book' : 'No edges today'}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--amber);line-height:1">
+          ${topEnv.length}
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-top:3px">Favorable Venues</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t2);margin-top:2px">
+          ${topEnv.length > 0 ? topEnv.map(d=>d.g.home).join(', ') : 'No wind+park stacks'}
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:32px;font-weight:700;font-family:var(--mono);color:var(--t1);line-height:1">
+          ${perGame[0] ? perGame[0].exp.toFixed(1) : '—'}
+        </div>
+        <div style="font-size:10px;color:var(--t3);margin-top:3px">Top Game HR Exp</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t2);margin-top:2px">
+          ${perGame[0] ? `${perGame[0].g.away} @ ${perGame[0].g.home}` : '—'}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Per-game bar chart -->
+    <div style="border-top:1px solid var(--bd);padding-top:12px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Expected HRs by Game</div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        ${perGame.map(({g, exp, park, windOut}) => {
+          const pct = Math.min(100, exp / (perGame[0].exp||1) * 100);
+          const barColor = (park.f||1)>=1.15 ? 'var(--green)' : (park.f||1)>=1.05 ? 'var(--teal)' : 'var(--t3)';
+          const icons = [(park.f||1)>=1.05?'📈':'', windOut?'💨':''].filter(Boolean).join('');
+          return `<div style="display:flex;align-items:center;gap:8px">
+            <div style="font-size:10px;font-family:var(--mono);color:var(--t2);width:110px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex-shrink:0">
+              ${g.away}@${g.home}
+            </div>
+            <div style="flex:1;height:4px;background:var(--bd);border-radius:2px;overflow:hidden">
+              <div style="width:${pct}%;height:100%;background:${barColor};border-radius:2px;transition:width .4s ease"></div>
+            </div>
+            <div style="font-size:10px;font-family:var(--mono);color:var(--t1);width:28px;text-align:right;flex-shrink:0">${exp.toFixed(1)}</div>
+            <div style="font-size:10px;width:24px;flex-shrink:0">${icons}</div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+
+  grid.innerHTML = summaryHTML + '<div class="ggrid" style="padding:10px 0">' + games.map(g=>{
     const park=getPark(g.home)||{};
     const wx=WX[g.home]||{};
     const ap=getPitcher(g.ap.name)||{};
@@ -2437,7 +2552,7 @@ function renderGames(){
         ${teamSection(homeRows,g.home,g.ap.name,ap)}
       </div>
     </div>`;
-  }).join('');
+  }).join('') + '</div>';
 }
 
 
