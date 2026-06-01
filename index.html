@@ -5,8 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HRProb · MLB Home Run Probability</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600;700&display=swap');
-:root{--bg:#0a0c0f;--bg2:#111318;--bg3:#181c24;--bd:#1e2430;--t1:#e8eaf0;--t2:#8892a4;--t3:#4a5568;--teal:#38bdf8;--green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#a78bfa;--mono:'Space Mono',monospace;--sans:'Inter',system-ui,sans-serif;--r:8px}
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+:root{--bg:#0a0c0f;--bg2:#111318;--bg3:#181c24;--bd:#1e2430;--t1:#e8eaf0;--t2:#8892a4;--t3:#4a5568;--teal:#38bdf8;--green:#4ade80;--amber:#fbbf24;--red:#f87171;--purple:#a78bfa;--mono:'Space Mono',monospace;--sans:'DM Sans',system-ui,sans-serif;--r:8px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden}
 .hdr{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:1px solid var(--bd);background:var(--bg);position:sticky;top:0;z-index:100}
@@ -179,6 +179,40 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .fcast-tier-label{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
 .fcast-tier-players{font-size:11px;color:var(--t3);margin-top:4px;line-height:1.5}
 @media(max-width:768px){.fcast-grid{padding:12px}.fcast-hero{padding:16px}.fcast-kpi-val{font-size:30px}.fcast-bar-label{width:90px}}
+
+/* ── MOBILE RESPONSIVE ── */
+@media (max-width: 768px) {
+  :root{--hdr-h:52px;--tab-h:52px}
+  .hdr{padding:0 12px;gap:8px}
+  .hdr-date{font-size:10px;padding:2px 7px}
+  .hdr-status span{max-width:120px;font-size:10px}
+  .tabs{padding:0}
+  .tab{padding:14px 14px;font-size:11px}
+  .fbar{padding:8px 12px;gap:6px}
+  .fbar input{width:130px;font-size:11px}
+  .fbar select{font-size:11px}
+  .col-park{display:none}
+  .col-ev{display:none}
+  .col-team{display:none}
+  .ggrid{grid-template-columns:1fr;padding:10px 12px;gap:8px}
+  .tgrid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));padding:10px 12px;gap:8px}
+  .tcard{padding:12px}
+  .tprob{font-size:22px}
+  .trk{font-size:18px}
+  .pgrid{padding:10px 12px}
+  .pcard{padding:12px}
+  .hgrid{padding:10px 12px}
+  .expand-strip{flex-direction:column!important}
+  .expand-strip > div{border-right:none!important;border-bottom:1px solid var(--bd)}
+  .expand-strip > div:last-child{border-bottom:none}
+  .sbar{padding:6px 12px;font-size:10px}
+}
+@media (max-width: 480px) {
+  .tgrid{grid-template-columns:1fr 1fr}
+  .tab{padding:14px 10px;font-size:10px}
+  .fbar input{width:110px}
+  .hdr-status{display:none}
+}
 </style>
 </head>
 <body>
@@ -1642,6 +1676,33 @@ function renderHistory() {
   const totalHits    = Object.values(tiers).reduce((a,t)=>a+t.hits,0);
   const totalPred    = Object.values(tiers).reduce((a,t)=>a+t.predictions.length,0);
 
+  // No completed results yet — show today's pending predictions
+  if (totalTracked === 0) {
+    const etNow  = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+    const today  = new Date(etNow).toLocaleDateString('en-CA');
+    const todayRec = historyRecords.find(r => r.date === today);
+    grid.innerHTML = '<div style="padding:20px">'
+      + '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:20px;margin-bottom:12px">'
+      + '<div style="font-size:11px;font-family:var(--mono);color:var(--teal);margin-bottom:6px">📊 ACCURACY TRACKING ACTIVE</div>'
+      + '<div style="font-size:13px;color:var(--t2);line-height:1.6">Today\'s predictions are saved. Results will be fetched automatically tomorrow morning from MLB box scores.</div>'
+      + '<div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:8px">'
+      + (todayRec ? todayRec.predictions.length+' players tracked · '+todayRec.date : 'Saving today\'s predictions\u2026')
+      + '</div></div>'
+      + (todayRec ? '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Today\'s Predictions ('+todayRec.date+')</div>'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">'
+        + ['20%+','15-19%','10-14%','5-9%'].map(tier => {
+            const ps = todayRec.predictions.filter(p => p.tier === tier);
+            if (!ps.length) return '';
+            return '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:6px;padding:12px 14px">'
+              + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">'+tier+'</div>'
+              + ps.map(p => '<div style="display:flex;justify-content:space-between;padding:3px 0;font-size:11px;font-family:var(--mono)"><span style="color:var(--t2)">'+p.name+'</span><span style="color:var(--teal)">'+p.hrp+'%</span></div>').join('')
+              + '</div>';
+          }).join('')
+        + '</div>' : '')
+      + '</div>';
+    return;
+  }
+
   // Window selector
   let html = `
   <div style="display:flex;gap:8px;margin-bottom:16px">
@@ -1828,12 +1889,13 @@ function rebuild(){
 
       batters.forEach((p,i)=>{
         const bs=getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0};
-        bs._name=p.name; const hrp=hrProbWithStreak(bs,park,wx,pit,p.battingOrder||(i+1));
+        const canonName = (!p.name.includes('Jr.') && BATTER[p.name+' Jr.']) ? p.name+' Jr.' : p.name;
+        bs._name=canonName; const hrp=hrProbWithStreak(bs,park,wx,pit,p.battingOrder||(i+1));
         const bookOdds = HR_ODDS[p.name] || null;
         const ev = calcEV(hrp, bookOdds);
         const gameOdds = GAME_ODDS[g.away+'@'+g.home] || null;
         allRows.push({
-          name:p.name,team,bats:getBatSide(p.name, p.batSide, bs),
+          name:canonName,team,bats:getBatSide(canonName, p.batSide, bs),
           order:p.battingOrder||(i+1),
           source:p.source||(confirmed?'confirmed':'projected'),
           ev:bs.ev||88.5,barrel:bs.ba||8,hh:bs.hh||37,
