@@ -271,7 +271,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 
   /* Header — compact */
   .hdr{padding:0 12px;gap:8px}
-  .hdr-date{display:none}
+  .hdr-date{font-size:10px;padding:2px 7px;}
   .hdr-status span{max-width:120px;font-size:10px}
   .btn-icon-only-mobile .btn-label{display:none}
 
@@ -2697,7 +2697,7 @@ function showDebug(){
 
 async function init(){
   document.getElementById('hdr-date').textContent=
-    new Date(SLATE.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
+    (()=>{const d=new Date(SLATE.date+'T12:00:00');return window.innerWidth<480?d.toLocaleDateString('en-US',{month:'short',day:'numeric'}):d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});})();
   setStatus('loading','Loading…');
   checkSlateDate();
 
@@ -2714,7 +2714,7 @@ async function init(){
         if (slate.date) {
           SLATE.date = slate.date;
           document.getElementById('hdr-date').textContent =
-            new Date(slate.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
+            (()=>{const d=new Date(slate.date+'T12:00:00');return window.innerWidth<480?d.toLocaleDateString('en-US',{month:'short',day:'numeric'}):d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});})();
           checkSlateDate();
         }
         // Build games from live pitcher data
