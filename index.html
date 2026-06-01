@@ -2229,7 +2229,15 @@ async function loadSplitsData() {
 }
 
 function expand(i){
-  document.querySelectorAll('[id^="xe"]').forEach(e=>e.remove());
+  // Toggle: clicking the same row closes it
+  const existing = document.getElementById('xe'+i);
+  if (existing) { existing.remove(); document.getElementById('pr'+i)?.classList.remove('expanded'); return; }
+  document.querySelectorAll('[id^="xe"]').forEach(e=>{
+    const idx = e.id.replace('xe','');
+    document.getElementById('pr'+idx)?.classList.remove('expanded');
+    e.remove();
+  });
+  document.getElementById('pr'+i)?.classList.add('expanded');
   const rows=filtered(); const r=rows[i];
   const xe=document.createElement('tr'); xe.id='xe'+i; xe.className='xrow';
   const w=r.wx||{};
