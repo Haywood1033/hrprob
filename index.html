@@ -1629,38 +1629,38 @@ function renderForecast() {
           const LG_OPP_K_PCT = 22.5; // opponent batter K% league avg
 
           const kGames = games.map(g => {
-            const apStats = getPitcher(g.ap.name)||{};
-            const hpStats = getPitcher(g.hp.name)||{};
+            // Use fully enriched pitcher objects from game (already merged with Statcast)
+            const apStats = {...g.ap, ...(getPitcher(g.ap.name)||{})};
+            const hpStats = {...g.hp, ...(getPitcher(g.hp.name)||{})};
 
-            const calcKProj = (pit, pitStats, oppTeam) => {
-              const k_pct = pitStats.k_pct || (pitStats.whiff ? pitStats.whiff * 0.72 : LG_K_PCT);
-              // Expected innings — use xERA as proxy for quality/durability
-              const xera = pitStats.xera || 4.50;
+            const calcKProj = (pit, oppTeam) => {
+              // K% from Statcast — fall back to whiff% proxy (r=0.72 correlation)
+              const k_pct = pit.k_pct || (pit.whiff ? +(pit.whiff * 0.72).toFixed(1) : LG_K_PCT);
+              // Expected IP — better pitchers throw more innings
+              const xera = pit.xera || pit.era || 4.50;
               const expIP = Math.min(7.0, Math.max(3.5, 6.5 - (xera - 4.50) * 0.4));
-              const expBF = expIP * 3.3; // ~3.3 BF per inning avg
+              const expBF = +(expIP * 3.3).toFixed(0);
 
-              // Opponent lineup K rate — avg of top 9 batters facing this pitcher
+              // Opponent lineup K rate
               const oppRows = allRows.filter(r => r.team === oppTeam).slice(0,9);
               const oppKPct = oppRows.length > 0
                 ? oppRows.reduce((s,r) => s + (getBatter(r.name)?.k_pct || LG_OPP_K_PCT), 0) / oppRows.length
                 : LG_OPP_K_PCT;
 
-              // Projected Ks = K% adjusted for opponent K tendency
               const adjKPct = k_pct * (oppKPct / LG_OPP_K_PCT);
               const projK = +(adjKPct / 100 * expBF).toFixed(1);
 
-              return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF: +expBF.toFixed(0), oppKPct: +oppKPct.toFixed(1), projK, adjKPct: +adjKPct.toFixed(1) };
+              return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, oppKPct: +oppKPct.toFixed(1), projK, adjKPct: +adjKPct.toFixed(1), hasDirectK: !!pit.k_pct };
             };
 
-            const awayK = calcKProj(g.ap, apStats, g.home);
-            const homeK = calcKProj(g.hp, hpStats, g.away);
+            const awayK = calcKProj(apStats, g.home);
+            const homeK = calcKProj(hpStats, g.away);
 
             return { g, awayK, homeK, apStats, hpStats };
           }).sort((a,b) => Math.max(b.awayK.projK, b.homeK.projK) - Math.max(a.awayK.projK, a.homeK.projK));
 
           const pitchCard = (name, stats, proj, oppTeam) => {
             const kColor = proj.projK >= 7 ? 'var(--green)' : proj.projK >= 5 ? 'var(--teal)' : 'var(--t2)';
-            const hasK = stats.k_pct !== null && stats.k_pct !== undefined;
             return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px">'
               + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
               + '<div style="font-size:12px;font-weight:600;color:var(--t1)">'+name+'</div>'
@@ -1668,12 +1668,12 @@ function renderForecast() {
               + '</div>'
               + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs '+oppTeam+'</div>'
               + '<div style="display:flex;gap:10px;margin-top:5px;flex-wrap:wrap">'
-              + '<span style="font-size:10px;font-family:var(--mono);color:var(--t2)">K% '+(hasK?proj.k_pct+'%':'~'+proj.k_pct+'% est')+'</span>'
+              + '<span style="font-size:10px;font-family:var(--mono);color:var(--t2)">K% '+proj.k_pct+'%'+(proj.hasDirectK?'':' est')+'</span>'
               + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">Whiff '+(stats.whiff||22).toFixed(1)+'%</span>'
               + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">~'+proj.expIP+' IP · '+proj.expBF+' BF</span>'
               + '</div>'
-              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Opp lineup K% '+proj.oppKPct+'%</div>'
-              + (hasK ? '' : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ K% estimated from Whiff%</div>')
+              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Opp K% '+proj.oppKPct+'%</div>'
+              + (proj.hasDirectK ? '' : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ K% estimated from Whiff%</div>')
               + '</div>';
           };
 
@@ -1693,6 +1693,7 @@ function renderForecast() {
     </div>
 
     <div class="fcast-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleFcastF1(this)">
         <div class="fcast-section-title" style="margin-bottom:0">First Inning Run Scoring</div>
         <div style="font-size:12px;color:var(--t3);font-family:var(--mono)" id="fcast-f1-chevron">▼</div>
       </div>
