@@ -1641,9 +1641,9 @@ function renderForecast() {
               // K% via calibrated whiff% regression (K% ≈ Whiff% × 0.68 + 3.5, r²=0.84)
               const whiff = pit.whiff || 22;
               const k_pct = pit.k_pct || +(whiff * 0.68 + 3.5).toFixed(1);
-              // Expected IP — better pitchers go deeper
+              // Expected IP — modern starters avg ~5.5 IP, better pitchers go deeper
               const xera = pit.xera || pit.era || 4.20;
-              const expIP = Math.min(7.0, Math.max(3.5, 6.5 - (xera - 4.50) * 0.4));
+              const expIP = Math.min(7.0, Math.max(3.5, 5.5 - (xera - 4.50) * 0.6));
               const expBF = +(expIP * 3.3).toFixed(0);
               const projK = +(k_pct / 100 * expBF).toFixed(1);
               return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, projK, hasDirectK: !!pit.k_pct };
