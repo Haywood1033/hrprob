@@ -1387,6 +1387,14 @@ function computeAccuracy(records, window='all') {
 let histWindow = 'all';
 
 
+function toggleFcastK(header) {
+  const body = document.getElementById('fcast-k-body');
+  const chevron = document.getElementById('fcast-k-chevron');
+  const open = body.style.display === 'block';
+  body.style.display = open ? 'none' : 'block';
+  chevron.textContent = open ? '▼' : '▲';
+}
+
 function toggleFcastF1(header) {
   const body = document.getElementById('fcast-f1-body');
   const chevron = document.getElementById('fcast-f1-chevron');
@@ -1608,7 +1616,83 @@ function renderForecast() {
     </div>
 
     <div class="fcast-section">
-      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleFcastF1(this)">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleFcastK(this)">
+        <div class="fcast-section-title" style="margin-bottom:0">Pitcher Strikeout Props</div>
+        <div style="font-size:12px;color:var(--t3);font-family:var(--mono)" id="fcast-k-chevron">▼</div>
+      </div>
+      <div id="fcast-k-body" style="display:none;margin-top:14px">
+        ${(()=>{
+          // K prop model: projected Ks = K% × expected batters faced
+          // Expected BF ≈ innings × 3 + estimated baserunners
+          // League avg K% ~22.5%, avg starter goes 5.5 IP ≈ 18-20 BF
+          const LG_K_PCT = 22.5;
+          const LG_OPP_K_PCT = 22.5; // opponent batter K% league avg
+
+          const kGames = games.map(g => {
+            const apStats = getPitcher(g.ap.name)||{};
+            const hpStats = getPitcher(g.hp.name)||{};
+
+            const calcKProj = (pit, pitStats, oppTeam) => {
+              const k_pct = pitStats.k_pct || (pitStats.whiff ? pitStats.whiff * 0.72 : LG_K_PCT);
+              // Expected innings — use xERA as proxy for quality/durability
+              const xera = pitStats.xera || 4.50;
+              const expIP = Math.min(7.0, Math.max(3.5, 6.5 - (xera - 4.50) * 0.4));
+              const expBF = expIP * 3.3; // ~3.3 BF per inning avg
+
+              // Opponent lineup K rate — avg of top 9 batters facing this pitcher
+              const oppRows = allRows.filter(r => r.team === oppTeam).slice(0,9);
+              const oppKPct = oppRows.length > 0
+                ? oppRows.reduce((s,r) => s + (getBatter(r.name)?.k_pct || LG_OPP_K_PCT), 0) / oppRows.length
+                : LG_OPP_K_PCT;
+
+              // Projected Ks = K% adjusted for opponent K tendency
+              const adjKPct = k_pct * (oppKPct / LG_OPP_K_PCT);
+              const projK = +(adjKPct / 100 * expBF).toFixed(1);
+
+              return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF: +expBF.toFixed(0), oppKPct: +oppKPct.toFixed(1), projK, adjKPct: +adjKPct.toFixed(1) };
+            };
+
+            const awayK = calcKProj(g.ap, apStats, g.home);
+            const homeK = calcKProj(g.hp, hpStats, g.away);
+
+            return { g, awayK, homeK, apStats, hpStats };
+          }).sort((a,b) => Math.max(b.awayK.projK, b.homeK.projK) - Math.max(a.awayK.projK, a.homeK.projK));
+
+          const pitchCard = (name, stats, proj, oppTeam) => {
+            const kColor = proj.projK >= 7 ? 'var(--green)' : proj.projK >= 5 ? 'var(--teal)' : 'var(--t2)';
+            const hasK = stats.k_pct !== null && stats.k_pct !== undefined;
+            return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px">'
+              + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+              + '<div style="font-size:12px;font-weight:600;color:var(--t1)">'+name+'</div>'
+              + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:'+kColor+'">'+proj.projK+'K</div>'
+              + '</div>'
+              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs '+oppTeam+'</div>'
+              + '<div style="display:flex;gap:10px;margin-top:5px;flex-wrap:wrap">'
+              + '<span style="font-size:10px;font-family:var(--mono);color:var(--t2)">K% '+(hasK?proj.k_pct+'%':'~'+proj.k_pct+'% est')+'</span>'
+              + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">Whiff '+(stats.whiff||22).toFixed(1)+'%</span>'
+              + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">~'+proj.expIP+' IP · '+proj.expBF+' BF</span>'
+              + '</div>'
+              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Opp lineup K% '+proj.oppKPct+'%</div>'
+              + (hasK ? '' : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ K% estimated from Whiff%</div>')
+              + '</div>';
+          };
+
+          return '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">'
+            + kGames.flatMap(({g, awayK, homeK, apStats, hpStats}) => [
+                pitchCard(g.ap.name, apStats, awayK, g.home),
+                pitchCard(g.hp.name, hpStats, homeK, g.away),
+              ]).join('')
+            + '</div>'
+            + '<div style="margin-top:10px;padding:8px 12px;background:var(--bg3);border-radius:6px;font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">'
+            + 'Projected Ks = pitcher K% × estimated batters faced, adjusted for opponent lineup K tendency. '
+            + 'K% estimated from Whiff% (~72% correlation) where direct K% is unavailable. '
+            + 'Expected IP based on pitcher xERA quality.'
+            + '</div>';
+        })()}
+      </div>
+    </div>
+
+    <div class="fcast-section">
         <div class="fcast-section-title" style="margin-bottom:0">First Inning Run Scoring</div>
         <div style="font-size:12px;color:var(--t3);font-family:var(--mono)" id="fcast-f1-chevron">▼</div>
       </div>
@@ -2488,6 +2572,8 @@ function renderPlayers(){
     const bc=r.barrel>=15?'hi':r.barrel>=9?'md':'lo';
     const sb=r.source==='live'||r.source==='confirmed'
       ?`<span class="sb slive">✓</span>`:`<span class="sb sproj">~</span>`;
+    const kPct = getBatter(r.name)?.k_pct;
+    const kFlag = kPct >= 28 ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);margin-left:3px" title="${kPct.toFixed(0)}% strikeout rate">K ${kPct.toFixed(0)}%</span>` : '';
     const flame = STREAK[r.name]?.flame || '';
     const pct=Math.min(100,r.hrp/25*100);
     // +EV badge
@@ -2503,7 +2589,7 @@ function renderPlayers(){
       : '—';
     return `<tr onclick="expand(${i})" id="pr${i}">
       <td class="rk">${i+1}</td>
-      <td><div class="pn">${r.name}${sb}</div><div class="pt">${r.team} · ${r.time}</div></td>
+      <td><div class="pn">${r.name}${sb}${kFlag}</div><div class="pt">${r.team} · ${r.time}</div></td>
       <td class="mono" style="color:var(--t2)">${r.team}</td>
       <td style="font-size:12px;color:var(--t2)">${r.pitName||'—'}</td>
       <td style="font-size:11px;color:var(--t3)">${r.park?.name||'—'}</td>
@@ -2712,7 +2798,7 @@ function renderTargets(){
       : '';
     return `<div class="tcard ${i<3?'t3':''}" id="tc-${i}" onclick="expandTarget(${i})" style="cursor:pointer">
       <div class="trk">${i+1}</div>
-      <div class="tn">${r.name} ${src} <span style="font-size:13px">${STREAK[r.name]?.flame||''}</span></div>
+      ${(()=>{const kp=getBatter(r.name)?.k_pct;const kf=kp>=28?`<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);margin-left:3px">K ${kp.toFixed(0)}%</span>`:'';return `<div class="tn">\${r.name} \${src} <span style="font-size:13px">\${STREAK[r.name]?.flame||''}</span>\${kf}</div>`;})()}
       <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
       <div style="display:flex;align-items:baseline;gap:10px;margin:4px 0">
         <div class="tprob">${r.hrp.toFixed(1)}<span>%</span></div>
@@ -2987,6 +3073,7 @@ async function init(){
               hr9:   +(s.hr9||1.2).toFixed(2),
               hh:    +(s.hh_pct||s.hh||38).toFixed(1),
               hand:  PITCHER[name]?.hand || 'R',
+              k_pct: s.k_pct||null,
             };
           }
           console.log('/api/statcast pitchers:', Object.keys(d.pitchers).length);
