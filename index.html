@@ -2533,7 +2533,15 @@ function renderGames(){
 
     const hasLU=g.awayLineup.length||g.homeLineup.length;
     const pill=hasLU?'<span class="gpill plive">✓ Lineup</span>':'<span class="gpill ppend">⏳ Projected</span>';
-    const wstr=park.roof==='dome'?'🏟 Dome':wx.ws?`🌬 ${Math.round(wx.ws)}mph · ${Math.round(wx.t||70)}°F`:'—';
+    const orient = park.orient || 180;
+    const windDiff = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : null;
+    const windDir = windDiff !== null
+      ? (windDiff < 45 || windDiff > 315 ? '↑ out' : windDiff > 135 && windDiff < 225 ? '↓ in' : '→ cross')
+      : null;
+    const windFlag = windDiff !== null && (windDiff < 45 || windDiff > 315) ? ' 💨' : '';
+    const wstr = park.roof==='dome' ? '🏟 Dome'
+      : wx.ws ? `${Math.round(wx.ws)}mph ${windDir} · ${Math.round(wx.t||70)}°F${windFlag}`
+      : '—';
 
     const threatRow=(r,i)=>{
       const hc=r.hrp>=12?'hi':r.hrp>=7?'md':'lo';
