@@ -2454,6 +2454,16 @@ function renderPlayers(){
   const rows=filtered();
   const body=document.getElementById('ptbody');
   updateSbar(rows);
+
+  // If Park+Wind filter is on but weather hasn't loaded yet
+  if (wxFilt && Object.keys(WX).length === 0) {
+    body.innerHTML=`<tr><td colspan="10"><div class="empty">
+      <div style="font-size:24px;margin-bottom:10px">💨</div>
+      <h3>Weather loading…</h3>
+      <p style="font-size:11px;color:var(--t3);margin-top:8px">Park+Wind Edge filter requires weather data.<br>Check back in a few seconds.</p>
+    </div></td></tr>`;
+    return;
+  }
   if(!rows.length){
     const nb=Object.keys(BATTER).length;
     const nl=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
