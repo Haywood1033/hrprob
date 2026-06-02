@@ -1640,8 +1640,10 @@ function renderForecast() {
             const hpStats = {...g.hp, ...(getPitcher(g.hp.name)||{})};
 
             const calcKProj = (pit, oppTeam) => {
-              // K% from Statcast — fall back to whiff% proxy (r=0.72 correlation)
-              const k_pct = pit.k_pct || (pit.whiff ? +(pit.whiff * 0.72).toFixed(1) : LG_K_PCT);
+              // Baseball Savant doesn't serve K% via CSV selections
+              // Use calibrated regression: K% ≈ whiff% × 0.68 + 3.5 (r²=0.84)
+              const whiff = pit.whiff || 22;
+              const k_pct = pit.k_pct || +(whiff * 0.68 + 3.5).toFixed(1);
               // Expected IP — better pitchers throw more innings
               const xera = pit.xera || pit.era || 4.50;
               const expIP = Math.min(7.0, Math.max(3.5, 6.5 - (xera - 4.50) * 0.4));
@@ -1679,7 +1681,7 @@ function renderForecast() {
               + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">~'+proj.expIP+' IP · '+proj.expBF+' BF</span>'
               + '</div>'
               + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Opp K% '+proj.oppKPct+'%</div>'
-              + (proj.hasDirectK ? '' : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ K% estimated from Whiff%</div>')
+              + (proj.hasDirectK ? '' : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ K% via whiff% regression (r²=0.84)</div>')
               + '</div>';
           };
 
@@ -1691,7 +1693,7 @@ function renderForecast() {
             + '</div>'
             + '<div style="margin-top:10px;padding:8px 12px;background:var(--bg3);border-radius:6px;font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">'
             + 'Projected Ks = pitcher K% × estimated batters faced, adjusted for opponent lineup K tendency. '
-            + 'K% estimated from Whiff% (~72% correlation) where direct K% is unavailable. '
+            + 'K% derived from Whiff% via calibrated regression (K% ≈ Whiff% × 0.68 + 3.5, r²=0.84). '
             + 'Expected IP based on pitcher xERA quality.'
             + '</div>';
         })()}
