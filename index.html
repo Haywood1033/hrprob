@@ -1632,37 +1632,25 @@ function renderForecast() {
           // Expected BF ≈ innings × 3 + estimated baserunners
           // League avg K% ~22.5%, avg starter goes 5.5 IP ≈ 18-20 BF
           const LG_K_PCT = 22.5;
-          const LG_OPP_K_PCT = 22.5; // opponent batter K% league avg
 
           const kGames = games.map(g => {
-            // Use fully enriched pitcher objects from game (already merged with Statcast)
             const apStats = {...g.ap, ...(getPitcher(g.ap.name)||{})};
             const hpStats = {...g.hp, ...(getPitcher(g.hp.name)||{})};
 
-            const calcKProj = (pit, oppTeam) => {
-              // Baseball Savant doesn't serve K% via CSV selections
-              // Use calibrated regression: K% ≈ whiff% × 0.68 + 3.5 (r²=0.84)
+            const calcKProj = (pit) => {
+              // K% via calibrated whiff% regression (K% ≈ Whiff% × 0.68 + 3.5, r²=0.84)
               const whiff = pit.whiff || 22;
               const k_pct = pit.k_pct || +(whiff * 0.68 + 3.5).toFixed(1);
-              // Expected IP — better pitchers throw more innings
-              const xera = pit.xera || pit.era || 4.50;
+              // Expected IP — better pitchers go deeper
+              const xera = pit.xera || pit.era || 4.20;
               const expIP = Math.min(7.0, Math.max(3.5, 6.5 - (xera - 4.50) * 0.4));
               const expBF = +(expIP * 3.3).toFixed(0);
-
-              // Opponent lineup K rate
-              const oppRows = allRows.filter(r => r.team === oppTeam).slice(0,9);
-              const oppKPct = oppRows.length > 0
-                ? oppRows.reduce((s,r) => s + (getBatter(r.name)?.k_pct || LG_OPP_K_PCT), 0) / oppRows.length
-                : LG_OPP_K_PCT;
-
-              const adjKPct = k_pct * (oppKPct / LG_OPP_K_PCT);
-              const projK = +(adjKPct / 100 * expBF).toFixed(1);
-
-              return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, oppKPct: +oppKPct.toFixed(1), projK, adjKPct: +adjKPct.toFixed(1), hasDirectK: !!pit.k_pct };
+              const projK = +(k_pct / 100 * expBF).toFixed(1);
+              return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, projK, hasDirectK: !!pit.k_pct };
             };
 
-            const awayK = calcKProj(apStats, g.home);
-            const homeK = calcKProj(hpStats, g.away);
+            const awayK = calcKProj(apStats);
+            const homeK = calcKProj(hpStats);
 
             return { g, awayK, homeK, apStats, hpStats };
           }).sort((a,b) => Math.max(b.awayK.projK, b.homeK.projK) - Math.max(a.awayK.projK, a.homeK.projK));
@@ -1674,13 +1662,12 @@ function renderForecast() {
               + '<div style="font-size:12px;font-weight:600;color:var(--t1)">'+name+'</div>'
               + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:'+kColor+'">'+proj.projK+'K</div>'
               + '</div>'
-              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs '+oppTeam+'</div>'
+              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">vs '+oppTeam+'</div>'
               + '<div style="display:flex;gap:10px;margin-top:5px;flex-wrap:wrap">'
               + '<span style="font-size:10px;font-family:var(--mono);color:var(--t2)">K% '+proj.k_pct+'%'+(proj.hasDirectK?'':' est')+'</span>'
               + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">Whiff '+(stats.whiff||22).toFixed(1)+'%</span>'
               + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">~'+proj.expIP+' IP · '+proj.expBF+' BF</span>'
               + '</div>'
-              + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Opp K% '+proj.oppKPct+'%</div>'
               + (proj.hasDirectK ? '' : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ K% via whiff% regression (r²=0.84)</div>')
               + '</div>';
           };
