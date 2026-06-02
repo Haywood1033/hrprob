@@ -3337,25 +3337,97 @@ init();
   </div>
 
   <div class="guide-section">
+    <div class="guide-h2">Confidence Tier Badge</div>
+    <div class="guide-text" style="margin-bottom:10px">Every player carries a confidence badge based on their 2026 plate appearance sample. The HR% shown is a point estimate — the badge tells you how much to trust it.</div>
+    <div class="guide-row">
+      <span class="guide-tag green">🔒 HIGH</span>
+      <div class="guide-text">200+ PA. Statcast numbers are statistically stable. Trust the HR% — uncertainty band is roughly ±1.5-2%.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag amber">⚡ MID</span>
+      <div class="guide-text">75-199 PA. Directionally reliable but still some noise. The number is probably in the right ballpark. Uncertainty band ±2.5-3.5%.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag red">⚠ LOW</span>
+      <div class="guide-text">Under 75 PA. Small sample — Bayesian regression pulls stats toward league average. Use as a directional signal only. Uncertainty band ±4-5%+.</div>
+    </div>
+    <div class="guide-tip">💡 When two players have similar HR% but different confidence tiers, lean toward the HIGH confidence player for betting purposes. A LOW player at 14% could realistically be anywhere from 9-19%.</div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">Other Player Badges</div>
+    <div class="guide-row">
+      <span class="guide-tag red">K 32%</span>
+      <div class="guide-text">High strikeout rate (28%+). Doesn't affect HR probability — purely informational. A player hitting .280 with 32% K rate is a different risk profile than one at 15% K rate, even at the same HR%.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag teal">🔥🔥 Scorching</span>
+      <div class="guide-text">3+ HR in last 20 plate appearances. Model applies a +15% boost to their HR probability.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag amber">🔥 Hot</span>
+      <div class="guide-text">1-2 HR in last 20 PA. Model applies a +7% boost.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag gray">❄️ Cold</span>
+      <div class="guide-text">0 HR and low SLG in last 20 PA. Model applies a -10% penalty.</div>
+    </div>
+  </div>
+
+  <div class="guide-section">
     <div class="guide-h2">Reading the Expand Row</div>
     <div class="guide-text" style="margin-bottom:8px">Click any player row or card to expand the full breakdown:</div>
-    <div class="guide-row"><span class="guide-tag amber">HR%</span><div class="guide-text">Our model's probability for today's specific matchup — not a season average.</div></div>
+    <div class="guide-row"><span class="guide-tag amber">HR%</span><div class="guide-text">Our model's probability for today's specific matchup — not a season average. Includes park, weather, pitcher, platoon, and streak adjustments.</div></div>
     <div class="guide-row"><span class="guide-tag amber">ISO</span><div class="guide-text">Isolated Power — the purest measure of raw power. Higher = more HR upside.</div></div>
     <div class="guide-row"><span class="guide-tag amber">Barrel%</span><div class="guide-text">Percentage of batted balls that are barreled (optimal launch angle + exit velocity). Strongest single predictor of home runs.</div></div>
-    <div class="guide-row"><span class="guide-tag amber">Last 20 PA</span><div class="guide-text">HR count and AVG over the last 20 plate appearances. 🔥🔥 = scorching (4+ HR), 🔥 = hot (2-3 HR), ❄️ = cold (0 HR, low SLG).</div></div>
-    <div class="guide-row"><span class="guide-tag amber">Platoon</span><div class="guide-text">Based on real MLB Stats API splits — actual ISO and SLG vs today's pitcher handedness, not a generic estimate.</div></div>
+    <div class="guide-row"><span class="guide-tag amber">Last 20 PA</span><div class="guide-text">HR count and AVG over the last 20 plate appearances. 🔥🔥 = scorching, 🔥 = hot, ❄️ = cold.</div></div>
+    <div class="guide-row"><span class="guide-tag amber">Platoon</span><div class="guide-text">Real MLB Stats API splits — actual ISO and SLG vs today's pitcher handedness. Also shows pitcher's FIP vs this batter's hand specifically (red = pitcher is weaker vs this hand).</div></div>
     <div class="guide-row"><span class="guide-tag amber">H2H</span><div class="guide-text">Career stats against today's specific pitcher. 2 HR in 15 AB against this guy is a meaningful signal.</div></div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">Games Tab — Click to Expand</div>
+    <div class="guide-text">Click any game card to open a full overlay showing both lineups sorted by batting order, with HR%, confidence tier, +EV, K rate flag, and streak for every player. Also shows pitcher xERA, HR/9, Whiff%, and projected strikeout total for both starters.</div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">🔮 Forecast Tab</div>
+    <div class="guide-row">
+      <span class="guide-tag teal">Expected HRs</span>
+      <div class="guide-text">Sum of all individual HR probabilities across the slate — the statistical expectation for total home runs today. Includes a 90% confidence interval range.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag teal">Hot Batters</span>
+      <div class="guide-text">Expandable section showing 🔥🔥 Scorching and 🔥 Hot players with their current form stats and book odds.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag teal">Pitcher K Props</span>
+      <div class="guide-text">Projected strikeout totals for every starter based on their Whiff% (K% ≈ Whiff% × 0.68 + 3.5) and expected innings (based on xERA quality). Green = 7K+, teal = 5-6K.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag teal">First Inning Scoring</span>
+      <div class="guide-text">Probability that either team scores in the 1st inning. Uses real 1st-inning pitcher splits where available, falling back to overall xERA proxy. Base rate is 26% per team per inning.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag green">🔒 NRFI Target</span>
+      <div class="guide-text">No Run First Inning — games where the model projects ≤38% probability of scoring. Both pitchers are projecting clean 1st innings.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag amber">🔥 YRFI Target</span>
+      <div class="guide-text">Yes Run First Inning — games at ≥55% probability. High likelihood at least one team scores in the 1st.</div>
+    </div>
   </div>
 
   <div class="guide-section">
     <div class="guide-h2">Daily Workflow</div>
     <div class="guide-text">
       1. Open the app — schedule, lineups, weather and Statcast load automatically<br>
-      2. If the yellow banner appears, click <strong>✦ Update odds</strong> to refresh DraftKings HR props and O/U totals<br>
+      2. If the yellow banner appears, click <strong>✦ Odds</strong> to refresh DraftKings HR props and O/U totals<br>
       3. Wait ~30 seconds for hot streak and platoon split data to load<br>
       4. Check Top Targets for the day's best opportunities<br>
       5. Use Parlays tab for multi-leg combinations<br>
-      6. Confirmed lineups replace projections automatically as managers post them (2-3 hrs before first pitch)
+      6. Check Forecast tab for K props, NRFI/YRFI targets, and HR total projection<br>
+      7. Confirmed lineups replace projections automatically as managers post them (2-3 hrs before first pitch)
     </div>
     <div class="guide-tip">💡 The ~ badge means projected lineup. The ✓ badge means confirmed batting order. Always wait for confirmed lineups before placing bets.</div>
   </div>
@@ -3370,11 +3442,13 @@ init();
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher xERA</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher HR/9</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher Whiff%</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Real Platoon Splits</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher Platoon FIP vs hand</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Real Batter Platoon Splits</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Park Factor + Elevation</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Wind Direction + Temp</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Batting Order Position</div>
       <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Hot Streak (last 20 PA)</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Bayesian sample regression</div>
     </div>
   </div>
   <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--bd);font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">
