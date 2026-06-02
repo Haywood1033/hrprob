@@ -85,7 +85,7 @@ async function fetchBatterExpected(year) {
 
 async function fetchPitcherStatcast(year) {
   const text = await fetchCSV(
-    `https://baseballsavant.mlb.com/leaderboard/custom?year=${year}&type=pitcher&filter=&sort=4&sortDir=asc&min=20&selections=xera,whiff_percent,p_hr_per9,strikeout_percent,p_k_percent,barrel_batted_rate,hard_hit_percent,exit_velocity_avg,p_home_run,p_formatted_ip,pa&csv=true`
+    `https://baseballsavant.mlb.com/leaderboard/custom?year=${year}&type=pitcher&filter=&sort=4&sortDir=asc&min=10&selections=xera,whiff_percent,p_hr_per9,strikeout_percent,p_k_percent,barrel_batted_rate,hard_hit_percent,exit_velocity_avg,p_home_run,p_formatted_ip,pa&csv=true`
   );
   return parseCSV(text);
 }
