@@ -2805,7 +2805,7 @@ function renderTargets(){
       : '';
     return `<div class="tcard ${i<3?'t3':''}" id="tc-${i}" onclick="expandTarget(${i})" style="cursor:pointer">
       <div class="trk">${i+1}</div>
-      ${(()=>{const kp=getBatter(r.name)?.k_pct;const kf=kp>=28?`<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);margin-left:3px">K ${kp.toFixed(0)}%</span>`:'';return `<div class="tn">\${r.name} \${src} <span style="font-size:13px">\${STREAK[r.name]?.flame||''}</span>\${kf}</div>`;})()}
+      <div class="tn">${r.name} ${src} <span style="font-size:13px">${STREAK[r.name]?.flame||''}</span>${(()=>{const kp=getBatter(r.name)?.k_pct;return kp>=28?`<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);margin-left:3px">K ${kp.toFixed(0)}%</span>`:'';})()}</div>
       <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
       <div style="display:flex;align-items:baseline;gap:10px;margin:4px 0">
         <div class="tprob">${r.hrp.toFixed(1)}<span>%</span></div>
