@@ -2633,6 +2633,35 @@ function closeGameModal() {
   document.body.style.overflow = '';
 }
 
+
+function goToPlayer(playerName) {
+  // Close game modal
+  closeGameModal();
+
+  // Switch to players tab
+  const playersTab = document.querySelector('.tab[onclick*="players"]');
+  setView('players', playersTab);
+
+  // Wait for render then find and expand the player row
+  setTimeout(() => {
+    // Clear any search filter that might hide the player
+    const srch = document.getElementById('srch');
+    if (srch) srch.value = '';
+
+    // Find the row index for this player
+    const rows = filtered();
+    const idx = rows.findIndex(r => r.name === playerName);
+    if (idx < 0) return;
+
+    // Scroll to row and expand it
+    const row = document.getElementById('pr'+idx);
+    if (row) {
+      row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setTimeout(() => expand(idx), 300);
+    }
+  }, 150);
+}
+
 function openGameModal(gamePk) {
   const g = games.find(g => g.pk === gamePk);
   if (!g) return;
@@ -2690,7 +2719,7 @@ function openGameModal(gamePk) {
       : '<span style="font-size:8px;color:var(--amber)">~</span>';
     return `<div class="gm-player">
       <div class="gm-order">${r.order}</div>
-      <div class="gm-pname">${r.name} ${src} ${flame}</div>
+      <div class="gm-pname" onclick="goToPlayer('${r.name.replace(/'/g, "\\'")}')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px" title="View full player profile">${r.name} ${src} ${flame}</div>
       <div style="display:flex;gap:4px;align-items:center;flex-shrink:0">
         ${kFlag}${evBadge}
         <span style="font-size:9px;font-family:var(--mono);padding:1px 3px;border-radius:2px;background:${ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)'};color:${ci.color};border:1px solid ${ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)'}">${ci.label}</span>
@@ -2752,7 +2781,7 @@ function openGameModal(gamePk) {
       ${ou ? `<span style="color:var(--amber);font-weight:700">O/U ${ou.ou}</span><span>O ${ou.overOdds>0?'+':''}${ou.overOdds} / U ${ou.underOdds>0?'+':''}${ou.underOdds}</span>` : ''}
       <span>${park.name||g.home} · ${park.elev||0}ft · PF ${(park.f||1).toFixed(2)}</span>
       <span>${wstr}</span>
-      <span style="color:var(--t3);margin-left:auto;font-size:9px">Click player in Players tab for full breakdown</span>
+      <span style="color:var(--t3);margin-left:auto;font-size:9px">Click any player name to view full profile →</span>
     </div>
   `;
 
