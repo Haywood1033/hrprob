@@ -91,8 +91,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on{display:block}
 .sbar{padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--bd);font-size:11px;font-family:var(--mono);color:var(--t2)}
 .sbar span{margin-right:12px}
 
@@ -242,6 +242,41 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   .gm-pits,.gm-lineups{grid-template-columns:1fr}
   .gm-pit+.gm-pit,.gm-lineup+.gm-lineup{border-left:none;border-top:1px solid var(--bd)}
 }
+
+.today-wrap{max-width:900px;margin:0 auto;padding:16px}
+.today-hero{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:20px 24px;margin-bottom:14px}
+.today-hero-date{font-size:11px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.today-hero-title{font-size:22px;font-weight:700;color:var(--t1);margin-bottom:4px;letter-spacing:-.02em}
+.today-hero-sub{font-size:12px;color:var(--t3);font-family:var(--mono)}
+.today-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px}
+.today-kpi{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:14px 16px}
+.today-kpi-val{font-size:26px;font-weight:700;font-family:var(--mono);line-height:1;margin-bottom:4px}
+.today-kpi-lbl{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em}
+.today-section{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;margin-bottom:12px;overflow:hidden}
+.today-section-hdr{padding:12px 16px;border-bottom:1px solid var(--bd);font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;display:flex;justify-content:space-between;align-items:center}
+.today-section-body{padding:14px 16px}
+.today-target{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--bg3)}
+.today-target:last-child{border-bottom:none}
+.today-target-rank{font-size:11px;font-family:var(--mono);color:var(--t3);width:20px;flex-shrink:0}
+.today-target-name{font-size:13px;font-weight:600;color:var(--t1);flex:1}
+.today-target-sub{font-size:10px;font-family:var(--mono);color:var(--t3)}
+.today-target-hrp{font-size:13px;font-family:var(--mono);font-weight:700;flex-shrink:0}
+.today-game{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s}
+.today-game:last-child{border-bottom:none}
+.today-game:hover{background:var(--bg3);margin:0 -16px;padding:8px 16px}
+.today-game-teams{font-size:13px;font-weight:600;color:var(--t1);flex:1}
+.today-game-meta{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+.today-pill{font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;flex-shrink:0}
+.today-ev-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.today-ev-card{background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.today-ev-card:hover{border-color:var(--teal)}
+@media(max-width:600px){
+  .today-wrap{padding:10px}
+  .today-kpis{grid-template-columns:repeat(2,1fr)}
+  .today-hero{padding:14px 16px}
+  .today-hero-title{font-size:18px}
+  .today-ev-list{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -259,7 +294,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button onclick="requestSlateUpdate()" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace">✦ Update odds</button>
 </div>
 <nav class="tabs">
-  <div class="tab active" onclick="setView('players',this)">☰ Players</div>
+  <div class="tab active" onclick="setView('today',this)">⚡ Today</div>
+  <div class="tab" onclick="setView('players',this)">☰ Players</div>
   <div class="tab" onclick="setView('games',this)">⬡ Games</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Top Targets</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
@@ -283,6 +319,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button class="chip" id="wxfilt" onclick="toggleWxFilter(this)" title="Hitter-friendly park + wind blowing out">⚡ Park+Wind Edge</button>
 </div>
 <div class="sbar" id="sbar"></div>
+<div id="vtoday"><div id="today-grid"></div></div>
 <div id="vplayers"><div class="twrap"><table><thead><tr>
   <th class="rk">#</th><th>Player</th><th>Team</th><th>vs Pitcher</th>
   <th>Park</th><th>Weather</th>
@@ -2790,6 +2827,229 @@ function openGameModal(gamePk) {
   document.body.style.overflow = 'hidden';
 }
 
+
+function renderToday() {
+  const grid = document.getElementById('today-grid');
+  if (!allRows.length) {
+    grid.innerHTML = '<div class="empty" style="padding:60px 20px"><div style="font-size:32px;margin-bottom:12px">⚾</div><h3>Loading today\'s slate\u2026</h3></div>';
+    return;
+  }
+
+  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const today = new Date(etStr);
+  const dayName = today.toLocaleDateString('en-US',{weekday:'long'});
+  const dateStr = today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+  // Deduplicate players
+  const seen = new Map();
+  for (const r of allRows) {
+    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
+  }
+  const players = [...seen.values()].sort((a,b) => b.hrp-a.hrp);
+
+  // KPIs
+  const expHR = players.reduce((s,r) => s+r.hrp/100, 0);
+  const evPlays = players.filter(r => (r.evEdge||0) > 2);
+  const hotPlayers = players.filter(r => STREAK[r.name]?.flame === '🔥🔥' || STREAK[r.name]?.flame === '🔥');
+  const confirmed = games.filter(g => g.awayLineup.length || g.homeLineup.length).length;
+
+  // Top 5 targets
+  const top5 = players.slice(0,5);
+
+  // Top +EV plays
+  const topEV = evPlays.sort((a,b) => b.evEdge-a.evEdge).slice(0,6);
+
+  // Best park today
+  const parkRanked = games.map(g => {
+    const park = getPark(g.home)||{};
+    const wx = WX[g.home]||{};
+    const orient = park.orient||180;
+    const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+    const windOut = diff<45||diff>315;
+    const score = (park.f||1) + (windOut&&wx.ws ? wx.ws*0.005 : 0);
+    return {g, park, wx, windOut, score};
+  }).sort((a,b) => b.score-a.score);
+
+  // NRFI targets
+  const nrfi = games.map(g => {
+    const park = getPark(g.home)||{f:1.0};
+    const wx = WX[g.home]||{};
+    const awayBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
+    const homeBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
+    const calcF1 = (pit, batters) => {
+      let p=0.26;
+      const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
+      if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
+      else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
+      if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
+      p*=(park.f||1.0);
+      if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
+      return Math.max(0.08,Math.min(0.65,p));
+    };
+    const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
+    const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
+    const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
+    const either=1-(1-af)*(1-hf);
+    return {g,either,park};
+  }).filter(d=>Math.round(d.either*100)<=40).sort((a,b)=>a.either-b.either).slice(0,3);
+
+  grid.innerHTML = `
+  <div class="today-wrap">
+
+    <!-- HERO -->
+    <div class="today-hero">
+      <div class="today-hero-date">${dayName} · ${dateStr}</div>
+      <div class="today-hero-title">${games.length}-Game Slate</div>
+      <div class="today-hero-sub">${confirmed} of ${games.length*2} lineups confirmed · ${players.length} batters · ${statReady?'Statcast live':'Statcast loading…'}</div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="today-kpis">
+      <div class="today-kpi">
+        <div class="today-kpi-val" style="color:var(--teal)">${expHR.toFixed(1)}</div>
+        <div class="today-kpi-lbl">Expected HRs</div>
+      </div>
+      <div class="today-kpi">
+        <div class="today-kpi-val" style="color:var(--green)">${evPlays.length}</div>
+        <div class="today-kpi-lbl">+EV Plays</div>
+      </div>
+      <div class="today-kpi">
+        <div class="today-kpi-val" style="color:var(--amber)">${hotPlayers.length}</div>
+        <div class="today-kpi-lbl">Hot Batters</div>
+      </div>
+      <div class="today-kpi">
+        <div class="today-kpi-val" style="color:var(--purple)">${nrfi.length}</div>
+        <div class="today-kpi-lbl">NRFI Targets</div>
+      </div>
+    </div>
+
+    <!-- TWO COLUMN LAYOUT -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+
+      <!-- TOP TARGETS -->
+      <div class="today-section">
+        <div class="today-section-hdr">
+          <span>Top HR Targets</span>
+          <span onclick="setView('targets',document.querySelector('.tab[onclick*=targets]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
+        </div>
+        <div class="today-section-body">
+          ${top5.map((r,i) => {
+            const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+            const flame = STREAK[r.name]?.flame||'';
+            const evBadge = (r.evEdge||0)>2
+              ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)">+EV</span>`
+              : '';
+            return `<div class="today-target" onclick="setView('players',document.querySelector('.tab[onclick*=players]'));setTimeout(()=>expand(${i}),200)" style="cursor:pointer">
+              <div class="today-target-rank">${i+1}</div>
+              <div>
+                <div class="today-target-name">${r.name} ${flame}</div>
+                <div class="today-target-sub">${r.team} vs ${r.pitName}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0">
+                <div class="today-target-hrp" style="color:${hc}">${r.hrp.toFixed(1)}%</div>
+                <div>${evBadge}</div>
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- TODAY'S GAMES -->
+      <div class="today-section">
+        <div class="today-section-hdr">
+          <span>Today's Games</span>
+          <span onclick="setView('games',document.querySelector('.tab[onclick*=games]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
+        </div>
+        <div class="today-section-body" style="padding:6px 0">
+          ${games.slice(0,7).map(g => {
+            const park = getPark(g.home)||{};
+            const wx = WX[g.home]||{};
+            const ou = GAME_ODDS[g.away+'@'+g.home];
+            const orient = park.orient||180;
+            const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+            const windOut = diff<45||diff>315;
+            const icons = [(park.f||1)>=1.05?'📈':'', windOut&&wx.ws?'💨':''].filter(Boolean).join(' ');
+            const hasLU = g.awayLineup.length||g.homeLineup.length;
+            return `<div class="today-game" onclick="openGameModal(${g.pk})">
+              <div style="flex:1;padding:0 16px">
+                <div class="today-game-teams">${g.away} <span style="color:var(--t3);font-weight:400">@</span> ${g.home} ${icons}</div>
+                <div class="today-game-meta">${g.time}${ou?' · O/U '+ou.ou:''}${hasLU?' · ✓':' · ~'}</div>
+              </div>
+            </div>`;
+          }).join('')}
+          ${games.length>7?`<div style="padding:8px 16px;font-size:10px;font-family:var(--mono);color:var(--t3)">+${games.length-7} more games</div>`:''}
+        </div>
+      </div>
+    </div>
+
+    <!-- TOP +EV PLAYS -->
+    ${topEV.length ? `<div class="today-section" style="margin-bottom:12px">
+      <div class="today-section-hdr">
+        <span>Best +EV Plays</span>
+        <span style="color:var(--t3);font-size:9px">Model edge vs DraftKings line</span>
+      </div>
+      <div class="today-section-body">
+        <div class="today-ev-list">
+          ${topEV.map((r,i) => {
+            const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+            const ci = getCI(r.hrp, getBatter(r.name)?.pa||0);
+            return `<div class="today-ev-card" onclick="setView('players',document.querySelector('.tab[onclick*=players]'));setTimeout(()=>expand(${players.indexOf(r)}),200)">
+              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+                <div style="font-size:12px;font-weight:600;color:var(--t1)">${r.name}</div>
+                <div style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--green)">+${r.evEdge}%</div>
+              </div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">${r.team} · ${r.bookOdds>0?'+':''}${r.bookOdds} · ${r.hrp.toFixed(1)}% model</div>
+              <div style="display:flex;gap:4px;align-items:center">
+                <span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)">+EV</span>
+                <span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)'};color:${ci.color};border:1px solid ${ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)'}">
+                  ${ci.tier==='high'?'🔒':ci.tier==='mid'?'⚡':'⚠'} ${ci.label}
+                </span>
+                ${STREAK[r.name]?.flame ? `<span style="font-size:11px">${STREAK[r.name].flame}</span>` : ''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>` : ''}
+
+    <!-- NRFI TARGETS + BEST PARK -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+
+      ${nrfi.length ? `<div class="today-section">
+        <div class="today-section-hdr"><span>🔒 NRFI Targets</span><span style="color:var(--t3);font-size:9px">≤40% first inning</span></div>
+        <div class="today-section-body">
+          ${nrfi.map(({g,either}) => `
+          <div class="today-target" onclick="openGameModal(${g.pk})" style="cursor:pointer">
+            <div style="flex:1">
+              <div style="font-size:12px;font-weight:600;color:var(--t1)">${g.away} @ ${g.home}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.hp.name} vs ${g.ap.name}</div>
+            </div>
+            <div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--green)">${Math.round(either*100)}%</div>
+          </div>`).join('')}
+        </div>
+      </div>` : '<div></div>'}
+
+      <div class="today-section">
+        <div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park + wind edge</span></div>
+        <div class="today-section-body">
+          ${parkRanked.slice(0,4).map(({g,park,wx,windOut,score}) => {
+            const pfColor = (park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
+            const wstr = park.roof==='dome'?'Dome':wx.ws?`${Math.round(wx.ws)}mph ${windOut?'↑ out':'→'}`:'—';
+            return `<div class="today-target" onclick="openGameModal(${g.pk})" style="cursor:pointer">
+              <div style="flex:1">
+                <div style="font-size:12px;font-weight:600;color:var(--t1)">${g.away} @ ${g.home}</div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${park.name||g.home} · ${wstr}</div>
+              </div>
+              <div style="font-size:12px;font-family:var(--mono);font-weight:700;color:${pfColor}">PF ${(park.f||1).toFixed(2)}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+  </div>`;
+}
+
 function renderGames(){
   const grid=document.getElementById('ggrid');
   if(!allRows.length){grid.innerHTML='<div class="empty"><h3>Loading…</h3></div>';return;}
@@ -3015,6 +3275,7 @@ function renderAll(){
   if(curView==='players')  renderPlayers();
   else if(curView==='games')   renderGames();
   else if(curView==='parlay')  renderParlay();
+  else if(curView==='today')    renderToday();
   else if(curView==='forecast') renderForecast();
   else if(curView==='history') renderHistory();
   else renderTargets();
@@ -3024,7 +3285,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['players','games','targets','parlay','forecast','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','games','targets','parlay','forecast','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   renderAll();
 }
@@ -3215,7 +3476,7 @@ async function init(){
 
   // ── Show UI immediately ─────────────────────────────────────
   rebuild();
-  setView('games', document.querySelector('.tab[onclick*="games"]'));
+  setView('today', document.querySelector('.tab[onclick*="today"]'));
   const conf0 = games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
   setStatus('loading',`${games.length} games · ${conf0>0?conf0+' lineups · ':''}Statcast loading…`);
   renderAll();
