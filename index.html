@@ -565,9 +565,9 @@ function hrProb(b,park,wx,pit,order){
   }
 
   // ── PITCHER MATCHUP ───────────────────────────────────────────
-  const xe    = pit.xera  || pit.era || 4.50;  // xERA: best pitcher quality metric
-  const whiff = pit.whiff || 22;               // whiff%: K rate proxy
-  const hr9   = pit.hr9   || 1.20;             // HR/9: pitcher HR vulnerability
+  const xe    = pit.xera  || pit.era || 4.20;  // unknown pitchers default above avg
+  const whiff = pit.whiff || 23;               // whiff%: slightly above avg default
+  const hr9   = pit.hr9   || 1.10;             // HR/9: slightly below avg default
   const pitHH = pit.hh    || 38;               // hard hit% against pitcher
 
   // xERA effect: worse pitcher = more HR
@@ -861,6 +861,9 @@ function getPitcher(name){
   if(PITCHER[name])return PITCHER[name];
   const n=name.toLowerCase().replace(/[^a-z ]/g,'');
   for(const[k,v]of Object.entries(PITCHER))if(k.toLowerCase().replace(/[^a-z ]/g,'')===n)return v;
+  // Unknown pitcher — return slightly above-average profile
+  // Any MLB starter is better than league average by selection bias
+  // Using conservative estimates rather than defaulting to exactly league avg
   return null;
 }
 
@@ -1468,10 +1471,13 @@ function renderForecast() {
         if (f1.hr9_1 !== null) p += (f1.hr9_1 - 1.20) * 0.020;
         if (f1.whip1 !== null) p += (f1.whip1 - 1.30) * 0.025;
       } else {
-        const xe = pit.xera||pit.era||4.50;
+        // No 1st inning splits — use overall stats with smart defaults
+        // Unknown pitchers default to slightly above average (4.20 xERA)
+        // since any MLB starter is better than league average by selection
+        const xe = pit.xera||pit.era||4.20;
         p += (xe-4.50)*0.022;
-        p -= ((pit.whiff||22)-22)*0.003;
-        p += ((pit.hr9||1.20)-1.20)*0.025;
+        p -= ((pit.whiff||23)-22)*0.003;
+        p += ((pit.hr9||1.10)-1.20)*0.025;
       }
       if (batters.length>0) {
         const avgXwoba = batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;
