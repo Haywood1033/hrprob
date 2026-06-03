@@ -2856,8 +2856,6 @@ function renderToday() {
   // Top 5 targets
   const top5 = players.slice(0,5);
 
-  // Top +EV plays
-  const topEV = evPlays.sort((a,b) => b.evEdge-a.evEdge).slice(0,6);
 
   // Best park today
   const parkRanked = games.map(g => {
@@ -2910,8 +2908,8 @@ function renderToday() {
         <div class="today-kpi-lbl">Expected HRs</div>
       </div>
       <div class="today-kpi">
-        <div class="today-kpi-val" style="color:var(--green)">${evPlays.length}</div>
-        <div class="today-kpi-lbl">+EV Plays</div>
+        <div class="today-kpi-val" style="color:var(--green)">${confirmed}</div>
+        <div class="today-kpi-lbl">Lineups In</div>
       </div>
       <div class="today-kpi">
         <div class="today-kpi-val" style="color:var(--amber)">${hotPlayers.length}</div>
@@ -2982,35 +2980,112 @@ function renderToday() {
       </div>
     </div>
 
-    <!-- TOP +EV PLAYS -->
-    ${topEV.length ? `<div class="today-section" style="margin-bottom:12px">
-      <div class="today-section-hdr">
-        <span>Best +EV Plays</span>
-        <span style="color:var(--t3);font-size:9px">Model edge vs DraftKings line</span>
-      </div>
-      <div class="today-section-body">
-        <div class="today-ev-list">
-          ${topEV.map((r,i) => {
-            const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-            const ci = getCI(r.hrp, getBatter(r.name)?.pa||0);
-            return `<div class="today-ev-card" onclick="setView('players',document.querySelector('.tab[onclick*=players]'));setTimeout(()=>expand(${players.indexOf(r)}),200)">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-                <div style="font-size:12px;font-weight:600;color:var(--t1)">${r.name}</div>
-                <div style="font-size:11px;font-family:var(--mono);font-weight:700;color:var(--green)">+${r.evEdge}%</div>
-              </div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">${r.team} · ${r.bookOdds>0?'+':''}${r.bookOdds} · ${r.hrp.toFixed(1)}% model</div>
-              <div style="display:flex;gap:4px;align-items:center">
-                <span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)">+EV</span>
-                <span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)'};color:${ci.color};border:1px solid ${ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)'}">
-                  ${ci.tier==='high'?'🔒':ci.tier==='mid'?'⚡':'⚠'} ${ci.label}
-                </span>
-                ${STREAK[r.name]?.flame ? `<span style="font-size:11px">${STREAK[r.name].flame}</span>` : ''}
-              </div>
-            </div>`;
-          }).join('')}
+
+    <!-- HIDDEN EDGE -->
+    ${(()=>{
+      // Fringe targets: model sees them for a real reason, not obvious top picks
+      // Criteria: 6-15% HR prob, MID/HIGH confidence, strong underlying signal
+      const fringe = players
+        .filter(r => r.hrp >= 6 && r.hrp < 15)
+        .filter(r => {
+          const pa = getBatter(r.name)?.pa || 0;
+          const ci = getCI(r.hrp, pa);
+          if (ci.tier === 'low') return false; // not enough sample
+
+          const barrel = getBatter(r.name)?.ba || r.barrel;
+          const streak = STREAK[r.name];
+          const park = getPark(r.game?.home||r.team)||{};
+          const wx = WX[r.game?.home||r.team]||{};
+          const orient = park.orient||180;
+          const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+          const windOut = diff<45||diff>315;
+          const pit = r.pit||{};
+
+          // Must have at least one strong signal
+          const hasEliteBarrel  = barrel >= 12;
+          const hasHotStreak    = streak?.flame === '🔥🔥' || streak?.flame === '🔥';
+          const hasParkEdge     = (park.f||1) >= 1.08;
+          const hasWindEdge     = windOut && (wx.ws||0) >= 10;
+          const hasWeakPitcher  = (pit.xera||pit.era||4.5) >= 5.0;
+          const hasHighHR9      = (pit.hr9||1.2) >= 1.6;
+
+          return hasEliteBarrel || hasHotStreak || hasParkEdge || hasWindEdge || hasWeakPitcher || hasHighHR9;
+        })
+        .sort((a,b) => {
+          // Score by strength of underlying signal
+          const score = (r) => {
+            const barrel = getBatter(r.name)?.ba || r.barrel;
+            const streak = STREAK[r.name];
+            const park = getPark(r.game?.home||r.team)||{};
+            const wx = WX[r.game?.home||r.team]||{};
+            const orient = park.orient||180;
+            const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+            const windOut = diff<45||diff>315;
+            const pit = r.pit||{};
+            return (barrel>=12?barrel*0.3:0)
+              + (streak?.flame==='🔥🔥'?8:streak?.flame==='🔥'?4:0)
+              + ((park.f||1)>=1.08?((park.f||1)-1)*20:0)
+              + (windOut?(wx.ws||0)*0.15:0)
+              + ((pit.xera||pit.era||4.5)>=5.0?(pit.xera||pit.era||4.5)-4.5:0)*3
+              + r.hrp * 0.5;
+          };
+          return score(b) - score(a);
+        })
+        .slice(0,8);
+
+      if (!fringe.length) return '';
+
+      return `<div class="today-section" style="margin-bottom:12px">
+        <div class="today-section-hdr">
+          <span>Hidden Edge</span>
+          <span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span>
         </div>
-      </div>
-    </div>` : ''}
+        <div class="today-section-body">
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+            ${fringe.map(r => {
+              const barrel = getBatter(r.name)?.ba || r.barrel;
+              const streak = STREAK[r.name];
+              const park   = getPark(r.game?.home||r.team)||{};
+              const wx     = WX[r.game?.home||r.tool]||{};
+              const orient = park.orient||180;
+              const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+              const windOut = diff<45||diff>315;
+              const pit    = r.pit||{};
+              const ci     = getCI(r.hrp, getBatter(r.name)?.pa||0);
+
+              // Build signal tags
+              const tags = [];
+              if (barrel >= 15)                        tags.push({label:'🔥 Elite Barrel '+barrel.toFixed(1)+'%', color:'var(--amber)'});
+              else if (barrel >= 12)                   tags.push({label:'Barrel '+barrel.toFixed(1)+'%', color:'var(--teal)'});
+              if (streak?.flame === '🔥🔥')            tags.push({label:'🔥🔥 Scorching', color:'var(--amber)'});
+              else if (streak?.flame === '🔥')         tags.push({label:'🔥 Hot streak', color:'var(--amber)'});
+              if ((park.f||1) >= 1.08)                 tags.push({label:'📈 '+park.name, color:'var(--teal)'});
+              if (windOut && (wx.ws||0) >= 10)         tags.push({label:'💨 Wind out '+Math.round(wx.ws)+'mph', color:'var(--teal)'});
+              if ((pit.xera||pit.era||4.5) >= 5.0)    tags.push({label:'Weak pitcher xERA '+(pit.xera||pit.era||4.5).toFixed(2), color:'var(--green)'});
+              if ((pit.hr9||1.2) >= 1.6)               tags.push({label:'HR/9 '+(pit.hr9||1.2).toFixed(2), color:'var(--green)'});
+
+              return `<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" 
+                onclick="setView('players',document.querySelector('.tab[onclick*=players]'));setTimeout(()=>expand(${players.indexOf(r)}),200)"
+                onmouseover="this.style.borderColor='var(--teal)'" onmouseout="this.style.borderColor='var(--bd)'">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+                  <div style="font-size:12px;font-weight:600;color:var(--t1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</div>
+                  <div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--teal);flex-shrink:0;margin-left:6px">${r.hrp.toFixed(1)}%</div>
+                </div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">${r.team} vs ${r.pitName} · ${r.time}</div>
+                <div style="display:flex;flex-direction:column;gap:3px">
+                  ${tags.slice(0,2).map(t => `<div style="font-size:9px;font-family:var(--mono);color:${t.color}">${t.label}</div>`).join('')}
+                </div>
+                <div style="margin-top:6px">
+                  <span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:${ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)'};color:${ci.color};border:1px solid ${ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)'}">
+                    ${ci.tier==='high'?'🔒':ci.tier==='mid'?'⚡':'⚠'} ${ci.label}
+                  </span>
+                </div>
+              </div>`;
+            }).join('')}
+          </div>
+        </div>
+      </div>`;
+    })()}
 
     <!-- NRFI TARGETS -->
     ${nrfi.length ? `<div class="today-section" style="margin-bottom:12px">
