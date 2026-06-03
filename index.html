@@ -284,7 +284,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="logo">⚾ HRProb</div>
   <div class="hdr-date" id="hdr-date">—</div>
   <div class="status"><div class="dot spin" id="sdot"></div><span id="stxt">Loading…</span></div>
-  <button class="btn" onclick="doRefresh()">↻ Refresh</button>
   <button class="btn" id="update-btn" onclick="requestSlateUpdate()" style="border-color:rgba(251,191,36,.4);color:#fbbf24;font-weight:700" title="Fetch today's HR odds from Claude">✦ Update odds</button>
   <button class="btn" onclick="showDebug()" style="font-size:10px;opacity:0.5" title="Debug">⚙</button>
   <button class="btn" onclick="showGuide()" style="font-size:11px;opacity:0.7" title="How to use">?</button>
@@ -318,7 +317,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button class="chip" onclick="hand('S',this)">SWT</button>
   <button class="chip" id="wxfilt" onclick="toggleWxFilter(this)" title="Hitter-friendly park + wind blowing out">⚡ Park+Wind Edge</button>
 </div>
-<div class="sbar" id="sbar"></div>
 <div id="vtoday"><div id="today-grid"></div></div>
 <div id="vplayers"><div class="twrap"><table><thead><tr>
   <th class="rk">#</th><th>Player</th><th>Team</th><th>vs Pitcher</th>
