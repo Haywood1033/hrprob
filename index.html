@@ -2851,7 +2851,7 @@ function renderToday() {
   const expHR = players.reduce((s,r) => s+r.hrp/100, 0);
   const evPlays = players.filter(r => (r.evEdge||0) > 2);
   const hotPlayers = players.filter(r => STREAK[r.name]?.flame === '🔥🔥' || STREAK[r.name]?.flame === '🔥');
-  const confirmed = games.filter(g => g.awayLineup.length || g.homeLineup.length).length;
+  const confirmed = games.reduce((n,g) => n + (g.awayLineup.length?1:0) + (g.homeLineup.length?1:0), 0);
 
   // Top 5 targets
   const top5 = players.slice(0,5);
@@ -3012,35 +3012,40 @@ function renderToday() {
       </div>
     </div>` : ''}
 
-    <!-- NRFI TARGETS + BEST PARK -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-
-      ${nrfi.length ? `<div class="today-section">
-        <div class="today-section-hdr"><span>🔒 NRFI Targets</span><span style="color:var(--t3);font-size:9px">≤40% first inning</span></div>
-        <div class="today-section-body">
+    <!-- NRFI TARGETS -->
+    ${nrfi.length ? `<div class="today-section" style="margin-bottom:12px">
+      <div class="today-section-hdr"><span>🔒 NRFI Targets</span><span style="color:var(--t3);font-size:9px">≤40% probability of scoring in 1st</span></div>
+      <div class="today-section-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">
           ${nrfi.map(({g,either}) => `
-          <div class="today-target" onclick="openGameModal(${g.pk})" style="cursor:pointer">
-            <div style="flex:1">
+          <div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openGameModal(${g.pk})">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
               <div style="font-size:12px;font-weight:600;color:var(--t1)">${g.away} @ ${g.home}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.hp.name} vs ${g.ap.name}</div>
+              <div style="font-size:14px;font-family:var(--mono);font-weight:700;color:var(--green)">${Math.round(either*100)}%</div>
             </div>
-            <div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--green)">${Math.round(either*100)}%</div>
+            <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.hp.name} vs ${g.ap.name}</div>
           </div>`).join('')}
         </div>
-      </div>` : '<div></div>'}
+      </div>
+    </div>` : ''}
 
-      <div class="today-section">
-        <div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park + wind edge</span></div>
-        <div class="today-section-body">
-          ${parkRanked.slice(0,4).map(({g,park,wx,windOut,score}) => {
+    <!-- BEST ENVIRONMENTS -->
+    <div class="today-section">
+      <div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div>
+      <div class="today-section-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
+          ${parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i) => {
             const pfColor = (park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
-            const wstr = park.roof==='dome'?'Dome':wx.ws?`${Math.round(wx.ws)}mph ${windOut?'↑ out':'→'}`:'—';
-            return `<div class="today-target" onclick="openGameModal(${g.pk})" style="cursor:pointer">
-              <div style="flex:1">
-                <div style="font-size:12px;font-weight:600;color:var(--t1)">${g.away} @ ${g.home}</div>
-                <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${park.name||g.home} · ${wstr}</div>
+            const wstr = park.roof==='dome'?'🏟 Dome':wx.ws?`${Math.round(wx.ws)}mph ${windOut?'↑ out':((wx.wd?((wx.wd-(park.orient||180))%360+360)%360:180)>135&&((wx.wd?((wx.wd-(park.orient||180))%360+360)%360:180))<225?'↓ in':'→ cross')}`:'—';
+            const ou = GAME_ODDS[g.away+'@'+g.home];
+            return `<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openGameModal(${g.pk})">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">#${i+1}</div>
+                <div style="font-size:12px;font-family:var(--mono);font-weight:700;color:${pfColor}">PF ${(park.f||1).toFixed(2)}</div>
               </div>
-              <div style="font-size:12px;font-family:var(--mono);font-weight:700;color:${pfColor}">PF ${(park.f||1).toFixed(2)}</div>
+              <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:2px">${g.away} @ ${g.home}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${park.name||g.home}</div>
+              <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">${wstr}${ou?' · O/U '+ou.ou:''}</div>
             </div>`;
           }).join('')}
         </div>
