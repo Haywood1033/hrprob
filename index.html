@@ -93,8 +93,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
 #vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday{display:none}
 #vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on{display:block}
-.sbar{padding:10px 20px;background:var(--bg2);border-bottom:1px solid var(--bd);font-size:11px;font-family:var(--mono);color:var(--t2)}
-.sbar span{margin-right:12px}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -281,7 +279,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 </head>
 <body>
 <header class="hdr">
-  <div class="logo">⚾ HRProb</div>
+  <div class="logo" onclick="setView('today',document.querySelector('.tab[onclick*=today]'))" style="cursor:pointer">⚾ HRProb</div>
   <div class="hdr-date" id="hdr-date">—</div>
   <div class="status"><div class="dot spin" id="sdot"></div><span id="stxt">Loading…</span></div>
   <button class="btn" id="update-btn" onclick="requestSlateUpdate()" style="border-color:rgba(251,191,36,.4);color:#fbbf24;font-weight:700" title="Fetch today's HR odds from Claude">✦ Update odds</button>
@@ -3339,15 +3337,7 @@ function renderTargets(){
   }).join(''):'<div class="empty"><h3>Loading…</h3></div>';
 }
 
-function updateSbar(rows){
-  const live=rows.filter(r=>r.source==='live'||r.source==='confirmed').length;
-  const proj=rows.filter(r=>r.source==='projected').length;
-  const sb=document.getElementById('sbar');
-  sb.innerHTML=`<span>${rows.length} batters</span>`+
-    (live?`<span style="color:var(--green)">✅ ${live} confirmed</span>`:'')+'  '+
-    (proj?`<span style="color:var(--amber)">⏳ ${proj} projected</span>`:'')+'  '+
-    `<span style="color:${statReady?'var(--teal)':'var(--t3)'}">${statReady?'● Statcast live':'○ Statcast loading…'}</span>`;
-}
+function updateSbar(rows){}
 
 function renderAll(){
   if(curView==='players')  renderPlayers();
