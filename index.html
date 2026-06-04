@@ -3017,7 +3017,7 @@ function renderToday() {
             const evBadge = (r.evEdge||0)>2
               ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)">+EV</span>`
               : '';
-            return `<div class="today-target" onclick="setView('players',document.querySelector('.tab[onclick*=players]'));setTimeout(()=>expand(${i}),200)" style="cursor:pointer">
+            return `<div class="today-target" onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')" style="cursor:pointer">
               <div class="today-target-rank">${i+1}</div>
               <div>
                 <div class="today-target-name">${r.name} ${flame} ${parkBadge(r.name,true)}</div>
@@ -3145,7 +3145,7 @@ function renderToday() {
               if ((pit.hr9||1.2) >= 1.6)               tags.push({label:'HR/9 '+(pit.hr9||1.2).toFixed(2), color:'var(--green)'});
 
               return `<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" 
-                onclick="setView('players',document.querySelector('.tab[onclick*=players]'));setTimeout(()=>expand(${players.indexOf(r)}),200)"
+                onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')" 
                 onmouseover="this.style.borderColor='var(--teal)'" onmouseout="this.style.borderColor='var(--bd)'">
                 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
                   <div style="font-size:12px;font-weight:600;color:var(--t1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</div>
