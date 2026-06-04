@@ -1568,6 +1568,7 @@ function renderForecast() {
   const avgEither = f1Games.reduce((s,d)=>s+d.eitherF1,0)/f1Games.length;
   const nrfi = f1Games.filter(d=>Math.round(d.eitherF1*100)<=38).sort((a,b)=>a.eitherF1-b.eitherF1);
   const yrfi = f1Games.filter(d=>Math.round(d.eitherF1*100)>=55).sort((a,b)=>b.eitherF1-a.eitherF1);
+  F1_CACHE = f1Games; // share with Today tab
 
   const flagCard = ({g,eitherF1,awayF1,homeF1}) => {
     const hasReal = PITCHER_SPLITS[g.hp.name]?.f1 || PITCHER_SPLITS[g.ap.name]?.f1;
@@ -2032,6 +2033,7 @@ function getBatSide(playerName, lineupBatSide, bsFromStatcast) {
 }
 function rebuild(){
   allRows=[];
+  F1_CACHE=[]; // invalidate so Today/Forecast recalculate with fresh data
   for(const g of games){
     const park=getPark(g.home)||{f:1.0};
     const wx=WX[g.home]||{};
@@ -2199,6 +2201,7 @@ const STREAK = {};
 const SPLITS = {};         // batter platoon splits from /api/splits
 const PITCHER_SPLITS = {}; // pitcher platoon splits from /api/splits
 const PARK_SPLITS    = {}; // career park splits from /api/splits
+let F1_CACHE = []; // shared first inning calculations — computed once, used by both Forecast and Today tabs
 const ROSTERS = {};   // active rosters from /api/slate — current 26-man        // {name: {hr, avg, slg, ab, games, flame}}
 window._debug = {get STREAK(){return STREAK;}, get BATTER(){return BATTER;}, get PITCHER(){return PITCHER;}, get games(){return games;}, get allRows(){return allRows;}};
 const STREAK_ID_CACHE = {};
@@ -2937,27 +2940,36 @@ function renderToday() {
   }).sort((a,b) => b.score-a.score);
 
   // NRFI targets
-  const nrfi = games.map(g => {
-    const park = getPark(g.home)||{f:1.0};
-    const wx = WX[g.home]||{};
-    const awayBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
-    const homeBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
-    const calcF1 = (pit, batters) => {
-      let p=0.26;
-      const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
-      if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
-      else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
-      if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
-      p*=(park.f||1.0);
-      if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
-      return Math.max(0.08,Math.min(0.65,p));
-    };
-    const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
-    const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
-    const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
-    const either=1-(1-af)*(1-hf);
-    return {g,either,park};
-  }).filter(d=>Math.round(d.either*100)<=38).sort((a,b)=>a.either-b.either).slice(0,3);
+  // Use F1_CACHE from renderForecast — same calculation, guaranteed to match
+  // If Forecast hasn't run yet, compute it now and cache it
+  if (!F1_CACHE.length && games.length) {
+    F1_CACHE = games.map(g => {
+      const park = getPark(g.home)||{f:1.0};
+      const wx   = WX[g.home]||{};
+      const awayBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
+      const homeBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
+      const calcF1 = (pit, batters) => {
+        let p=0.26;
+        const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
+        if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
+        else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
+        if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
+        p*=(park.f||1.0);
+        if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
+        return Math.max(0.08,Math.min(0.65,p));
+      };
+      const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
+      const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
+      const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
+      const eitherF1=1-(1-af)*(1-hf);
+      return {g, eitherF1, park, awayF1:af, homeF1:hf};
+    });
+  }
+  const nrfi = F1_CACHE
+    .filter(d => Math.round(d.eitherF1*100) <= 38)
+    .sort((a,b) => a.eitherF1 - b.eitherF1)
+    .slice(0,3)
+    .map(d => ({g: d.g, either: d.eitherF1, park: d.park}));
 
   grid.innerHTML = `
   <div class="today-wrap">
