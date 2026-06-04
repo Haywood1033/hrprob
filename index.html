@@ -2448,13 +2448,42 @@ function expand(i){
   const pk=getPark(r.game?.home||r.team)||{};
   const pit=r.pit||{};
   const wxd=pk.roof==='dome'?'Dome (climate controlled)':w.ws?`${Math.round(w.ws)}mph · ${Math.round(w.t||70)}°F`:'—';
-  const platoon=(r.bats!=='S')?((r.bats===(pit.hand||'R'))?'⚠ Same side':'✓ Platoon adv'):'— Switch';
   const pitHand = pit.hand||'R';
+  const isSameHand = r.bats !== 'S' && r.bats === pitHand;
+  // splitKey: which of the batter's splits apply vs this pitcher
   const splitKey = pitHand==='L'?'vsLHP':'vsRHP';
+  const oppKey   = pitHand==='L'?'vsRHP':'vsLHP';
   const realSplit = SPLITS[r.name]?.[splitKey];
-  const platoonDetail = realSplit && realSplit.ab>=15
-    ? `ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr} HR in ${realSplit.ab} AB`
-    : 'Loading real splits…';
+  const oppSplit  = SPLITS[r.name]?.[oppKey];
+
+  // Determine advantage from actual data if available, else fall back to hand matchup rule
+  let platoon, platoonDetail;
+  if (realSplit && realSplit.ab >= 15 && oppSplit && oppSplit.ab >= 15) {
+    // Use real HR/PA ratio to determine actual advantage
+    const thisHrpa = realSplit.hrpa || (realSplit.hr / Math.max(realSplit.ab, 1));
+    const oppHrpa  = oppSplit.hrpa  || (oppSplit.hr  / Math.max(oppSplit.ab,  1));
+    const hasAdv   = thisHrpa >= oppHrpa * 0.9; // within 10% = neutral
+    const isMuchWorse = thisHrpa < oppHrpa * 0.7; // 30%+ worse = clear disadvantage
+    if (r.bats === 'S') {
+      platoon = '— Switch hitter';
+    } else if (isMuchWorse) {
+      platoon = '⚠ Split disadvantage';
+    } else if (hasAdv && !isSameHand) {
+      platoon = '✓ Platoon adv';
+    } else if (hasAdv && isSameHand) {
+      platoon = '~ Same side (no penalty)';
+    } else {
+      platoon = '⚠ Same side';
+    }
+    platoonDetail = `vs ${pitHand==='L'?'LHP':'RHP'}: ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr} HR in ${realSplit.ab} AB`
+      + ` (vs ${pitHand==='L'?'RHP':'LHP'}: .${Math.round(oppSplit.slg*1000).toString().padStart(3,'0')} SLG)`;
+  } else if (realSplit && realSplit.ab >= 15) {
+    platoon = isSameHand ? '⚠ Same side' : '✓ Platoon adv';
+    platoonDetail = `vs ${pitHand==='L'?'LHP':'RHP'}: ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr} HR in ${realSplit.ab} AB`;
+  } else {
+    platoon = isSameHand ? '⚠ Same side' : '✓ Platoon adv';
+    platoonDetail = 'Loading real splits…';
+  }
   const parkEdge=(pk.f||1)>=1.05?`📈 +${(((pk.f||1)-1)*100).toFixed(0)}% hitter park`:(pk.f||1)<=0.95?`📉 ${(((pk.f||1)-1)*100).toFixed(0)}% pitcher park`:'— Neutral';
   const windEdge=wxd.includes('out')?'💨 Wind blowing out':wxd.includes('in')?'🌬 Wind blowing in':wxd.includes('Dome')?'🏟 Dome':'— Neutral wind';
   const evColor=r.evEdge>2?'var(--green)':r.evEdge<-2?'var(--red)':'var(--t1)';
@@ -3243,7 +3272,20 @@ function expandTarget(i) {
   const pit = r.pit||{};
   const w = r.wx||{};
   const wxd = pk.roof==='dome'?'Dome':w.ws?`${Math.round(w.ws)}mph · ${Math.round(w.t||70)}°F`:'—';
-  const platoon = (r.bats!=='S')?((r.bats===(pit.hand||'R'))?'⚠ Same side':'✓ Platoon adv'):'— Switch';
+  const pitHandT = pit.hand||'R';
+  const isSameHandT = r.bats !== 'S' && r.bats === pitHandT;
+  const splitKeyT = pitHandT==='L'?'vsLHP':'vsRHP';
+  const oppKeyT   = pitHandT==='L'?'vsRHP':'vsLHP';
+  const realSplitT = SPLITS[r.name]?.[splitKeyT];
+  const oppSplitT  = SPLITS[r.name]?.[oppKeyT];
+  let platoon;
+  if (realSplitT?.ab >= 15 && oppSplitT?.ab >= 15) {
+    const thisHrpa = realSplitT.hrpa || (realSplitT.hr / Math.max(realSplitT.ab,1));
+    const oppHrpa  = oppSplitT.hrpa  || (oppSplitT.hr  / Math.max(oppSplitT.ab,1));
+    platoon = r.bats==='S' ? '— Switch' : thisHrpa < oppHrpa*0.7 ? '⚠ Split disadvantage' : !isSameHandT ? '✓ Platoon adv' : '~ Same side';
+  } else {
+    platoon = r.bats==='S' ? '— Switch' : isSameHandT ? '⚠ Same side' : '✓ Platoon adv';
+  }
   const parkEdge = (pk.f||1)>=1.05?`📈 +${(((pk.f||1)-1)*100).toFixed(0)}% hitter park`:(pk.f||1)<=0.95?`📉 ${(((pk.f||1)-1)*100).toFixed(0)}% pitcher park`:'— Neutral';
   const windEdge = wxd.includes('out')?'💨 Blowing out':wxd.includes('in')?'🌬 Blowing in':wxd.includes('Dome')?'🏟 Dome':'— Neutral wind';
   const evColor = r.evEdge>2?'var(--green)':r.evEdge<-2?'var(--red)':'var(--t1)';
