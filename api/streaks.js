@@ -89,8 +89,10 @@ module.exports = async function handler(req, res) {
   const results = {};
   const start = Date.now();
 
-  for (let i = 0; i < Math.min(names.length, 40); i += 5) {
-    const batch = names.slice(i, i+5);
+  // Process in larger batches (10 concurrent) to handle full 270-player slates
+  // Each batch: 2 API calls per player (search + gameLog) = ~1-2s per batch
+  for (let i = 0; i < names.length; i += 10) {
+    const batch = names.slice(i, i+10);
     await Promise.allSettled(batch.map(async name => {
       try {
         const id = await searchPlayer(name);
