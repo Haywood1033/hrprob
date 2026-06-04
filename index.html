@@ -2181,6 +2181,7 @@ function populatePitcherIds(pitchers) {
 const STREAK = {};
 const SPLITS = {};         // batter platoon splits from /api/splits
 const PITCHER_SPLITS = {}; // pitcher platoon splits from /api/splits
+const PARK_SPLITS    = {}; // career park splits from /api/splits
 const ROSTERS = {};   // active rosters from /api/slate — current 26-man        // {name: {hr, avg, slg, ab, games, flame}}
 window._debug = {get STREAK(){return STREAK;}, get BATTER(){return BATTER;}, get PITCHER(){return PITCHER;}, get games(){return games;}, get allRows(){return allRows;}};
 const STREAK_ID_CACHE = {};
@@ -2401,7 +2402,19 @@ async function loadSplitsData() {
     const r = await fetch('/api/splits', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: allPlayers, pitchers: pitcherNames }),
+      body: JSON.stringify({
+          names: allPlayers,
+          pitchers: pitcherNames,
+          venues: Object.fromEntries(
+            allRows
+              .filter(r => r.source !== 'projected' && r.game)
+              .map(r => [r.name, {
+                homeTeam: r.game.home,
+                isAway: r.team === r.game.away,
+                seasonSlg: (getBatter(r.name)?.iso || 0.150) + 0.250, // iso + avg ≈ slg proxy
+              }])
+          ),
+        }),
       signal: ctrl.signal,
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2422,6 +2435,12 @@ async function loadSplitsData() {
       }
       const pitWithBoth = Object.values(PITCHER_SPLITS).filter(s=>s.vsLHB&&s.vsRHB).length;
       console.log(`Pitcher splits loaded: ${Object.keys(PITCHER_SPLITS).length} pitchers, ${pitWithBoth} with both sides`);
+    }
+    if (d.parkSplits) {
+      for (const [name, ps] of Object.entries(d.parkSplits)) {
+        PARK_SPLITS[name] = ps;
+      }
+      console.log(`Park splits loaded: ${Object.keys(PARK_SPLITS).length} players`);
     }
     rebuild(); renderAll();
   } catch(e) {
@@ -2543,6 +2562,16 @@ function expand(i){
         <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Park</div>
         <div style="font-size:13px;font-family:var(--mono);color:var(--t1);font-weight:600">${parkEdge}</div>
         <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:2px">${pk.name||'—'} · ${pk.elev||0}ft elev</div>
+        ${(()=>{
+          const ps = PARK_SPLITS[r.name];
+          if (!ps || ps.ab < 10) return '';
+          const col = ps.flag==='boost' ? 'var(--green)' : ps.flag==='suppressed' ? 'var(--red)' : 'var(--t3)';
+          const icon = ps.flag==='boost' ? '📈' : ps.flag==='suppressed' ? '📉' : '—';
+          return '<div style="margin-top:5px;padding-top:5px;border-top:1px solid var(--bg3)">'
+            + '<div style="font-size:10px;font-family:var(--mono);color:'+col+';font-weight:600">'+icon+' Career at '+ps.venue+'</div>'
+            + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">SLG .'+Math.round(ps.slg*1000).toString().padStart(3,'0')+' · '+ps.hr+' HR in '+ps.ab+' AB</div>'
+            + '</div>';
+        })()}
       </div>
       <div style="padding:10px 14px;border-right:1px solid var(--bd)">
         <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">Weather</div>
@@ -3347,6 +3376,9 @@ function renderTargets(){
     if(r.barrel>=15) tags.push({c:'hot',  t:'🔥 Elite Barrel'});
     if(r.ev>=93)     tags.push({c:'hot',  t:`⚡ EV ${r.ev.toFixed(1)}`});
     if((r.park?.f||1)>=1.05) tags.push({c:'park', t:'📈 Hitter Park'});
+    const ps = PARK_SPLITS[r.name];
+    if(ps?.flag==='boost') tags.push({c:'park', t:'📈 Park History'});
+    else if(ps?.flag==='suppressed') tags.push({c:'pit', t:'📉 Park History'});
     if((r.pit?.xera||r.pit?.era||4.5)>=5.0) tags.push({c:'pit', t:'🎯 Weak Pitcher'});
     const src = r.source==='live'||r.source==='confirmed'
       ? '<span class="sb slive" style="font-size:9px">✓ Live</span>'
