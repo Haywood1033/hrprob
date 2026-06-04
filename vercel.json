@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "api/streaks.js": { "maxDuration": 60 },
+    "api/splits.js":  { "maxDuration": 60 },
+    "api/slate.js":   { "maxDuration": 30 },
+    "api/statcast.js":{ "maxDuration": 30 },
+    "api/history.js": { "maxDuration": 30 }
+  }
+}
