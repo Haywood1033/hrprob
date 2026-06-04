@@ -2033,7 +2033,9 @@ function getBatSide(playerName, lineupBatSide, bsFromStatcast) {
 }
 function rebuild(){
   allRows=[];
-  F1_CACHE=[]; // invalidate so Today/Forecast recalculate with fresh data
+  // Invalidate F1_CACHE when game data changes (lineup confirmations, pitcher updates)
+  const gameKey = games.map(g=>g.pk+':'+(g.awayLineup.length>0?1:0)+(g.homeLineup.length>0?1:0)+g.ap.name+g.hp.name).join(',');
+  if (rebuild._lastGameKey !== gameKey) { F1_CACHE=[]; rebuild._lastGameKey=gameKey; }
   for(const g of games){
     const park=getPark(g.home)||{f:1.0};
     const wx=WX[g.home]||{};
