@@ -2957,7 +2957,7 @@ function renderToday() {
     const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
     const either=1-(1-af)*(1-hf);
     return {g,either,park};
-  }).filter(d=>Math.round(d.either*100)<=40).sort((a,b)=>a.either-b.either).slice(0,3);
+  }).filter(d=>Math.round(d.either*100)<=38).sort((a,b)=>a.either-b.either).slice(0,3);
 
   grid.innerHTML = `
   <div class="today-wrap">
@@ -3157,7 +3157,7 @@ function renderToday() {
 
     <!-- NRFI TARGETS -->
     ${nrfi.length ? `<div class="today-section" style="margin-bottom:12px">
-      <div class="today-section-hdr"><span>🔒 NRFI Targets</span><span style="color:var(--t3);font-size:9px">≤40% probability of scoring in 1st</span></div>
+      <div class="today-section-hdr"><span>🔒 NRFI Targets</span><span style="color:var(--t3);font-size:9px">≤38% probability of scoring in 1st</span></div>
       <div class="today-section-body">
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">
           ${nrfi.map(({g,either}) => `
