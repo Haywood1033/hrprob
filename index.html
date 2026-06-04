@@ -1351,7 +1351,7 @@ async function saveToHistory() {
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
-  const top40 = [...seen.values()].sort((a,b)=>b.hrp-a.hrp).slice(0,40);
+  const top40 = [...seen.values()].sort((a,b)=>b.hrp-a.hrp).slice(0,40); // accuracy tracking keeps top 40
   if (!top40.length) return;
 
   try {
@@ -2266,23 +2266,21 @@ async function fetchStreakForPlayer(name, playerId) {
 }
 
 async function loadStreakData() {
-  // Get top 40 unique players by HR probability
   const seen = new Set();
-  const top40 = [];
+  const allPlayers = [];
   for (const r of [...allRows].sort((a,b)=>b.hrp-a.hrp)) {
-    if (!seen.has(r.name)) { seen.add(r.name); top40.push(r.name); }
-    if (top40.length >= 40) break;
+    if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
   }
-  if (!top40.length) { console.warn('Streak: allRows empty, skipping'); return; }
-  console.log(`Fetching streaks for ${top40.length} players…`, top40.slice(0,3));
+  if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
+  console.log(`Fetching streaks for ${allPlayers.length} players…`);
 
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 45000);
+    const t = setTimeout(() => ctrl.abort(), 90000);
     const r = await fetch('/api/streaks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: top40 }),
+      body: JSON.stringify({ names: allPlayers }),
       signal: ctrl.signal,
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2387,24 +2385,23 @@ async function fetchStreakForPlayer(name, playerId) {
 // ── REAL PLATOON SPLITS (MLB Stats API via /api/splits) ──────────
 async function loadSplitsData() {
   const seen = new Set();
-  const top60 = [];
+  const allPlayers = [];
   for (const r of [...allRows].sort((a,b)=>b.hrp-a.hrp)) {
-    if (!seen.has(r.name)) { seen.add(r.name); top60.push(r.name); }
-    if (top60.length >= 60) break;
+    if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
   }
-  if (!top60.length) return;
+  if (!allPlayers.length) return;
 
   // Also send today's starting pitchers for platoon split fetching
   const pitcherNames = [...new Set(games.flatMap(g => [g.ap?.name, g.hp?.name]).filter(Boolean))];
 
-  console.log(`Fetching platoon splits for ${top60.length} batters + ${pitcherNames.length} pitchers…`);
+  console.log(`Fetching platoon splits for ${allPlayers.length} batters + ${pitcherNames.length} pitchers…`);
   try {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 55000); // extra time for pitchers
+    const t = setTimeout(() => ctrl.abort(), 90000); // more time for full slate
     const r = await fetch('/api/splits', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: top60, pitchers: pitcherNames }),
+      body: JSON.stringify({ names: allPlayers, pitchers: pitcherNames }),
       signal: ctrl.signal,
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error('HTTP ' + r.status);
