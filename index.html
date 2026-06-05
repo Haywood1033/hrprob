@@ -3124,30 +3124,47 @@ function renderToday() {
         </div>
       </div>
 
-      <!-- TODAY'S GAMES -->
+      <!-- TOP SIGNAL PLAYS -->
       <div class="today-section">
         <div class="today-section-hdr">
-          <span>Today's Games</span>
-          <span onclick="setView('games',document.querySelector('.tab[onclick*=games]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
+          <span>Top Signal Plays</span>
+          <span onclick="setView('players',document.querySelector('.tab[onclick*=players]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
         </div>
-        <div class="today-section-body" style="padding:6px 0">
-          ${games.slice(0,7).map(g => {
-            const park = getPark(g.home)||{};
-            const wx = WX[g.home]||{};
-            const ou = GAME_ODDS[g.away+'@'+g.home];
-            const orient = park.orient||180;
-            const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-            const windOut = diff<45||diff>315;
-            const icons = [(park.f||1)>=1.05?'📈':'', windOut&&wx.ws?'💨':''].filter(Boolean).join(' ');
-            const hasLU = g.awayLineup.length||g.homeLineup.length;
-            return `<div class="today-game" onclick="openGameModal(${g.pk})">
-              <div style="flex:1;padding:0 16px">
-                <div class="today-game-teams">${g.away} <span style="color:var(--t3);font-weight:400">@</span> ${g.home} ${icons}</div>
-                <div class="today-game-meta">${g.time}${ou?' · O/U '+ou.ou:''}${hasLU?' · ✓':' · ~'}</div>
-              </div>
-            </div>`;
-          }).join('')}
-          ${games.length>7?`<div style="padding:8px 16px;font-size:10px;font-family:var(--mono);color:var(--t3)">+${games.length-7} more games</div>`:''}
+        <div class="today-section-body">
+          ${(()=>{
+            // Rank by signal convergence — badge tier first, then HR probability
+            const badgeRank = (r) => {
+              const { count } = getSignals(r);
+              return count >= 5 ? 3 : count >= 4 ? 2 : count >= 3 ? 1 : 0;
+            };
+            const signalPlays = [...players]
+              .filter(r => badgeRank(r) > 0)
+              .sort((a,b) => {
+                const rankDiff = badgeRank(b) - badgeRank(a);
+                return rankDiff !== 0 ? rankDiff : b.hrp - a.hrp;
+              })
+              .slice(0,5);
+
+            if (!signalPlays.length) return '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
+
+            return signalPlays.map(r => {
+              const { signals, badge } = getSignals(r);
+              const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+              return `<div class="today-target" onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')">
+                <div style="flex:1">
+                  <div class="today-target-name">${r.name}</div>
+                  <div class="today-target-sub">${r.team} vs ${r.pitName}</div>
+                  <div style="margin-top:4px;display:flex;align-items:center;gap:6px">
+                    ${signalPanel(r, true)}
+                  </div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;margin-left:8px">
+                  <div class="today-target-hrp" style="color:${hc}">${r.hrp.toFixed(1)}%</div>
+                  ${badge ? `<div style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd};margin-top:3px;white-space:nowrap">${badge.label}</div>` : ''}
+                </div>
+              </div>`;
+            }).join('');
+          })()}
         </div>
       </div>
     </div>
