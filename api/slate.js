@@ -130,12 +130,12 @@ module.exports = async function handler(req, res) {
   console.log(`slate ${today}: ${pitchers.length} games, ${confirmedCount} lineups, ${rosterCount} rosters, ${Date.now()-start}ms`);
 
   const data = {
-    date: today, pitchers, lineups, rosters, lineupSource,
+    date: targetDate, pitchers, lineups, rosters, lineupSource,
     weather: weather || {}, confirmedCount,
     timestamp: Date.now(), elapsed: Date.now() - start,
   };
 
-  cache = { data, timestamp: Date.now(), date: today };
+  cache = { data, timestamp: Date.now(), date: targetDate };
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60');
   return res.status(200).json(data);
 };
