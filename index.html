@@ -3207,6 +3207,13 @@ async function renderTomorrow() {
     }
   }
 
+  // Build projected rows — use today's rosters (valid for tomorrow's lineup projection)
+  // If rosters not loaded yet, show message
+  if (!Object.keys(ROSTERS).length) {
+    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>Loading roster data\u2026</h3><p style="margin-top:8px;font-size:12px;color:var(--t3)">Today\'s data needs to finish loading first. Try again in a few seconds.</p></div></div>';
+    return;
+  }
+
   // Build projected rows
   const tRows = [];
   for (const g of tGames) {
