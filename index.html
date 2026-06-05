@@ -704,12 +704,24 @@ function hrProb(b,park,wx,pit,order){
     }
   }
 
+  // ── WALK FACTOR ──────────────────────────────────────────────
+  // High walk rate = fewer swingable PAs = fewer HR opportunities per game
+  // Elite hitters (Judge, Ohtani) walk 18-22% of PAs — significantly reduces
+  // their effective PA count vs average hitters at 8-9%
+  // League avg BB% ~8.5%. Adjustment: proportional reduction in effective PAs
+  const bb_pct = b.bb_pct || 8.5;
+  const LG_BB  = 8.5;
+  if (bb_pct > LG_BB) {
+    // Each 1% above league avg reduces probability by ~0.4%
+    // Capped at 15% max reduction (even Judge still gets PAs)
+    const walkPenalty = Math.min(0.15, (bb_pct - LG_BB) * 0.004);
+    p *= (1 - walkPenalty);
+  }
+
   // ── BATTING ORDER POSITION ────────────────────────────────────
-  // Cleanup hitters (3-5) get slightly more AB with men on
-  // Leadoff (1-2) and bottom (7-9) slight adjustment
   const ord = order || 5;
-  if (ord >= 3 && ord <= 5) p *= 1.02;       // cleanup premium
-  else if (ord >= 7)        p *= 0.97;       // bottom of order
+  if (ord >= 3 && ord <= 5) p *= 1.02;
+  else if (ord >= 7)        p *= 0.97;
 
   return Math.max(0.5, Math.min(32, p * 100));
 }
@@ -886,6 +898,8 @@ function parseStatcastCSV(csv,type){
       if(!BATTER[n])BATTER[n]={};
       if(ev)BATTER[n].ev=ev;if(ba)BATTER[n].ba=ba;if(hh)BATTER[n].hh=hh;
       BATTER[n].pa=pa;
+      const bb=get(row,'b_bb_percent','bb_percent','walk_percent');
+      if(bb)BATTER[n].bb_pct=bb;
     }else{
       const xera=get(row,'xera'),whiff=get(row,'whiff_percent'),hr9=get(row,'p_hr_per9','hr_per9');
       if(!PITCHER[n])PITCHER[n]={};
@@ -2295,7 +2309,9 @@ async function loadStreakData() {
     if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
   }
   if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
-  console.log(`Fetching streaks for ${allPlayers.length} players…`);
+  // Cap at 150 — sorted by HR prob so top targets always included, reduces API lag
+  const streakPlayers = allPlayers.slice(0, 150);
+  console.log(`Fetching streaks for ${streakPlayers.length} of ${allPlayers.length} players…`);
 
   try {
     const ctrl = new AbortController();
@@ -2303,7 +2319,7 @@ async function loadStreakData() {
     const r = await fetch('/api/streaks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: allPlayers }),
+      body: JSON.stringify({ names: streakPlayers }),
       signal: ctrl.signal,
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -3692,7 +3708,8 @@ async function init(){
               hr9:   +(s.hr9||1.2).toFixed(2),
               hh:    +(s.hh_pct||s.hh||38).toFixed(1),
               hand:  PITCHER[name]?.hand || 'R',
-              k_pct: s.k_pct||null,
+              k_pct:  s.k_pct||null,
+              bb_pct: s.bb_pct||null,
             };
           }
           console.log('/api/statcast pitchers:', Object.keys(d.pitchers).length);
