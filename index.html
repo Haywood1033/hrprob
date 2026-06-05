@@ -3215,6 +3215,15 @@ async function renderTomorrow() {
   }
 
   // Build projected rows
+  // First merge tomorrow's rosters for teams not in today's slate
+  if (td.rosters) {
+    for (const [team, players] of Object.entries(td.rosters)) {
+      if (!ROSTERS[team]) ROSTERS[team] = players;
+    }
+  }
+  // Create empty placeholders for any still-missing teams
+  tGames.flatMap(g=>[g.away,g.home]).forEach(t=>{ if(!ROSTERS[t]) ROSTERS[t]=[]; });
+
   const tRows = [];
   for (const g of tGames) {
     const park=getPark(g.home)||{f:1.0};const wx=tWX[g.home]||{};
