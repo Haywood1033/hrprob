@@ -314,6 +314,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button class="chip" onclick="hand('R',this)">RHB</button>
   <button class="chip" onclick="hand('S',this)">SWT</button>
   <button class="chip" id="wxfilt" onclick="toggleWxFilter(this)" title="Hitter-friendly park + wind blowing out">⚡ Park+Wind Edge</button>
+  <button class="chip" id="sigfilt" onclick="toggleSignalFilter(this)" title="Players with 3+ signals firing">🎯 Signal Plays</button>
 </div>
 <div id="vtoday"><div id="today-grid"></div></div>
 <div id="vplayers"><div class="twrap"><table><thead><tr>
@@ -576,7 +577,7 @@ Object.assign(BATTER, BATTER_REAL);
 
 
 let games=SLATE.games.map(g=>({...g,awayLineup:[],homeLineup:[]}));
-let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, statReady=false;
+let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, statReady=false;
 let curView='players';
 
 function getPark(t){return PARKS[t]||PARKS[(t||'').replace(/\s+/g,'')]||null;}
@@ -2741,6 +2742,7 @@ function filtered(){
     if(t&&r.team!==t)return false;
     if(q&&!r.name.toLowerCase().includes(q)&&!r.team.toLowerCase().includes(q))return false;
     if(wxFilt&&!hasWxEdge(r))return false;
+    if(signalFilt&&getSignals(r).count<3)return false;
     return true;
   });
 }
@@ -3128,7 +3130,7 @@ function renderToday() {
       <div class="today-section">
         <div class="today-section-hdr">
           <span>Top Signal Plays</span>
-          <span onclick="setView('players',document.querySelector('.tab[onclick*=players]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
+          <span onclick="signalFilt=true;document.getElementById('sigfilt')?.classList.add('on');setView('players',document.querySelector('.tab[onclick*=players]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
         </div>
         <div class="today-section-body">
           ${(()=>{
@@ -3610,7 +3612,14 @@ function setView(v,el){
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   renderAll();
 }
-function hand(h,el){handFilt=h;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el?.classList.add('on');wxFilt=false;document.getElementById('wxfilt')?.classList.remove('on');renderPlayers();}
+function hand(h,el){handFilt=h;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el?.classList.add('on');wxFilt=false;signalFilt=false;document.getElementById('wxfilt')?.classList.remove('on');document.getElementById('sigfilt')?.classList.remove('on');renderPlayers();}
+
+function toggleSignalFilter(btn) {
+  signalFilt = !signalFilt;
+  btn.classList.toggle('on', signalFilt);
+  if (signalFilt) { handFilt=''; wxFilt=false; document.querySelectorAll('.chip:not(#sigfilt)').forEach(c=>c.classList.remove('on')); }
+  renderPlayers();
+}
 
 function toggleWxFilter(btn) {
   wxFilt = !wxFilt;
