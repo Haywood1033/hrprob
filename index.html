@@ -91,8 +91,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -297,6 +297,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('targets',this)">🎯 Top Targets</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('forecast',this)">🔮 Forecast</div>
+  <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
 <div class="fbar" id="fbar">
@@ -328,6 +329,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vgames"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets"><div class="tgrid" id="tgrid"></div></div>
 <div id="vparlay"><div class="pgrid" id="pgrid"></div></div>
+<div id="vtomorrow"><div id="tomorrow-grid"></div></div>
 <div id="vforecast"><div class="fcast-grid" id="fcast-grid"></div></div>
 <div id="vhistory"><div class="hgrid" id="hgrid"></div></div>
 
@@ -2288,7 +2290,8 @@ const STREAK = {};
 const SPLITS = {};         // batter platoon splits from /api/splits
 const PITCHER_SPLITS = {}; // pitcher platoon splits from /api/splits
 const PARK_SPLITS    = {}; // career park splits from /api/splits
-let F1_CACHE = []; // shared first inning calculations — computed once, used by both Forecast and Today tabs
+let F1_CACHE = [];
+let tomorrowData = null; // cached tomorrow slate response // shared first inning calculations — computed once, used by both Forecast and Today tabs
 const ROSTERS = {};   // active rosters from /api/slate — current 26-man        // {name: {hr, avg, slg, ab, games, flame}}
 window._debug = {get STREAK(){return STREAK;}, get BATTER(){return BATTER;}, get PITCHER(){return PITCHER;}, get games(){return games;}, get allRows(){return allRows;}};
 const STREAK_ID_CACHE = {};
@@ -2995,7 +2998,7 @@ function openGameModal(gamePk) {
 function renderToday() {
   const grid = document.getElementById('today-grid');
   if (!allRows.length) {
-    grid.innerHTML = '<div class="empty" style="padding:60px 20px"><div style="font-size:32px;margin-bottom:12px">⚾</div><h3>Loading today\'s slate\u2026</h3></div>';
+    grid.innerHTML = '<div class="empty" style="padding:60px 20px"><div style="font-size:32px;margin-bottom:12px">⚾</div><h3>Loading today\u2019s slate\u2026</h3></div>';
     return;
   }
 
@@ -3004,46 +3007,45 @@ function renderToday() {
   const dayName = today.toLocaleDateString('en-US',{weekday:'long'});
   const dateStr = today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
 
-  // Deduplicate players
   const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
   const players = [...seen.values()].sort((a,b) => b.hrp-a.hrp);
 
-  // KPIs
   const expHR = players.reduce((s,r) => s+r.hrp/100, 0);
-  const evPlays = players.filter(r => (r.evEdge||0) > 2);
-  const hotPlayers = players.filter(r => STREAK[r.name]?.flame === '🔥🔥' || STREAK[r.name]?.flame === '🔥');
+  const hotPlayers = players.filter(r => STREAK[r.name]?.flame === '\uD83D\uDD25\uD83D\uDD25' || STREAK[r.name]?.flame === '\uD83D\uDD25');
   const confirmed = games.reduce((n,g) => n + (g.awayLineup.length?1:0) + (g.homeLineup.length?1:0), 0);
+  const signalCount = players.filter(r=>{const {count}=getSignals(r);return count>=3;}).length;
 
-  // Top 5 targets
   const top5 = players.slice(0,5);
 
+  // Top signal plays
+  const signalPlays = [...players]
+    .filter(r => { const {count}=getSignals(r); return count>=3; })
+    .sort((a,b) => {
+      const ra=getSignals(a),rb=getSignals(b);
+      return rb.count!==ra.count ? rb.count-ra.count : b.hrp-a.hrp;
+    })
+    .slice(0,5);
 
-  // Best park today
+  // Park ranking
   const parkRanked = games.map(g => {
-    const park = getPark(g.home)||{};
-    const wx = WX[g.home]||{};
-    const orient = park.orient||180;
-    const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-    const windOut = diff<45||diff>315;
-    const score = (park.f||1) + (windOut&&wx.ws ? wx.ws*0.005 : 0);
-    return {g, park, wx, windOut, score};
-  }).sort((a,b) => b.score-a.score);
+    const park=getPark(g.home)||{};const wx=WX[g.home]||{};
+    const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
+    const windOut=diff<45||diff>315;
+    const score=(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0);
+    return {g,park,wx,windOut,score};
+  }).sort((a,b)=>b.score-a.score);
 
-  // NRFI targets
-  // Use F1_CACHE from renderForecast — same calculation, guaranteed to match
-  // If Forecast hasn't run yet, compute it now and cache it
+  // Use F1_CACHE for NRFI
   if (!F1_CACHE.length && games.length) {
     F1_CACHE = games.map(g => {
-      const park = getPark(g.home)||{f:1.0};
-      const wx   = WX[g.home]||{};
-      const awayBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
-      const homeBatters = allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
-      const calcF1 = (pit, batters) => {
-        let p=0.26;
-        const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
+      const park=getPark(g.home)||{f:1.0};const wx=WX[g.home]||{};
+      const awayBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
+      const homeBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
+      const calcF1=(pit,batters)=>{
+        let p=0.26;const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
         if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
         else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
         if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
@@ -3055,314 +3057,242 @@ function renderToday() {
       const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
       const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
       const eitherF1=1-(1-af)*(1-hf);
-      return {g, eitherF1, park, awayF1:af, homeF1:hf};
+      return {g,eitherF1,park,awayF1:af,homeF1:hf};
     });
   }
-  const nrfi = F1_CACHE
-    .filter(d => Math.round(d.eitherF1*100) <= 38)
-    .sort((a,b) => a.eitherF1 - b.eitherF1)
-    .slice(0,3)
-    .map(d => ({g: d.g, either: d.eitherF1, park: d.park}));
 
-  grid.innerHTML = `
-  <div class="today-wrap">
+  // Best play composite score
+  const scorePlayer = (r) => {
+    const {signals,count,ci}=getSignals(r);
+    const streak=STREAK[r.name];const ps=PARK_SPLITS[r.name];
+    return (count*20)+(streak?.flame==='\uD83D\uDD25\uD83D\uDD25'?12:streak?.flame==='\uD83D\uDD25'?6:0)+(ps?.flag==='boost'?8:0)+(ci.tier==='high'?6:ci.tier==='mid'?3:0)+r.hrp*0.8;
+  };
+  const best = [...players].sort((a,b)=>scorePlayer(b)-scorePlayer(a))[0];
 
-    <!-- HERO -->
-    <div class="today-hero">
-      <div class="today-hero-date">${dayName} · ${dateStr}</div>
-      <div class="today-hero-title">${games.length}-Game Slate</div>
-      <div class="today-hero-sub">${confirmed} of ${games.length*2} lineups confirmed · ${players.length} batters · ${statReady?'Statcast live':'Statcast loading…'}</div>
-    </div>
+  // Hidden edge
+  const fringe = players
+    .filter(r => r.hrp>=6 && r.hrp<15)
+    .filter(r => {
+      const pa=getBatter(r.name)?.pa||0;const ci=getCI(r.hrp,pa);
+      if(ci.tier==='low')return false;
+      const barrel=getBatter(r.name)?.ba||r.barrel;const streak=STREAK[r.name];
+      const park=getPark(r.game?.home||r.team)||{};const wx=WX[r.game?.home||r.team]||{};
+      const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
+      const windOut=diff<45||diff>315;const pit=r.pit||{};
+      return barrel>=12||streak?.flame==='\uD83D\uDD25\uD83D\uDD25'||streak?.flame==='\uD83D\uDD25'||(park.f||1)>=1.08||(windOut&&(wx.ws||0)>=10)||(pit.xera||pit.era||4.5)>=5.0||(pit.hr9||1.2)>=1.6;
+    })
+    .sort((a,b)=>scorePlayer(b)-scorePlayer(a))
+    .slice(0,8);
 
-    <!-- KPIs -->
-    <div class="today-kpis">
-      <div class="today-kpi">
-        <div class="today-kpi-val" style="color:var(--teal)">${expHR.toFixed(1)}</div>
-        <div class="today-kpi-lbl">Expected HRs</div>
-      </div>
-      <div class="today-kpi">
-        <div class="today-kpi-val" style="color:var(--green)">${confirmed}</div>
-        <div class="today-kpi-lbl">Lineups In</div>
-      </div>
-      <div class="today-kpi">
-        <div class="today-kpi-val" style="color:var(--amber)">${hotPlayers.length}</div>
-        <div class="today-kpi-lbl">Hot Batters</div>
-      </div>
-      <div class="today-kpi">
-        <div class="today-kpi-val" style="color:var(--purple)">${players.filter(r=>{const {count}=getSignals(r);return count>=3;}).length}</div>
-        <div class="today-kpi-lbl">Signal Plays</div>
-      </div>
-    </div>
+  const top5HTML = top5.map((r,i)=>{
+    const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+    const flame=STREAK[r.name]?.flame||'';
+    return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
+      +'<div class="today-target-rank">'+(i+1)+'</div>'
+      +'<div><div class="today-target-name">'+r.name+' '+flame+' '+parkBadge(r.name,true)+'</div>'
+      +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div>'
+      +'<div style="margin-top:4px">'+signalPanel(r,true)+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div></div>'
+      +'</div>';
+  }).join('');
 
-    <!-- TWO COLUMN LAYOUT -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+  const signalHTML = signalPlays.length ? signalPlays.map(r=>{
+    const {badge}=getSignals(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+    return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
+      +'<div style="flex:1"><div class="today-target-name">'+r.name+'</div>'
+      +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div>'
+      +'<div style="margin-top:4px">'+signalPanel(r,true)+'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div>'
+      +(badge?'<div style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+';margin-top:3px">'+badge.label+'</div>':'')
+      +'</div></div>';
+  }).join('') : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
 
-      <!-- TOP TARGETS -->
-      <div class="today-section">
-        <div class="today-section-hdr">
-          <span>Top HR Targets</span>
-          <span onclick="setView('targets',document.querySelector('.tab[onclick*=targets]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
-        </div>
-        <div class="today-section-body">
-          ${top5.map((r,i) => {
-            const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-            const flame = STREAK[r.name]?.flame||'';
-            const evBadge = (r.evEdge||0)>2
-              ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:rgba(52,211,153,.12);color:var(--green);border:1px solid rgba(52,211,153,.25)">+EV</span>`
-              : '';
-            return `<div class="today-target" onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')" style="cursor:pointer">
-              <div class="today-target-rank">${i+1}</div>
-              <div>
-                <div class="today-target-name">${r.name} ${flame} ${parkBadge(r.name,true)}</div>
-                <div class="today-target-sub">${r.team} vs ${r.pitName}</div>
-              <div style="margin-top:4px">${signalPanel(r, true)}</div>
-              </div>
-              <div style="text-align:right;flex-shrink:0">
-                <div class="today-target-hrp" style="color:${hc}">${r.hrp.toFixed(1)}%</div>
-                <div>${evBadge}</div>
-              </div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
+  const bestHTML = !best ? '' : (()=>{
+    const {signals,badge,ci}=getSignals(best);
+    const streak=STREAK[best.name];const ps=PARK_SPLITS[best.name];const pit=best.pit||{};
+    const park=getPark(best.game?.home||best.team)||{};
+    const hc=best.hrp>=15?'var(--green)':best.hrp>=10?'var(--teal)':'var(--amber)';
+    const reasons=[];
+    if(signals.find(s=>s.key==='streak')?.active)reasons.push(streak?.flame==='\uD83D\uDD25\uD83D\uDD25'?'Scorching hot (\uD83D\uDD25\uD83D\uDD25)':'Hot streak (\uD83D\uDD25)');
+    if(signals.find(s=>s.key==='pitcher')?.active)reasons.push('Weak pitcher — xERA '+(pit.xera||pit.era||4.5).toFixed(2));
+    if(signals.find(s=>s.key==='park')?.active)reasons.push(ps?.flag==='boost'?'Career park boost at '+park.name:'Hitter park (PF '+(park.f||1).toFixed(2)+')');
+    if(signals.find(s=>s.key==='weather')?.active)reasons.push('Wind blowing out');
+    if(signals.find(s=>s.key==='conf')?.active)reasons.push(ci.label+' confidence sample');
+    return '<div class="today-section" style="margin-bottom:12px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-color:'+(badge?.bd||'var(--bd)')+'"><div class="today-section-hdr" style="border-bottom-color:'+(badge?.bd||'var(--bd)')+'"><span>\u26A1 Best Play Today</span><span style="color:var(--t3);font-size:9px">Composite signal + probability score</span></div><div class="today-section-body"><div style="display:flex;gap:16px;align-items:flex-start" onclick="goToPlayer(\''+best.name.replace(/'/g,"\\'")+'\')" style="cursor:pointer"><div style="flex:1"><div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:2px">'+best.name+'</div><div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">'+best.team+' vs '+best.pitName+' · '+best.time+'</div><div style="margin-bottom:10px">'+signalPanel(best,false)+'</div><div style="display:flex;flex-direction:column;gap:4px">'+reasons.map(r=>'<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">· '+r+'</div>').join('')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:36px;font-weight:700;font-family:var(--mono);color:'+hc+';line-height:1">'+best.hrp.toFixed(1)+'%</div><div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>'+(badge?'<div style="margin-top:8px"><span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:4px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')+'<div style="margin-top:8px">'+ciBadge(best.hrp,getBatter(best.name)?.pa||0)+'</div></div></div></div></div>';
+  })();
 
-      <!-- TOP SIGNAL PLAYS -->
-      <div class="today-section">
-        <div class="today-section-hdr">
-          <span>Top Signal Plays</span>
-          <span onclick="signalFilt=true;document.getElementById('sigfilt')?.classList.add('on');setView('players',document.querySelector('.tab[onclick*=players]'))" style="cursor:pointer;color:var(--teal)">See all →</span>
-        </div>
-        <div class="today-section-body">
-          ${(()=>{
-            // Rank by signal convergence — badge tier first, then HR probability
-            const badgeRank = (r) => {
-              const { count } = getSignals(r);
-              return count >= 5 ? 3 : count >= 4 ? 2 : count >= 3 ? 1 : 0;
-            };
-            const signalPlays = [...players]
-              .filter(r => badgeRank(r) > 0)
-              .sort((a,b) => {
-                const rankDiff = badgeRank(b) - badgeRank(a);
-                return rankDiff !== 0 ? rankDiff : b.hrp - a.hrp;
-              })
-              .slice(0,5);
+  const fringeHTML = fringe.length ? '<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Hidden Edge</span><span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+fringe.map(r=>{
+    const barrel=getBatter(r.name)?.ba||r.barrel;const streak=STREAK[r.name];const ci=getCI(r.hrp,getBatter(r.name)?.pa||0);
+    return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')" onmouseover="this.style.borderColor=\'var(--teal)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><div style="font-size:12px;font-weight:600;color:var(--t1)">'+r.name+'</div><div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--teal)">'+r.hrp.toFixed(1)+'%</div></div>'
+      +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">'+r.team+' vs '+r.pitName+' · '+r.time+'</div>'
+      +'<div style="margin-top:2px">'+signalPanel(r,true)+'</div>'
+      +'<div style="margin-top:6px"><span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:'+(ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)')+';color:'+ci.color+';border:1px solid '+(ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)')+'">'+ci.label+'</span></div>'
+      +'</div>';
+  }).join('')+'</div></div></div>' : '';
 
-            if (!signalPlays.length) return '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
+  const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
+    const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
+    const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
+    const wdir=diff<45||diff>315?'\u2191 out':diff>135&&diff<225?'\u2193 in':'\u2192 cross';
+    const wstr=park.roof==='dome'?'\uD83C\uDFDF Dome':wx.ws?Math.round(wx.ws)+'mph '+wdir:'\u2014';
+    const ou=GAME_ODDS[g.away+'@'+g.home];
+    return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openGameModal('+g.pk+')">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px"><div style="font-size:11px;font-family:var(--mono);color:var(--t3)">#'+(i+1)+'</div><div style="font-size:12px;font-family:var(--mono);font-weight:700;color:'+pfColor+'">PF '+(park.f||1).toFixed(2)+'</div></div>'
+      +'<div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:2px">'+g.away+' @ '+g.home+'</div>'
+      +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">'+(park.name||g.home)+'</div>'
+      +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">'+wstr+(ou?' · O/U '+ou.ou:'')+'</div>'
+      +'</div>';
+  }).join('')+'</div></div></div>';
 
-            return signalPlays.map(r => {
-              const { signals, badge } = getSignals(r);
-              const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-              return `<div class="today-target" onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')">
-                <div style="flex:1">
-                  <div class="today-target-name">${r.name}</div>
-                  <div class="today-target-sub">${r.team} vs ${r.pitName}</div>
-                  <div style="margin-top:4px;display:flex;align-items:center;gap:6px">
-                    ${signalPanel(r, true)}
-                  </div>
-                </div>
-                <div style="text-align:right;flex-shrink:0;margin-left:8px">
-                  <div class="today-target-hrp" style="color:${hc}">${r.hrp.toFixed(1)}%</div>
-                  ${badge ? `<div style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd};margin-top:3px;white-space:nowrap">${badge.label}</div>` : ''}
-                </div>
-              </div>`;
-            }).join('');
-          })()}
-        </div>
-      </div>
-    </div>
+  grid.innerHTML = '<div class="today-wrap">'
+    + '<div class="today-hero"><div class="today-hero-date">'+dayName+' · '+dateStr+'</div>'
+    + '<div class="today-hero-title">'+games.length+'-Game Slate</div>'
+    + '<div class="today-hero-sub">'+confirmed+' of '+games.length*2+' lineups confirmed · '+players.length+' batters · '+(statReady?'Statcast live':'Statcast loading…')+'</div></div>'
+    + '<div class="today-kpis">'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+confirmed+'</div><div class="today-kpi-lbl">Lineups In</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
+    + '</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span onclick="setView(\'targets\',document.querySelector(\'.tab[onclick*=targets]\'))" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span onclick="signalFilt=true;document.getElementById(\'sigfilt\')?.classList.add(\'on\');setView(\'players\',document.querySelector(\'.tab[onclick*=players]\'))" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
+    + '</div>'
+    + bestHTML
+    + fringeHTML
+    + envHTML
+    + '</div>';
+}
 
+async function renderTomorrow() {
+  const grid = document.getElementById('tomorrow-grid');
+  grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><div style="font-size:28px;margin-bottom:12px">\uD83D\uDCC5</div><h3>Loading tomorrow\u2019s slate\u2026</h3></div></div>';
 
-    <!-- HIDDEN EDGE -->
-    ${(()=>{
-      // Fringe targets: model sees them for a real reason, not obvious top picks
-      // Criteria: 6-15% HR prob, MID/HIGH confidence, strong underlying signal
-      const fringe = players
-        .filter(r => r.hrp >= 6 && r.hrp < 15)
-        .filter(r => {
-          const pa = getBatter(r.name)?.pa || 0;
-          const ci = getCI(r.hrp, pa);
-          if (ci.tier === 'low') return false; // not enough sample
+  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const todayET = new Date(etStr);
+  const tomorrowET = new Date(todayET);
+  tomorrowET.setDate(tomorrowET.getDate()+1);
+  const tomorrowDate = tomorrowET.toLocaleDateString('en-CA');
 
-          const barrel = getBatter(r.name)?.ba || r.barrel;
-          const streak = STREAK[r.name];
-          const park = getPark(r.game?.home||r.team)||{};
-          const wx = WX[r.game?.home||r.team]||{};
-          const orient = park.orient||180;
-          const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-          const windOut = diff<45||diff>315;
-          const pit = r.pit||{};
+  try {
+    if (!tomorrowData || tomorrowData.date !== tomorrowDate) {
+      const r = await safeFetch('/api/slate?date='+tomorrowDate, 15000);
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      tomorrowData = await r.json();
+    }
+  } catch(e) {
+    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>Tomorrow\u2019s slate unavailable</h3><p style="margin-top:8px;font-size:12px;color:var(--t3)">Probable pitchers may not be posted yet. Check back later.</p></div></div>';
+    return;
+  }
 
-          // Must have at least one strong signal
-          const hasEliteBarrel  = barrel >= 12;
-          const hasHotStreak    = streak?.flame === '🔥🔥' || streak?.flame === '🔥';
-          const hasParkEdge     = (park.f||1) >= 1.08;
-          const hasWindEdge     = windOut && (wx.ws||0) >= 10;
-          const hasWeakPitcher  = (pit.xera||pit.era||4.5) >= 5.0;
-          const hasHighHR9      = (pit.hr9||1.2) >= 1.6;
+  const td = tomorrowData;
+  if (!td.pitchers?.length) {
+    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>No games found for '+tomorrowET.toLocaleDateString('en-US',{month:'long',day:'numeric'})+'</h3></div></div>';
+    return;
+  }
 
-          return hasEliteBarrel || hasHotStreak || hasParkEdge || hasWindEdge || hasWeakPitcher || hasHighHR9;
-        })
+  const tGames = td.pitchers.map(g => ({
+    pk: g.gamePk, time: new Date(g.gameTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})+' ET',
+    away: g.awayTeam, home: g.homeTeam,
+    ap: {name:g.awayPitcher||'TBD', hand:g.awayPitcherHand||'R', era:g.awayPitcherEra||4.50, ...(getPitcher(g.awayPitcher)||{})},
+    hp: {name:g.homePitcher||'TBD', hand:g.homePitcherHand||'R', era:g.homePitcherEra||4.50, ...(getPitcher(g.homePitcher)||{})},
+    awayLineup:[], homeLineup:[],
+  }));
+
+  const tWX = {};
+  if (td.weather) {
+    for (const [team,wx] of Object.entries(td.weather)) {
+      tWX[team] = {t:wx.t||72, ws:wx.w||0, wd:wx.d||180, dome:wx.dome||false};
+    }
+  }
+
+  // Build projected rows
+  const tRows = [];
+  for (const g of tGames) {
+    const park=getPark(g.home)||{f:1.0};const wx=tWX[g.home]||{};
+    [[g.away,{...g.hp,...(getPitcher(g.hp.name)||{})}],
+     [g.home,{...g.ap,...(getPitcher(g.ap.name)||{})}]].forEach(([team,pit]) => {
+      const roster = ROSTERS[team]||[];
+      const batters = roster
+        .map(p => ({p, bs:getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0}}))
+        .filter(({bs}) => (bs.pa||0)>=20)
         .sort((a,b) => {
-          // Score by strength of underlying signal
-          const score = (r) => {
-            const barrel = getBatter(r.name)?.ba || r.barrel;
-            const streak = STREAK[r.name];
-            const park = getPark(r.game?.home||r.team)||{};
-            const wx = WX[r.game?.home||r.team]||{};
-            const orient = park.orient||180;
-            const diff = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-            const windOut = diff<45||diff>315;
-            const pit = r.pit||{};
-            return (barrel>=12?barrel*0.3:0)
-              + (streak?.flame==='🔥🔥'?8:streak?.flame==='🔥'?4:0)
-              + ((park.f||1)>=1.08?((park.f||1)-1)*20:0)
-              + (windOut?(wx.ws||0)*0.15:0)
-              + ((pit.xera||pit.era||4.5)>=5.0?(pit.xera||pit.era||4.5)-4.5:0)*3
-              + r.hrp * 0.5;
-          };
-          return score(b) - score(a);
-        })
-        .slice(0,8);
+          const sa=(a.bs.ba||0)*2.5+(a.bs.ev||88)*0.18+(a.bs.xw||0.310)*40;
+          const sb=(b.bs.ba||0)*2.5+(b.bs.ev||88)*0.18+(b.bs.xw||0.310)*40;
+          return sb-sa;
+        }).slice(0,9);
+      batters.forEach(({p,bs},i) => {
+        const name=(!p.name.includes('Jr.')&&BATTER[p.name+' Jr.'])?p.name+' Jr.':p.name;
+        bs._name=name;
+        const hrp=hrProbWithStreak(bs,park,wx,pit,i+1);
+        tRows.push({name,team,order:i+1,source:'projected',ev:bs.ev||88.5,barrel:bs.ba||8,hh:bs.hh||37,xwoba:bs.xw||0.310,iso:bs.iso||0.150,hrp,park,wx,pit,pitName:team===g.home?g.ap.name:g.hp.name,time:g.time,game:g,gamePk:g.pk,bookOdds:null,evEdge:null,ou:null,bats:getBatSide(name,p.batSide||'R',bs)});
+      });
+    });
+  }
 
-      if (!fringe.length) return '';
+  tRows.sort((a,b)=>b.hrp-a.hrp);
+  const tSeen=new Map();
+  for(const r of tRows){if(!tSeen.has(r.name)||r.hrp>tSeen.get(r.name).hrp)tSeen.set(r.name,r);}
+  const tPlayers=[...tSeen.values()].sort((a,b)=>b.hrp-a.hrp);
+  const expHR=tPlayers.reduce((s,r)=>s+r.hrp/100,0);
+  const tTop5=tPlayers.slice(0,5);
 
-      return `<div class="today-section" style="margin-bottom:12px">
-        <div class="today-section-hdr">
-          <span>Hidden Edge</span>
-          <span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span>
-        </div>
-        <div class="today-section-body">
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
-            ${fringe.map(r => {
-              const barrel = getBatter(r.name)?.ba || r.barrel;
-              const streak = STREAK[r.name];
-              const park   = getPark(r.game?.home||r.team)||{};
-              const wx     = WX[r.game?.home||r.tool]||{};
-              const orient = park.orient||180;
-              const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-              const windOut = diff<45||diff>315;
-              const pit    = r.pit||{};
-              const ci     = getCI(r.hrp, getBatter(r.name)?.pa||0);
+  // Signal plays using tomorrow WX
+  const origWX={...WX};
+  Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,tWX);
+  const tSignalPlays=[...tPlayers].filter(r=>getSignals(r).count>=3).sort((a,b)=>{const ra=getSignals(a),rb=getSignals(b);return rb.count!==ra.count?rb.count-ra.count:b.hrp-a.hrp;}).slice(0,5);
+  Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,origWX);
 
-              // Build signal tags
-              const tags = [];
-              if (barrel >= 15)                        tags.push({label:'🔥 Elite Barrel '+barrel.toFixed(1)+'%', color:'var(--amber)'});
-              else if (barrel >= 12)                   tags.push({label:'Barrel '+barrel.toFixed(1)+'%', color:'var(--teal)'});
-              if (streak?.flame === '🔥🔥')            tags.push({label:'🔥🔥 Scorching', color:'var(--amber)'});
-              else if (streak?.flame === '🔥')         tags.push({label:'🔥 Hot streak', color:'var(--amber)'});
-              if ((park.f||1) >= 1.08)                 tags.push({label:'📈 '+park.name, color:'var(--teal)'});
-              if (windOut && (wx.ws||0) >= 10)         tags.push({label:'💨 Wind out '+Math.round(wx.ws)+'mph', color:'var(--teal)'});
-              if ((pit.xera||pit.era||4.5) >= 5.0)    tags.push({label:'Weak pitcher xERA '+(pit.xera||pit.era||4.5).toFixed(2), color:'var(--green)'});
-              if ((pit.hr9||1.2) >= 1.6)               tags.push({label:'HR/9 '+(pit.hr9||1.2).toFixed(2), color:'var(--green)'});
+  const tParkRanked=tGames.map(g=>{const park=getPark(g.home)||{};const wx=tWX[g.home]||{};const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;const windOut=diff<45||diff>315;return{g,park,wx,windOut,score:(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0)};}).sort((a,b)=>b.score-a.score);
 
-              return `<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" 
-                onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')" 
-                onmouseover="this.style.borderColor='var(--teal)'" onmouseout="this.style.borderColor='var(--bd)'">
-                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-                  <div style="font-size:12px;font-weight:600;color:var(--t1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.name}</div>
-                  <div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--teal);flex-shrink:0;margin-left:6px">${r.hrp.toFixed(1)}%</div>
-                </div>
-                <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">${r.team} vs ${r.pitName} · ${r.time}</div>
-                <div style="display:flex;flex-direction:column;gap:3px">
-                  ${tags.slice(0,2).map(t => `<div style="font-size:9px;font-family:var(--mono);color:${t.color}">${t.label}</div>`).join('')}
-                </div>
-                <div style="margin-top:4px">${signalPanel(r, true)}</div>
-                <div style="margin-top:4px">
-                  <span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:${ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)'};color:${ci.color};border:1px solid ${ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)'}">
-                    ${ci.tier==='high'?'🔒':ci.tier==='mid'?'⚡':'⚠'} ${ci.label}
-                  </span>
-                </div>
-              </div>`;
-            }).join('')}
-          </div>
-        </div>
-      </div>`;
-    })()}
+  const tTop5HTML=tTop5.map((r,i)=>{
+    const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+    return '<div class="today-target" style="cursor:default"><div class="today-target-rank">'+(i+1)+'</div><div><div class="today-target-name">'+r.name+'</div><div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div></div><div style="text-align:right"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--amber)">~ proj</div></div></div>';
+  }).join('');
 
-    <!-- NRFI TARGETS -->
-    <!-- BEST PLAY OF THE DAY -->
-    ${(()=>{
-      // Composite score: signal count weighted highest, then streak strength,
-      // park boost, probability, confidence
-      const scorePlayer = (r) => {
-        const { signals, count, ci } = getSignals(r);
-        const streak = STREAK[r.name];
-        const ps = PARK_SPLITS[r.name];
-        return (count * 20)                                          // signal count (0-100)
-          + (streak?.flame === '🔥🔥' ? 12 : streak?.flame === '🔥' ? 6 : 0)  // streak heat
-          + (ps?.flag === 'boost' ? 8 : 0)                          // career park boost
-          + (ci.tier === 'high' ? 6 : ci.tier === 'mid' ? 3 : 0)   // confidence
-          + r.hrp * 0.8;                                            // probability (scaled)
-      };
+  const tSignalHTML=tSignalPlays.length?tSignalPlays.map(r=>{
+    const{badge}=getSignals(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+    return '<div class="today-target" style="cursor:default"><div style="flex:1"><div class="today-target-name">'+r.name+'</div><div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div><div style="margin-top:4px">'+signalPanel(r,true)+'</div></div><div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div>'+(badge?'<div style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+';margin-top:3px">'+badge.label+'</div>':'')+'</div></div>';
+  }).join(''):'<div style="font-size:12px;color:var(--t3);padding:8px 0">No signal plays yet — streaks update after tonight\u2019s games</div>';
 
-      const best = [...players].sort((a,b) => scorePlayer(b) - scorePlayer(a))[0];
-      if (!best) return '';
+  const tMatchupsHTML=tGames.map(g=>{
+    const park=getPark(g.home)||{};const wx=tWX[g.home]||{};
+    const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
+    const windOut=diff<45||diff>315;
+    const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
+    const icons=[(park.f||1)>=1.05?'\uD83D\uDCC8':'',windOut&&wx.ws?'\uD83D\uDCA8':''].filter(Boolean).join(' ');
+    const ap=getPitcher(g.ap.name)||{};const hp=getPitcher(g.hp.name)||{};
+    const wdir=windOut?'\u2191 out':diff>135&&diff<225?'\u2193 in':'\u2192';
+    return '<div class="today-game" style="padding:8px 16px;border-bottom:1px solid var(--bg3)">'
+      +'<div style="flex:1"><div class="today-game-teams">'+g.away+' <span style="color:var(--t3)">@</span> '+g.home+' '+icons+'</div>'
+      +'<div class="today-game-meta">'+g.time+' · '+g.ap.name+' vs '+g.hp.name+'</div>'
+      +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px">xERA '+(ap.xera||g.ap.era||4.5).toFixed(2)+' vs '+(hp.xera||g.hp.era||4.5).toFixed(2)+(wx.ws?' · '+Math.round(wx.ws)+'mph '+(windOut?'\u2191 out':''):'')+'</div></div>'
+      +'<div style="font-size:12px;font-family:var(--mono);font-weight:700;color:'+pfColor+';flex-shrink:0">PF '+(park.f||1).toFixed(2)+'</div></div>';
+  }).join('');
 
-      const { signals, badge, ci } = getSignals(best);
-      const streak = STREAK[best.name];
-      const ps = PARK_SPLITS[best.name];
-      const pit = best.pit||{};
-      const park = getPark(best.game?.home||best.team)||{};
-      const hc = best.hrp>=15?'var(--green)':best.hrp>=10?'var(--teal)':'var(--amber)';
-
-      // Build reason string from active signals
-      const reasons = [];
-      if (signals.find(s=>s.key==='streak')?.active) reasons.push(streak?.flame==='🔥🔥'?'Scorching hot (🔥🔥)':'Hot streak (🔥)');
-      if (signals.find(s=>s.key==='pitcher')?.active) reasons.push('Weak pitcher — xERA '+(pit.xera||pit.era||4.5).toFixed(2));
-      if (signals.find(s=>s.key==='park')?.active) reasons.push(ps?.flag==='boost'?'Career park boost at '+park.name:'Hitter park (PF '+(park.f||1).toFixed(2)+')');
-      if (signals.find(s=>s.key==='weather')?.active) reasons.push('Wind blowing out');
-      if (signals.find(s=>s.key==='conf')?.active) reasons.push(ci.label+' confidence sample');
-
-      return `<div class="today-section" style="margin-bottom:12px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-color:${badge?.bd||'var(--bd)'}">
-        <div class="today-section-hdr" style="border-bottom-color:${badge?.bd||'var(--bd)'}">
-          <span>⚡ Best Play Today</span>
-          <span style="color:var(--t3);font-size:9px">Composite signal + probability score</span>
-        </div>
-        <div class="today-section-body">
-          <div style="display:flex;gap:16px;align-items:flex-start" onclick="goToPlayer('${best.name.replace(/'/g,"\\'")}')">
-            <div style="flex:1;cursor:pointer">
-              <div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:2px">${best.name}</div>
-              <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">${best.team} vs ${best.pitName} · ${best.time}</div>
-              <div style="margin-bottom:10px">${signalPanel(best, false)}</div>
-              <div style="display:flex;flex-direction:column;gap:4px">
-                ${reasons.map(r=>`<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">· ${r}</div>`).join('')}
-              </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:36px;font-weight:700;font-family:var(--mono);color:${hc};line-height:1">${best.hrp.toFixed(1)}%</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>
-              ${badge?`<div style="margin-top:8px"><span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:4px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label}</span></div>`:''}
-              <div style="margin-top:8px">${ciBadge(best.hrp, getBatter(best.name)?.pa||0)}</div>
-            </div>
-          </div>
-        </div>
-      </div>`;
-    })()}
-
-    <!-- BEST ENVIRONMENTS -->
-    <div class="today-section">
-      <div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div>
-      <div class="today-section-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">
-          ${parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i) => {
-            const pfColor = (park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
-            const wstr = park.roof==='dome'?'🏟 Dome':wx.ws?`${Math.round(wx.ws)}mph ${windOut?'↑ out':((wx.wd?((wx.wd-(park.orient||180))%360+360)%360:180)>135&&((wx.wd?((wx.wd-(park.orient||180))%360+360)%360:180))<225?'↓ in':'→ cross')}`:'—';
-            const ou = GAME_ODDS[g.away+'@'+g.home];
-            return `<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openGameModal(${g.pk})">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
-                <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">#${i+1}</div>
-                <div style="font-size:12px;font-family:var(--mono);font-weight:700;color:${pfColor}">PF ${(park.f||1).toFixed(2)}</div>
-              </div>
-              <div style="font-size:12px;font-weight:600;color:var(--t1);margin-bottom:2px">${g.away} @ ${g.home}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${park.name||g.home}</div>
-              <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">${wstr}${ou?' · O/U '+ou.ou:''}</div>
-            </div>`;
-          }).join('')}
-        </div>
-      </div>
-    </div>
-
-  </div>`;
+  grid.innerHTML='<div class="today-wrap">'
+    +'<div class="today-hero">'
+    +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
+    +'<div class="today-hero-date">'+tomorrowET.toLocaleDateString('en-US',{weekday:'long'})+' · '+tomorrowET.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div>'
+    +'<span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:3px;background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.2)">~ ALL PROJECTIONS · NO CONFIRMED LINEUPS</span>'
+    +'</div>'
+    +'<div class="today-hero-title">'+tGames.length+'-Game Slate Preview</div>'
+    +'<div class="today-hero-sub">Probable pitchers confirmed · Batting orders projected from rosters · '+expHR.toFixed(1)+' expected HRs</div>'
+    +'</div>'
+    +'<div class="today-kpis">'
+    +'<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
+    +'<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+tGames.length+'</div><div class="today-kpi-lbl">Games</div></div>'
+    +'<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+tSignalPlays.length+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
+    +'<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+tParkRanked.filter(d=>(d.park.f||1)>=1.05).length+'</div><div class="today-kpi-lbl">Hitter Parks</div></div>'
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">'
+    +'<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="color:var(--t3);font-size:9px">~ Projected lineups</span></div><div class="today-section-body">'+tTop5HTML+'</div></div>'
+    +'<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="color:var(--t3);font-size:9px">~ Projected lineups</span></div><div class="today-section-body">'+tSignalHTML+'</div></div>'
+    +'</div>'
+    +'<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Tomorrow\u2019s Matchups</span><span style="color:var(--t3);font-size:9px">Probable pitchers · Park + weather</span></div><div class="today-section-body" style="padding:6px 0">'+tMatchupsHTML+'</div></div>'
+    +'<div style="padding:12px 16px;font-size:10px;font-family:var(--mono);color:var(--t3);text-align:center;line-height:1.6">\u26A0 All projections use probable pitchers + roster-based batting orders. No confirmed lineups until 2-3 hrs before first pitch. Streak data reflects tonight\u2019s results after games complete.</div>'
+    +'</div>';
 }
 
 function renderGames(){
@@ -3600,6 +3530,7 @@ function renderAll(){
   else if(curView==='parlay')  renderParlay();
   else if(curView==='today')    renderToday();
   else if(curView==='forecast') renderForecast();
+  else if(curView==='tomorrow') renderTomorrow();
   else if(curView==='history') renderHistory();
   else renderTargets();
 }
@@ -3608,7 +3539,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','games','targets','parlay','forecast','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','games','targets','parlay','forecast','tomorrow','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   renderAll();
 }
