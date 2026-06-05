@@ -3917,26 +3917,34 @@ init();
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">The Five Tabs</div>
+    <div class="guide-h2">The Tabs</div>
+    <div class="guide-row">
+      <span class="guide-tag teal">⚡ Today</span>
+      <div class="guide-text">Landing page — daily digest showing Best Play, Top HR Targets, Top Signal Plays, Hidden Edge, and Best Environments. Start here every day.</div>
+    </div>
     <div class="guide-row">
       <span class="guide-tag teal">☰ Players</span>
-      <div class="guide-text">Full ranked table of every batter in today's slate. Sorted by HR probability. Click any row to expand the full breakdown. Use the filters to narrow by handedness or team.</div>
+      <div class="guide-text">Full ranked table of every batter. Use the 🎯 Signal Plays chip to filter to only players with 3+ signals firing. Click any row to expand the full breakdown.</div>
     </div>
     <div class="guide-row">
       <span class="guide-tag teal">⬡ Games</span>
-      <div class="guide-text">Matchup cards for each game — pitchers, park factor, weather, O/U total, and top HR threats per team. Best for a quick game-by-game overview.</div>
+      <div class="guide-text">Matchup cards — click any game to open a full overlay with both lineups, signal panels, pitcher K projections, and game context.</div>
     </div>
     <div class="guide-row">
       <span class="guide-tag teal">🎯 Top Targets</span>
-      <div class="guide-text">The top 24 unique players by HR probability, one card per player. Deduplicated so the same player doesn't appear multiple times. Click any card to expand.</div>
+      <div class="guide-text">Top 24 unique players by HR probability with signal panels and composite badges. Click any card to expand.</div>
     </div>
     <div class="guide-row">
       <span class="guide-tag teal">🎰 Parlays</span>
-      <div class="guide-text">Best 2, 3, and 4-leg HR parlays built from today's top candidates. Prefers players from different games. Flags same-game stacks with a bonus when park + wind + O/U align.</div>
+      <div class="guide-text">Best 2, 3, and 4-leg HR parlays built from today's top candidates.</div>
+    </div>
+    <div class="guide-row">
+      <span class="guide-tag teal">🔮 Forecast</span>
+      <div class="guide-text">Expected HR total, hot batters, pitcher K props, and first inning run scoring with NRFI/YRFI targets.</div>
     </div>
     <div class="guide-row">
       <span class="guide-tag teal">📊 Accuracy</span>
-      <div class="guide-text">Model calibration over time. Shows actual HR rate vs predicted rate by probability tier. Updates automatically each morning from MLB box scores.</div>
+      <div class="guide-text">Model calibration — actual HR rate vs predicted rate by probability tier. Updates automatically each morning.</div>
     </div>
   </div>
 
@@ -4004,6 +4012,35 @@ init();
     <div class="guide-row"><span class="guide-tag amber">Last 20 PA</span><div class="guide-text">HR count and AVG over the last 20 plate appearances. 🔥🔥 = scorching, 🔥 = hot, ❄️ = cold.</div></div>
     <div class="guide-row"><span class="guide-tag amber">Platoon</span><div class="guide-text">Real MLB Stats API splits — actual ISO and SLG vs today's pitcher handedness. Also shows pitcher's FIP vs this batter's hand specifically (red = pitcher is weaker vs this hand).</div></div>
     <div class="guide-row"><span class="guide-tag amber">H2H</span><div class="guide-text">Career stats against today's specific pitcher. 2 HR in 15 AB against this guy is a meaningful signal.</div></div>
+  </div>
+
+    <div class="guide-section">
+    <div class="guide-h2">Signal Indicator Panel</div>
+    <div class="guide-text" style="margin-bottom:10px">Every player shows a 5-icon panel. Active signals are full brightness — dimmed means that factor isn't firing today.</div>
+    <div class="guide-row"><span class="guide-tag teal">🏟</span><div class="guide-text"><strong>Park</strong> — hitter-friendly park (PF ≥1.05) or career SLG boost at this venue (≥20% above season average).</div></div>
+    <div class="guide-row"><span class="guide-tag teal">💨</span><div class="guide-text"><strong>Weather</strong> — wind blowing out ≥8mph at an open-air park. Ball carries further, HR rate increases.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🎯</span><div class="guide-text"><strong>Pitcher matchup</strong> — pitcher is vulnerable (xERA ≥4.80 or HR/9 ≥1.40). Also factors in pitcher's FIP vs this batter's handedness specifically.</div></div>
+    <div class="guide-row"><span class="guide-tag amber">🔥</span><div class="guide-text"><strong>Hot streak</strong> — player has hit at least 1 HR in their last 20 plate appearances. 🔥🔥 = scorching (3+ HR).</div></div>
+    <div class="guide-row"><span class="guide-tag green">🔒</span><div class="guide-text"><strong>Confidence</strong> — MID (75-199 PA) or HIGH (200+ PA) sample size. Enough data to trust the probability number.</div></div>
+    <div class="guide-tip">💡 You can filter the Players tab to only show Signal Plays using the 🎯 Signal Plays chip in the filter bar.</div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">Composite Play Badges</div>
+    <div class="guide-text" style="margin-bottom:10px">Awarded when multiple signals converge on a player. Completely independent of probability — a 10% player with 4 signals gets the same badge as a 20% player with 4 signals.</div>
+    <div class="guide-row"><span class="guide-tag amber">🏆 Elite Play</span><div class="guide-text">All 5 signals firing simultaneously. Rare alignment — the model is converging from every angle on this player today.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">⭐ All-Star Play</span><div class="guide-text">4 of 5 signals active. Strong multi-factor conviction. These are the plays to prioritize regardless of raw probability ranking.</div></div>
+    <div class="guide-row"><span class="guide-tag gray">💡 Value Play</span><div class="guide-text">3 of 5 signals active. Multiple reasons to like this player — worth a closer look even if probability is modest.</div></div>
+    <div class="guide-tip">💡 The ⚡ Today tab shows the Best Play of the Day — a single card combining signal count, streak heat, park history, confidence, and probability into one composite score.</div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">⚡ Today Tab</div>
+    <div class="guide-row"><span class="guide-tag teal">Best Play Today</span><div class="guide-text">Single card showing the highest composite score player — weighted by signal count, streak strength, career park boost, confidence, and probability. This is the model's top recommendation for the day.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">Top HR Targets</span><div class="guide-text">Top 5 by raw HR probability. The players with the statistically highest chance of homering today.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">Top Signal Plays</span><div class="guide-text">Top 5 ranked by signal convergence — Elite Play first, then All-Star, then Value. A player can rank higher here than in Top Targets if they have more signals firing despite a lower raw probability. Click "See all →" to view all signal plays in the Players tab.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">Hidden Edge</span><div class="guide-text">Mid-probability players (6-15%) with at least one strong signal. The fringe plays the market may be overlooking.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">Best Environments</span><div class="guide-text">Top 6 games ranked by park factor + wind conditions. Click any card to open the game modal.</div></div>
   </div>
 
   <div class="guide-section">
