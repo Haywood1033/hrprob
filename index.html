@@ -1137,26 +1137,16 @@ function calcJointProb(legs) {
 }
 
 function getSameGamePenalty(legs, games) {
-  // Check if any two legs are from the same game
   const gamePks = legs.map(l => l.gamePk);
   const uniqueGames = new Set(gamePks).size;
   if (uniqueGames === legs.length) return 1.0; // all different games
 
-  // Check if same-game stack deserves a bonus instead
-  // Bonus condition: hitter park + wind out + high O/U
-  const sameGameLegs = legs.filter((l, i) =>
-    legs.some((l2, j) => i !== j && l2.gamePk === l.gamePk)
-  );
-  const g = games.find(g => g.pk === sameGameLegs[0]?.gamePk);
-  const park = getPark(sameGameLegs[0]?.team) || {};
-  const wx = WX[sameGameLegs[0]?.team] || {};
-  const ou = GAME_ODDS[sameGameLegs[0]?.away + '@' + sameGameLegs[0]?.home]?.ou || 0;
+  // Allow same-game if ALL same-game legs have 4+ signals (4/5 rule)
+  const sameGameLegs = legs.filter((l,i) => legs.some((l2,j) => i!==j && l2.gamePk===l.gamePk));
+  const allHighSignal = sameGameLegs.every(l => getSignals(l).count >= 4);
+  if (allHighSignal) return 1.05; // bonus for high-signal same-game stack
 
-  const isStackFavorable = (park.f || 1) >= 1.05
-    && (wx.label || '').includes('out')
-    && ou >= 9.0;
-
-  return isStackFavorable ? 1.05 : 0.85; // bonus or penalty
+  return 0.85; // penalty for low-signal same-game
 }
 
 function scoreParlay(legs, games) {
@@ -1164,21 +1154,19 @@ function scoreParlay(legs, games) {
   const penalty   = getSameGamePenalty(legs, games);
   const adjusted  = jointProb * penalty;
 
-  // EV score: how much model edge we have across all legs
-  const evScore = legs.reduce((acc, l) => {
-    if (!l.bookOdds) return acc;
-    const bookImplied = oddsToImplied(l.bookOdds) * 100;
-    return acc + (l.hrp - bookImplied);
-  }, 0);
+  // Signal score: total signals across all legs
+  const signalScore = legs.reduce((acc, l) => acc + getSignals(l).count, 0);
+  const avgSignals = signalScore / legs.length;
 
   // Diversity bonus: reward legs from different games
   const uniqueGames = new Set(legs.map(l => l.gamePk)).size;
   const diversityBonus = uniqueGames / legs.length;
 
   return {
-    jointProb: +(adjusted * 100).toFixed(2),
-    evScore:   +evScore.toFixed(1),
-    score:     adjusted * (1 + evScore * 0.02) * diversityBonus,
+    jointProb:   +(adjusted * 100).toFixed(2),
+    signalScore: +signalScore.toFixed(0),
+    avgSignals:  +avgSignals.toFixed(1),
+    score:       adjusted * (1 + avgSignals * 0.08) * diversityBonus,
     penalty,
   };
 }
@@ -1192,16 +1180,23 @@ function buildParlayLegs() {
   const dynamicMin = Math.min(150, Math.max(20, Math.floor(gamesPlayed * 3.8 * 0.25)));
   console.log(`Parlay PA min: ${dynamicMin} (based on ~${gamesPlayed} game-days into season)`);
 
-  // Use top unique players with book odds and sufficient PA
+  // Use top players by signal count + probability, no book odds required
   const seen = new Map();
   for (const r of allRows) {
     const pa = getBatter(r.name)?.pa || 0;
-    if (r.bookOdds && r.hrp > 2 && pa >= dynamicMin) {
+    if (r.hrp > 5 && pa >= dynamicMin) {
       if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
     }
   }
-  const legs = [...seen.values()].sort((a,b)=>b.hrp-a.hrp).slice(0,20);
-  console.log(`Parlay candidates: ${legs.length} (PA min: ${dynamicMin}, allRows: ${allRows.length})`);
+  // Score by signal count first, then probability
+  const legs = [...seen.values()]
+    .sort((a,b) => {
+      const sa = getSignals(a).count * 20 + a.hrp;
+      const sb = getSignals(b).count * 20 + b.hrp;
+      return sb - sa;
+    })
+    .slice(0,25);
+  console.log(`Parlay candidates: ${legs.length} (PA min: ${dynamicMin})`);
   return legs;
 }
 
@@ -1227,7 +1222,7 @@ function renderParlay() {
     grid.innerHTML = `<div class="empty" style="padding:40px 20px">
       <div style="font-size:28px;margin-bottom:12px">🎰</div>
       <h3>No parlay candidates yet</h3>
-      <p style="font-size:12px;color:var(--t3);margin-top:8px">Parlays require confirmed lineups and book odds.<br>Check back closer to first pitch.</p>
+      <p style="font-size:12px;color:var(--t3);margin-top:8px">Parlays require confirmed lineups and sufficient PA data.<br>Check back closer to first pitch.</p>
     </div>`;
     return;
   }
@@ -1254,15 +1249,15 @@ function renderParlay() {
     html += `<div class="psection">
       <div class="psection-title">${label} <span></span></div>`;
 
-    for (const { combo, jointProb, evScore, penalty } of scored) {
+    for (const { combo, jointProb, signalScore, avgSignals, penalty } of scored) {
       const parlayOdds = calcParlayOdds(combo);
-      const isEV = evScore > 0;
       const isSameGame = new Set(combo.map(l => l.gamePk)).size < combo.length;
       const isStack = isSameGame && penalty > 1;
+      const signalColor = avgSignals >= 4 ? 'var(--green)' : avgSignals >= 3 ? 'var(--teal)' : 'var(--t2)';
 
       const tags = [];
-      if (isEV) tags.push(`<span class="tag hot">+EV Stack</span>`);
-      if (isStack) tags.push(`<span class="tag park">🏟 Favorable Stack</span>`);
+      if (avgSignals >= 4) tags.push(`<span class="tag hot">⭐ High Signal Stack</span>`);
+      if (isStack) tags.push(`<span class="tag park">🏟 Same-Game Stack</span>`);
       if (isSameGame && !isStack) tags.push(`<span class="tag" style="background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">Same Game</span>`);
 
       html += `<div class="pcard">
@@ -1272,7 +1267,7 @@ function renderParlay() {
             <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">Joint prob: ${jointProb}%</div>
           </div>
           <div style="text-align:right">
-            <div class="pcard-ev ${isEV?'pos':'neg'}">${isEV?'+':''}${evScore}% model edge</div>
+            <div class="pcard-ev" style="color:${signalColor}">⚡ ${signalScore} signals · avg ${avgSignals}/5 per leg</div>
             ${tags.length ? `<div class="pcard-tags">${tags.join('')}</div>` : ''}
           </div>
         </div>`;
@@ -1295,6 +1290,7 @@ function renderParlay() {
           <div class="pleg-num">${i+1}</div>
           <div style="flex:1">
             <div class="pleg-name">${leg.name} ${ciBadge(leg.hrp, getBatter(leg.name)?.pa||0, true)}</div>
+            <div style="margin-top:3px">${signalPanel(leg, true)}</div>
             <div class="pleg-detail">${detail}</div>
           </div>
           <div style="text-align:right">
