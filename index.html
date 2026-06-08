@@ -2406,10 +2406,9 @@ async function loadStreakData() {
     if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
   }
   if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
-  // Two-wave fetch: top 50 first (fast, updates UI quickly), then remaining
-  const wave1 = allPlayers.slice(0, 50);
-  const wave2 = allPlayers.slice(50, 150);
-  console.log(`Fetching streaks wave 1: ${wave1.length} players…`);
+  // Single fetch — top 150 by HR prob
+  const streakPlayers = allPlayers.slice(0, 150);
+  console.log(`Fetching streaks for ${streakPlayers.length} of ${allPlayers.length} players…`);
 
   try {
     const ctrl = new AbortController();
@@ -2417,7 +2416,7 @@ async function loadStreakData() {
     const r = await fetch('/api/streaks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ names: wave1 }),
+      body: JSON.stringify({ names: streakPlayers }),
       signal: ctrl.signal,
     }).finally(() => clearTimeout(t));
     if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2427,20 +2426,8 @@ async function loadStreakData() {
         STREAK[name] = stats;
       }
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
-      console.log(`Streaks wave 1 loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
+      console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       rebuild(); renderAll();
-      // Wave 2 — remaining players in background, silent update
-      if (wave2.length) {
-        fetch('/api/streaks', {
-          method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ names: wave2 }),
-        }).then(r=>r.ok?r.json():null).then(d=>{
-          if (!d?.streaks) return;
-          for (const [name,s] of Object.entries(d.streaks)) STREAK[name]=s;
-          console.log(`Streaks wave 2 loaded: ${Object.keys(STREAK).length} total`);
-          rebuild(); renderAll();
-        }).catch(()=>{});
-      }
     }
   } catch(e) {
     console.warn('Streak error:', e.message);
