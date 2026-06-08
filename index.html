@@ -2183,7 +2183,7 @@ function rebuild(){
   }
   allRows.sort((a,b)=>sortAsc?a[sortKey]-b[sortKey]:b[sortKey]-a[sortKey]);
   // team selector
-  const sel=document.getElementById('tsel');
+  const sel=document.getElementById('gsel');
   const prev=sel.value;
   sel.innerHTML='<option value="">All Teams</option>';
   [...new Set(games.flatMap(g=>[g.away,g.home]))].sort().forEach(t=>{
@@ -2761,10 +2761,8 @@ function expand(i){
 
 function filtered(){
   const q=document.getElementById('srch').value.toLowerCase();
-  const t=document.getElementById('tsel').value;
   return allRows.filter(r=>{
     if(handFilt&&r.bats!==handFilt)return false;
-    if(t&&r.team!==t)return false;
     if(q&&!r.name.toLowerCase().includes(q)&&!r.team.toLowerCase().includes(q))return false;
     if(wxFilt&&!hasWxEdge(r))return false;
     if(signalFilt&&getSignals(r).count<3)return false;
