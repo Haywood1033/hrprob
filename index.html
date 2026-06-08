@@ -279,6 +279,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .pit-grid{max-width:1100px;margin:0 auto;padding:16px}
 .pit-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;margin-top:14px}
 .pit-card{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden}
+.pit-card.target{border-color:rgba(245,158,11,.4)}
+.pit-card.strong-target{border-color:rgba(248,113,113,.5);box-shadow:0 0 0 1px rgba(248,113,113,.2)}
 .pit-card-header{padding:14px 16px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:flex-start}
 .pit-name{font-size:15px;font-weight:700;color:var(--t1)}
 .pit-team{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
@@ -3347,6 +3349,28 @@ function renderPitchers() {
     ];
   }).filter(p => p.pit.name && p.pit.name !== 'TBD');
 
+  // Ensure F1_CACHE is populated
+  if (!F1_CACHE.length && games.length) {
+    F1_CACHE = games.map(g => {
+      const park=getPark(g.home)||{f:1.0};const wx=WX[g.home]||{};
+      const awayBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
+      const homeBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
+      const calcF1=(pit,batters)=>{
+        let p=0.26;const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
+        if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
+        else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
+        if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
+        p*=(park.f||1.0);
+        if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
+        return Math.max(0.08,Math.min(0.65,p));
+      };
+      const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
+      const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
+      const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
+      return {g,eitherF1:1-(1-af)*(1-hf),park,awayF1:af,homeF1:hf};
+    });
+  }
+
   // Sort by K projection descending
   pitcherCards.sort((a,b) => {
     const kA = getKProj(a.pit);
@@ -3416,7 +3440,28 @@ function renderPitchers() {
     const oppXwoba = opp?.avgXwoba || 0.310;
     const oppQualColor = oppXwoba >= 0.340 ? 'var(--red)' : oppXwoba <= 0.290 ? 'var(--green)' : 'var(--t2)';
 
-    return '<div class="pit-card">'
+    // (header/stats/K built above in target section)
+
+      // First Inning
+      const f1Splits = ps.f1;
+      const f1Era = f1Splits?.era1;
+      const f1RunRate = f1Splits?.runRate;
+      const f1EraColor = f1Era != null ? (f1Era <= 2.50 ? 'var(--green)' : f1Era >= 5.00 ? 'var(--red)' : 'var(--amber)') : 'var(--t3)';
+
+      // ── TARGET INDICATOR ──────────────────────────────────────
+      // Flag pitcher as a target when: xERA ≥ 4.80 OR HR/9 ≥ 1.40 OR f1 run rate high
+      // Combined with opp lineup quality
+      const isTarget = (xera >= 4.80 || hr9 >= 1.40 || (f1RunRate != null && f1RunRate > 0.55))
+        && (opp ? opp.avgXwoba >= 0.310 : true);
+      const isStrongTarget = (xera >= 5.20 || hr9 >= 1.60)
+        && (opp ? opp.avgXwoba >= 0.330 : true);
+      const targetBadge = isStrongTarget
+        ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3);font-weight:700">🎯 Strong Target</span>'
+        : isTarget
+        ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.25)">🎯 Target</span>'
+        : '';
+
+      return '<div class="pit-card'+(isStrongTarget?' strong-target':isTarget?' target':'')+'">'
       // Header
       + '<div class="pit-card-header">'
       + '<div><div class="pit-name">'+pit.name+'</div>'
@@ -3424,6 +3469,7 @@ function renderPitchers() {
       + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
       + '<span class="pit-hand">'+(pit.hand||'R')+'HP</span>'
       + nrfiFlag
+      + (targetBadge ? '<div style="margin-top:2px">'+targetBadge+'</div>' : '')
       + '</div></div>'
 
       // Key stats row
@@ -3447,8 +3493,12 @@ function renderPitchers() {
       + (f1Pct !== null
         ? '<div class="pit-row"><span class="pit-row-label">Run probability</span><span class="pit-row-val" style="color:'+f1Color+'">'+f1Pct+'%</span></div>'
           + '<div class="pit-nrfi-bar"><div class="pit-nrfi-fill" style="width:'+Math.min(100,f1Pct)+'%;background:'+f1Color+'"></div></div>'
-          + (ps.f1 ? '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">Real 1st inning splits · '+ps.f1.bf+' BF</div>' : '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">~ General model estimate</div>')
-        : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</div>')
+          + (f1Era != null
+            ? '<div class="pit-row" style="margin-top:6px"><span class="pit-row-label">1st inn ERA</span><span class="pit-row-val" style="color:'+f1EraColor+'">'+f1Era.toFixed(2)+'</span></div>'
+              + '<div class="pit-row"><span class="pit-row-label">Run rate/inn</span><span class="pit-row-val" style="color:'+(f1RunRate>0.55?'var(--red)':f1RunRate<0.35?'var(--green)':'var(--amber)')+'">'+f1RunRate.toFixed(2)+'</span></div>'
+              + '<div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-top:3px">✓ Real 1st inning splits · '+f1Splits.bf+' BF</div>'
+            : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ General model estimate</div>')
+        : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Visit Forecast tab first to load F1 data</div>')
       + '</div>'
 
       // Platoon splits
