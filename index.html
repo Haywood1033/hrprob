@@ -328,6 +328,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div class="fbar" id="fbar">
   <input type="text" id="srch" placeholder="Search player…" oninput="renderPlayers()">
   <select id="gsel" onchange="filterByGame(this.value)" style="min-width:160px"><option value="">All Games</option></select>
+  <select id="tsel" onchange="filterByTeam(this.value)"><option value="">All Teams</option></select>
   <select id="ssel" onchange="sortBy(this.value)">
     <option value="hrp">HR Prob %</option>
     <option value="barrel">Barrel %</option>
@@ -605,7 +606,7 @@ Object.assign(BATTER, BATTER_REAL);
 
 
 let games=SLATE.games.map(g=>({...g,awayLineup:[],homeLineup:[]}));
-let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, statReady=false;
+let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, teamFilt='', statReady=false;
 let curView='players';
 
 function getPark(t){return PARKS[t]||PARKS[(t||'').replace(/\s+/g,'')]||null;}
@@ -2191,6 +2192,14 @@ function rebuild(){
     if(prev&&games.some(g=>g.pk===+prev))sel.value=prev;
     else if(gameFilt)sel.value=gameFilt;
   }
+  // Populate team selector
+  const tsel=document.getElementById('tsel');
+  if(tsel){
+    const tprev=tsel.value;
+    const teams=[...new Set(allRows.map(r=>r.team))].sort();
+    tsel.innerHTML='<option value="">All Teams</option>'+teams.map(t=>`<option value="${t}">${t}</option>`).join('');
+    if(tprev)tsel.value=tprev;
+  }
   console.log(`rebuild: ${allRows.length} rows, batters:${Object.keys(BATTER).length}`);
 }
 
@@ -2768,6 +2777,7 @@ function filtered(){
     if(wxFilt&&!hasWxEdge(r))return false;
     if(signalFilt&&getSignals(r).count<3)return false;
     if(gameFilt&&r.gamePk!==gameFilt)return false;
+    if(teamFilt&&r.team!==teamFilt)return false;
     return true;
   });
 }
@@ -3824,6 +3834,17 @@ function hand(h,el){handFilt=h;document.querySelectorAll('.chip').forEach(c=>c.c
 
 function filterByGame(pk) {
   gameFilt = pk ? +pk : 0;
+  teamFilt = '';
+  const tsel = document.getElementById('tsel');
+  if (tsel) tsel.value = '';
+  renderPlayers();
+}
+
+function filterByTeam(t) {
+  teamFilt = t;
+  gameFilt = 0;
+  const gsel = document.getElementById('gsel');
+  if (gsel) gsel.value = '';
   renderPlayers();
 }
 
