@@ -183,11 +183,29 @@ async function getPitcherSplits(playerId) {
   // ── First inning splits ──────────────────────────────────────
   if (f1Res.status === 'fulfilled' && f1Res.value.ok) {
     const d = await f1Res.value.json();
-    const splits = d.stats?.[0]?.splits || [];
-    const s = splits[0]; // single entry for 1st inning
+    // Try multiple possible structures
+    const allStats = d.stats || [];
+    let splits = [];
+    for (const statGroup of allStats) {
+      const s = statGroup.splits || [];
+      if (s.length) { splits = s; break; }
+    }
 
-    if (s) {
-      const stat = s.stat || {};
+    console.log(`F1 splits for player: ${splits.length} splits found`);
+    if (splits.length > 0) {
+      console.log('F1 split codes:', splits.map(s => s.split?.code || s.split?.description).join(', '));
+    }
+
+    // Try to find first inning — various possible codes
+    const f1Split = splits.find(s => {
+      const code = (s.split?.code || '').toLowerCase();
+      const desc = (s.split?.description || '').toLowerCase();
+      return code === '1st' || code === 'i1' || code === 'inn1' || 
+             desc.includes('1st inning') || desc.includes('first inning');
+    }) || splits[0]; // fallback to first split if only one returned
+
+    if (f1Split) {
+      const stat = f1Split.stat || {};
       const bf  = stat.battersFaced || stat.atBats || 0;
       const h   = stat.hits        || 0;
       const hr  = stat.homeRuns    || 0;
@@ -195,16 +213,16 @@ async function getPitcherSplits(playerId) {
       const so  = stat.strikeOuts  || 0;
       const ip  = parseFloat(stat.inningsPitched || '0') || 0;
       const er  = stat.earnedRuns  || 0;
-      const r   = stat.runs        || 0; // total runs (not just earned)
+      const r   = stat.runs        || er;
 
-      // ERA in 1st inning specifically
-      const era1  = ip > 0 ? +(er / ip * 9).toFixed(2) : null;
-      // Run rate per inning (more useful than ERA for NRFI)
+      const era1    = ip > 0 ? +(er / ip * 9).toFixed(2) : null;
       const runRate = bf > 0 ? +(r / Math.max(ip, bf / 3)).toFixed(3) : null;
-      const whip1 = ip > 0 ? +((h + bb) / ip).toFixed(2) : null;
-      const hr9_1 = ip > 0 ? +(hr / ip * 9).toFixed(2)   : null;
+      const whip1   = ip > 0 ? +((h + bb) / ip).toFixed(2) : null;
+      const hr9_1   = ip > 0 ? +(hr / ip * 9).toFixed(2)   : null;
 
-      if (bf >= 5) { // only need small sample for 1st inning (each start = ~3-4 BF)
+      console.log(`F1 data: bf=${bf} ip=${ip} er=${er} r=${r} era1=${era1} runRate=${runRate}`);
+
+      if (bf >= 5) {
         result.f1 = { bf, ip, er, r, hr, bb, so, era1, runRate, whip1, hr9_1 };
       }
     }
