@@ -134,17 +134,68 @@ async function getBatterSplits(playerId) {
 }
 
 async function getPitcherSplits(playerId) {
-  // Fetch platoon splits (vsLHB/vsRHB) AND first inning splits in parallel
-  const [platoonRes, f1Res] = await Promise.allSettled([
-    fetch(
-      `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=vr,vl`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
-    ),
-    fetch(
-      `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=1st`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
-    ),
-  ]);
+  // Fetch platoon splits only — sitCodes=1st is unreliable mid-season
+  const r = await fetch(
+    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=vr,vl`,
+    { headers: { 'User-Agent': 'Mozilla/5.0' } }
+  );
+  if (!r.ok) return null;
+  const d = await r.json();
+  const allStats = d.stats || [];
+  let splits = [];
+  for (const statGroup of allStats) {
+    const s = statGroup.splits || [];
+    if (s.length) { splits = s; break; }
+  }
+
+  const result = { vsLHB: null, vsRHB: null, f1: null };
+
+  for (const s of splits) {
+    const code = s.split?.code;
+    const stat = s.stat || {};
+    const ab  = stat.atBats  || 0;
+    const bf  = stat.battersFaced || ab;
+    if (bf < 15) continue;
+
+    const h   = stat.hits        || 0;
+    const hr  = stat.homeRuns    || 0;
+    const bb  = stat.baseOnBalls || 0;
+    const so  = stat.strikeOuts  || 0;
+    const ip  = parseFloat(stat.inningsPitched || '0') || 0;
+    const er  = stat.earnedRuns  || 0;
+
+    const era  = ip > 0 ? +(er / ip * 9).toFixed(2)   : 4.50;
+    const whip = ip > 0 ? +((h + bb) / ip).toFixed(2) : 1.30;
+    const kp9  = ip > 0 ? +(so / ip * 9).toFixed(1)   : 8.0;
+    const hr9  = ip > 0 ? +(hr / ip * 9).toFixed(2)   : 1.20;
+    const fip  = ip > 0 ? +((13*hr + 3*bb - 2*so) / ip + 3.10).toFixed(2) : 4.50;
+    const babip = (ab - so - hr) > 0 ? +((h - hr) / (ab - so - hr)).toFixed(3) : 0.300;
+
+    const entry = { bf, ab, era, fip, whip, kp9, hr9, babip, hr, bb, so };
+    if (code === 'vr') result.vsRHB = entry;
+    if (code === 'vl') result.vsLHB = entry;
+  }
+
+  // Derive F1 estimate from overall platoon stats
+  // First inning ERA ≈ overall ERA × 0.85 (pitchers are typically sharper early)
+  // Run rate ≈ ERA / 9 (runs per inning approximation)
+  const combined = result.vsLHB || result.vsRHB;
+  if (combined) {
+    const est_era = combined.era > 0 ? combined.era * 0.85 : 4.00;
+    const runRate = +(est_era / 9).toFixed(3);
+    result.f1 = {
+      bf: combined.bf,
+      era1: +est_era.toFixed(2),
+      runRate,
+      whip1: combined.whip,
+      hr9_1: combined.hr9,
+      estimated: true, // flag that this is derived, not real splits
+    };
+  }
+
+  if (!result.vsLHB && !result.vsRHB) return null;
+  return result;
+}
 
   const result = { vsLHB: null, vsRHB: null, f1: null };
 
