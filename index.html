@@ -2890,6 +2890,47 @@ function renderPlayers(){
 
 
 
+
+function calcBatterProps(r) {
+  const b = getBatter(r.name) || {};
+  const xba   = b.xba || (r.xwoba ? r.xwoba * 0.72 + 0.04 : 0.245); // xBA from xwOBA if not direct
+  const xslg  = (r.iso || b.iso || 0.150) + xba;  // ISO + xBA ≈ xSLG
+  const xwoba = r.xwoba || b.xw || 0.310;
+  const order = r.order || 5;
+  const pf    = (getPark(r.game?.home||r.team)||{}).f || 1.0;
+  const streak = STREAK[r.name];
+  const bb_pct = b.bb_pct || 8.5;
+
+  // Expected PAs per game by batting order
+  const pa_map = {1:4.3,2:4.2,3:4.1,4:3.9,5:3.8,6:3.7,7:3.6,8:3.5,9:3.4};
+  const exp_pa = pa_map[order] || 3.8;
+  const swing_pa = exp_pa * (1 - Math.max(0, (bb_pct - 8.5) * 0.008));
+
+  const streak_mult = streak?.flame === '🔥🔥' ? 1.10 : streak?.flame === '🔥' ? 1.05 : 1.0;
+  const hit_rate = Math.min(0.45, xba * pf * 0.95 * streak_mult);
+
+  // P(1+ hit) = 1 - P(0 hits)
+  const p_hit = +(( 1 - Math.pow(1 - hit_rate, swing_pa)) * 100).toFixed(1);
+
+  // P(2+ TB) — Poisson approximation on expected total bases
+  const exp_tb = Math.min(4.0, xslg * swing_pa * pf * streak_mult);
+  const p_0tb = Math.exp(-exp_tb);
+  const p_1tb = exp_tb * Math.exp(-exp_tb);
+  const p_2tb = +(Math.max(0, 1 - p_0tb - p_1tb) * 100).toFixed(1);
+
+  // P(1+ RBI) — by lineup slot × batter quality
+  const rbi_opp = {1:.08,2:.10,3:.13,4:.15,5:.14,6:.12,7:.10,8:.09,9:.07};
+  const rbi_rate = Math.min(0.25, (rbi_opp[order]||.11) * (xwoba/0.315) * pf * streak_mult);
+  const p_rbi = +(( 1 - Math.pow(1 - rbi_rate, swing_pa)) * 100).toFixed(1);
+
+  // P(1+ Run) — OBP-based × lineup spot scoring opportunity
+  const xobp = Math.min(0.50, xwoba * 0.82 + 0.05);
+  const run_opp = {1:.35,2:.33,3:.30,4:.27,5:.25,6:.22,7:.20,8:.18,9:.16};
+  const p_run  = +(Math.min(75, (run_opp[order]||.25) * (xobp/0.315) * streak_mult * 100)).toFixed(1);
+
+  return { p_hit, p_2tb, p_rbi, p_run, exp_tb: +exp_tb.toFixed(2) };
+}
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -3029,9 +3070,32 @@ function openPlayerModal(name) {
       </div>
     </div>
 
+    <!-- HITTING PROPS -->
+    <div style="border-top:1px solid var(--bd);padding:14px 16px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Prop Probabilities · Today</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="pm-props">
+        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green)" id="pm-p-hit">—</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">1+ Hit</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--teal)" id="pm-p-tb">—</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">2+ Total Bases</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--amber)" id="pm-p-rbi">—</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">1+ RBI</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--purple)" id="pm-p-run">—</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">1+ Run</div>
+        </div>
+      </div>
+    </div>
+
     <!-- H2H -->
     <div class="pm-h2h">
-      <div class="pm-h2h-title">H2H vs ${r.pitName||'—'} (Career)</div>
+      <div class="pm-h2h-title">H2H vs \${r.pitName||'—'} (Career)</div>
       <div id="pm-h2h-data" style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</div>
     </div>
   `;
@@ -3039,6 +3103,13 @@ function openPlayerModal(name) {
   document.getElementById('player-modal').style.display = 'block';
   document.getElementById('player-modal').scrollTop = 0;
   document.body.style.overflow = 'hidden';
+
+  // Populate prop probabilities
+  const props = calcBatterProps(r);
+  document.getElementById('pm-p-hit').textContent = props.p_hit + '%';
+  document.getElementById('pm-p-tb').textContent  = props.p_2tb + '%';
+  document.getElementById('pm-p-rbi').textContent = props.p_rbi + '%';
+  document.getElementById('pm-p-run').textContent = props.p_run + '%';
 
   // Load H2H data async
   loadH2HForModal(r.name, r.pitName, b.id, pit.id);
@@ -3377,6 +3448,37 @@ function renderToday() {
       +'</div>';
   }).join('')+'</div></div></div>' : '';
 
+  const multiPropHTML = (()=>{
+    const multiProps = players
+      .filter(r => { const ci=getCI(r.hrp,getBatter(r.name)?.pa||0); return ci.tier!=='low'&&r.hrp>=6; })
+      .map(r => { const p=calcBatterProps(r); const score=p.p_hit*0.35+p.p_2tb*0.30+p.p_rbi*0.20+p.p_run*0.15; return {r,p,score}; })
+      .sort((a,b)=>b.score-a.score).slice(0,6);
+    if (!multiProps.length) return '';
+    return '<div class="today-section" style="margin-bottom:12px">'
+      +'<div class="today-section-hdr"><span>Best Multi-Prop Targets</span><span style="color:var(--t3);font-size:9px">Hit · Total Bases · RBI · Run probabilities</span></div>'
+      +'<div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">'
+      +multiProps.map(({r,p})=>{
+        const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+        const {badge}=getSignals(r);
+        return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" '
+          +'onclick="openPlayerModal(this.dataset.name)" data-name="'+r.name+'" '
+          +'onmouseover="this.style.borderColor=\'var(--teal)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">'
+          +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
+          +'<div><div style="font-size:13px;font-weight:600;color:var(--t1)">'+r.name+'</div>'
+          +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">'+r.team+' vs '+r.pitName+'</div></div>'
+          +'<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:'+hc+'">'+r.hrp.toFixed(1)+'% HR</div>'
+          +'</div>'
+          +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px">'
+          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--green)">'+p.p_hit+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+H</div></div>'
+          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--teal)">'+p.p_2tb+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">2+TB</div></div>'
+          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--amber)">'+p.p_rbi+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+RBI</div></div>'
+          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--purple)">'+p.p_run+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+R</div></div>'
+          +'</div>'
+          +(badge?'<div style="margin-top:6px"><span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')
+          +'</div>';
+      }).join('')+'</div></div></div>';
+  })();
+
   const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
@@ -3407,6 +3509,7 @@ function renderToday() {
     + '</div>'
     + bestHTML
     + fringeHTML
+    + multiPropHTML
     + envHTML
     + '</div>';
 }
