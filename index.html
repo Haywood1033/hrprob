@@ -299,6 +299,31 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .pit-nrfi-bar{height:6px;background:var(--bd);border-radius:3px;overflow:hidden;margin-top:4px}
 .pit-nrfi-fill{height:100%;border-radius:3px;transition:width .5s}
 @media(max-width:768px){.pit-cards{grid-template-columns:1fr}.pit-grid{padding:10px}}
+
+#player-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;overflow-y:auto;padding:20px}
+.pm-box{background:#0a0c10;border:1px solid var(--bd);border-radius:10px;max-width:820px;margin:0 auto;overflow:hidden}
+.pm-header{padding:16px 20px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-bottom:1px solid var(--teal);display:flex;justify-content:space-between;align-items:flex-start}
+.pm-name{font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-.02em;margin-bottom:2px}
+.pm-sub{font-size:11px;font-family:var(--mono);color:var(--t3)}
+.pm-close{background:none;border:1px solid var(--bd);color:var(--t2);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:12px;flex-shrink:0}
+.pm-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--bd)}
+.pm-kpi{background:var(--bg2);padding:14px 16px;text-align:center}
+.pm-kpi-val{font-size:26px;font-weight:700;font-family:var(--mono);line-height:1}
+.pm-kpi-lbl{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+.pm-kpi-sub{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+.pm-signals{padding:12px 16px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:12px}
+.pm-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)}
+.pm-cell{background:var(--bg2);padding:14px 16px}
+.pm-cell-title{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.pm-cell-val{font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1);margin-bottom:2px}
+.pm-cell-sub{font-size:11px;font-family:var(--mono);color:var(--t3);line-height:1.5;white-space:normal}
+.pm-h2h{padding:12px 16px;border-top:1px solid var(--bd)}
+.pm-h2h-title{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+@media(max-width:600px){
+  .pm-kpis{grid-template-columns:repeat(2,1fr)}
+  .pm-grid{grid-template-columns:1fr}
+  #player-modal{padding:10px}
+}
 </style>
 </head>
 <body>
@@ -2845,7 +2870,7 @@ function renderPlayers(){
     const oddsStr = r.bookOdds
       ? `${r.bookOdds>0?'+':''}${r.bookOdds}`
       : '—';
-    return `<tr onclick="expand(${i})" id="pr${i}">
+    return `<tr onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" id="pr${i}">
       <td class="rk">${i+1}</td>
       <td><div class="pn">${r.name}${sb}${kFlag}${parkBadge(r.name,true)}</div><div class="pt">${r.team} · ${r.time}</div></td>
       <td class="mono" style="color:var(--t2)">${r.team}</td>
@@ -2864,6 +2889,192 @@ function renderPlayers(){
 }
 
 
+
+function closePlayerModal() {
+  document.getElementById('player-modal').style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+function openPlayerModal(name) {
+  // Find best row for this player
+  const seen = new Map();
+  for (const r of allRows) {
+    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
+  }
+  const r = seen.get(name);
+  if (!r) return;
+
+  const b     = getBatter(r.name) || {};
+  const pit   = r.pit || {};
+  const pk    = getPark(r.game?.home||r.team) || {};
+  const w     = r.wx || {};
+  const streak = STREAK[r.name] || {};
+  const { signals, badge, ci } = getSignals(r);
+
+  // Header
+  document.getElementById('pm-name').innerHTML = r.name
+    + (badge ? ` <span style="font-size:11px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd};margin-left:6px">${badge.label}</span>` : '');
+  document.getElementById('pm-sub').textContent = `${r.team} · ${r.bats}HB · Batting ${r.order||'?'} · ${r.time}`;
+
+  // Pitcher / matchup info
+  const pitHand    = pit.hand||'R';
+  const isSameHand = r.bats !== 'S' && r.bats === pitHand;
+  const splitKey   = pitHand==='L'?'vsLHP':'vsRHP';
+  const oppKey     = pitHand==='L'?'vsRHP':'vsLHP';
+  const realSplit  = SPLITS[r.name]?.[splitKey];
+  const oppSplit   = SPLITS[r.name]?.[oppKey];
+  const ps         = PITCHER_SPLITS[r.pitName] || {};
+
+  let platoon, platoonDetail;
+  if (realSplit?.ab >= 15 && oppSplit?.ab >= 15) {
+    const thisHrpa = realSplit.hrpa || realSplit.hr/Math.max(realSplit.ab,1);
+    const oppHrpa  = oppSplit.hrpa  || oppSplit.hr /Math.max(oppSplit.ab,1);
+    const isMuchWorse = thisHrpa < oppHrpa * 0.7;
+    const hasAdv = thisHrpa >= oppHrpa * 0.9;
+    platoon = r.bats==='S'?'— Switch hitter':isMuchWorse?'⚠ Split disadvantage':hasAdv&&!isSameHand?'✓ Platoon adv':hasAdv&&isSameHand?'~ Same side (no penalty)':'⚠ Same side';
+    platoonDetail = `vs ${pitHand==='L'?'LHP':'RHP'}: ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr}HR/${realSplit.ab}AB<br>vs ${pitHand==='L'?'RHP':'LHP'}: SLG .${Math.round(oppSplit.slg*1000).toString().padStart(3,'0')} · ${oppSplit.hr}HR/${oppSplit.ab}AB`;
+  } else if (realSplit?.ab >= 15) {
+    platoon = isSameHand ? '⚠ Same side' : '✓ Platoon adv';
+    platoonDetail = `vs ${pitHand==='L'?'LHP':'RHP'}: ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr}HR/${realSplit.ab}AB`;
+  } else {
+    platoon = isSameHand ? '⚠ Same side' : '✓ Platoon adv';
+    platoonDetail = 'Loading splits…';
+  }
+
+  const platoonColor = platoon.includes('✓')?'var(--green)':platoon.includes('⚠')?'var(--red)':'var(--t3)';
+  const parkEdge = (pk.f||1)>=1.05?`📈 +${(((pk.f||1)-1)*100).toFixed(0)}% hitter park`:(pk.f||1)<=0.95?`📉 ${(((pk.f||1)-1)*100).toFixed(0)}% pitcher park`:'— Neutral';
+  const wxd = pk.roof==='dome'?'Dome':w.ws?`${Math.round(w.ws)}mph`:null;
+  const orient = pk.orient||180;
+  const diff = w.wd ? ((w.wd-orient)%360+360)%360 : 180;
+  const windOut = diff<45||diff>315;
+  const windEdge = pk.roof==='dome'?'🏟 Dome':w.ws?(windOut?`💨 ${Math.round(w.ws)}mph out`:`${Math.round(w.ws)}mph cross/in`):'— No wind data';
+  const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':r.hrp>=7?'var(--amber)':'var(--t2)';
+
+  // Park splits
+  const ps2 = PARK_SPLITS[r.name];
+  const parkHistHTML = ps2?.ab >= 10
+    ? `<br><span style="color:${ps2.flag==='boost'?'var(--green)':ps2.flag==='suppressed'?'var(--red)':'var(--t3)'}">Career at ${ps2.venue}: SLG .${Math.round(ps2.slg*1000).toString().padStart(3,'0')} · ${ps2.hr}HR/${ps2.ab}AB</span>`
+    : '';
+
+  // Pitcher platoon splits
+  const pitSplitKey = r.bats==='L'?'vsLHB':'vsRHB';
+  const pitSplit = ps[pitSplitKey];
+  const pitOppSplit = ps[r.bats==='L'?'vsRHB':'vsLHB'];
+  const pitSplitHTML = pitSplit?.bf >= 20
+    ? `vs ${r.bats==='L'?'L':'R'}HB: FIP <span style="color:${pitSplit.fip>(pitOppSplit?.fip||4.5)?'var(--red)':'var(--green)'}">${pitSplit.fip}</span> · HR/9 ${pitSplit.hr9} · ${pitSplit.bf}BF<br>vs ${r.bats==='L'?'R':'L'}HB: FIP ${pitOppSplit?.fip||'—'}`
+    : 'Loading pitcher splits…';
+
+  // K rate flag
+  const kPct = b.k_pct;
+  const kHTML = kPct >= 28
+    ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">K ${kPct.toFixed(0)}% rate</span>`
+    : '';
+
+  document.getElementById('pm-body').innerHTML = `
+    <!-- KPIs -->
+    <div class="pm-kpis">
+      <div class="pm-kpi">
+        <div class="pm-kpi-val" style="color:${hc}">${r.hrp.toFixed(1)}%</div>
+        <div class="pm-kpi-lbl">HR Probability</div>
+        <div class="pm-kpi-sub">${ciBadge(r.hrp, b.pa||0)}</div>
+      </div>
+      <div class="pm-kpi">
+        <div class="pm-kpi-val" style="color:var(--t1)">${r.barrel?.toFixed(1)||'—'}%</div>
+        <div class="pm-kpi-lbl">Barrel %</div>
+        <div class="pm-kpi-sub">EV ${r.ev?.toFixed(1)||'—'} mph</div>
+      </div>
+      <div class="pm-kpi">
+        <div class="pm-kpi-val" style="color:var(--t1)">${r.iso?.toFixed(3)||'—'}</div>
+        <div class="pm-kpi-lbl">ISO</div>
+        <div class="pm-kpi-sub">xwOBA ${r.xwoba?.toFixed(3)||'—'}</div>
+      </div>
+      <div class="pm-kpi">
+        <div class="pm-kpi-val" style="color:${streak.flame?'var(--amber)':'var(--t2)'}">${streak.hr||0} HR</div>
+        <div class="pm-kpi-lbl">Last 20 PA</div>
+        <div class="pm-kpi-sub">${streak.flame||'—'} ${streak.avg?'.'+Math.round(streak.avg*1000).toString().padStart(3,'0'):''}</div>
+      </div>
+    </div>
+
+    <!-- Signal panel -->
+    <div class="pm-signals">
+      ${signalPanel(r, false)}
+      ${kHTML}
+      ${parkBadge(r.name, false)}
+    </div>
+
+    <!-- Detail grid -->
+    <div class="pm-grid">
+      <div class="pm-cell">
+        <div class="pm-cell-title">Pitcher</div>
+        <div class="pm-cell-val">${r.pitName||'—'}</div>
+        <div class="pm-cell-sub">
+          xERA ${(pit.xera||pit.era||4.5).toFixed(2)} · HR/9 ${(pit.hr9||1.2).toFixed(2)} · Whiff ${(pit.whiff||22).toFixed(1)}%<br>
+          ${pitSplitHTML}
+        </div>
+      </div>
+      <div class="pm-cell">
+        <div class="pm-cell-title">Matchup Split · ${r.bats||'R'} vs ${pitHand}HP</div>
+        <div class="pm-cell-val" style="color:${platoonColor}">${platoon}</div>
+        <div class="pm-cell-sub">${platoonDetail}</div>
+      </div>
+      <div class="pm-cell">
+        <div class="pm-cell-title">Park</div>
+        <div class="pm-cell-val">${parkEdge}</div>
+        <div class="pm-cell-sub">${pk.name||'—'} · ${pk.elev||0}ft elev${parkHistHTML}</div>
+      </div>
+      <div class="pm-cell">
+        <div class="pm-cell-title">Weather</div>
+        <div class="pm-cell-val">${windEdge}</div>
+        <div class="pm-cell-sub">${w.t?Math.round(w.t)+'°F':'—'} · ${pk.roof==='dome'?'Dome':'Open air'}</div>
+      </div>
+    </div>
+
+    <!-- H2H -->
+    <div class="pm-h2h">
+      <div class="pm-h2h-title">H2H vs ${r.pitName||'—'} (Career)</div>
+      <div id="pm-h2h-data" style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</div>
+    </div>
+  `;
+
+  document.getElementById('player-modal').style.display = 'block';
+  document.getElementById('player-modal').scrollTop = 0;
+  document.body.style.overflow = 'hidden';
+
+  // Load H2H data async
+  loadH2HForModal(r.name, r.pitName, b.id, pit.id);
+}
+
+async function loadH2HForModal(batterName, pitcherName, batterId, pitcherId) {
+  const el = document.getElementById('pm-h2h-data');
+  if (!el) return;
+  try {
+    // Get pitcher ID if not cached
+    let pid = pitcherId || PIT_IDS[pitcherName];
+    if (!pid) {
+      const sr = await fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(pitcherName)}&sportId=1`);
+      const sd = await sr.json();
+      pid = sd.people?.[0]?.id;
+      if (pid && pitcherName) PIT_IDS[pitcherName] = pid;
+    }
+    // Get batter ID
+    let bid = batterId;
+    if (!bid) {
+      const br = await fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(batterName)}&sportId=1`);
+      const bd = await br.json();
+      bid = bd.people?.[0]?.id;
+    }
+    if (!bid || !pid) { el.textContent = 'No career matchup data'; return; }
+    const h2h = await fetch(`https://statsapi.mlb.com/api/v1/people/${bid}/stats?stats=vsPlayer&opposingPlayerId=${pid}&group=hitting&sportId=1`);
+    const hd = await h2h.json();
+    const s = hd.stats?.[0]?.splits?.[0]?.stat;
+    if (!s || !s.atBats) { el.textContent = 'No career matchup data'; return; }
+    const avg = s.atBats>0 ? (s.hits/s.atBats).toFixed(3) : '.000';
+    el.innerHTML = `AVG <strong>.${avg.split('.')[1]}</strong> &nbsp; H ${s.hits||0}/${s.atBats||0} &nbsp; HR <strong>${s.homeRuns||0}</strong> &nbsp; BB ${s.baseOnBalls||0} &nbsp; K ${s.strikeOuts||0} &nbsp; OBP ${s.obp||'.000'} &nbsp; <span style="color:var(--t3)">${s.atBats||0} AB · ${Math.ceil((s.atBats||0)/4)} games est.</span>`;
+  } catch(e) {
+    if (el) el.textContent = 'Career data unavailable';
+  }
+}
+
 function closeGameModal() {
   document.getElementById('game-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -2871,6 +3082,9 @@ function closeGameModal() {
 
 
 function goToPlayer(playerName) {
+  openPlayerModal(playerName); return;
+  // Legacy scroll code below (kept for reference)
+
   closeGameModal();
   const playersTab = document.querySelector('.tab[onclick*="players"]');
   setView('players', playersTab);
@@ -4363,6 +4577,19 @@ init();
       <button class="gm-close" onclick="closeGameModal()">✕ Close</button>
     </div>
     <div id="gm-body"></div>
+  </div>
+</div>
+
+<div id="player-modal">
+  <div class="pm-box">
+    <div class="pm-header">
+      <div>
+        <div class="pm-name" id="pm-name">—</div>
+        <div class="pm-sub" id="pm-sub">—</div>
+      </div>
+      <button class="pm-close" onclick="closePlayerModal()">✕</button>
+    </div>
+    <div id="pm-body"></div>
   </div>
 </div>
 </body>
