@@ -176,20 +176,21 @@ async function getPitcherSplits(playerId) {
     if (code === 'vl') result.vsLHB = entry;
   }
 
-  // Derive F1 estimate from overall platoon stats
-  // First inning ERA ≈ overall ERA × 0.85 (pitchers are typically sharper early)
-  // Run rate ≈ ERA / 9 (runs per inning approximation)
+  // Derive F1 estimate from platoon stats
+  // Use FIP as primary since ERA can be 0 from small samples
+  // First inning ERA ≈ FIP × 0.90 (pitchers sharper early, FIP more stable)
   const combined = result.vsLHB || result.vsRHB;
   if (combined) {
-    const est_era = combined.era > 0 ? combined.era * 0.85 : 4.00;
+    const baseFip = combined.fip > 0 ? combined.fip : 4.20;
+    const est_era = +(baseFip * 0.90).toFixed(2);
     const runRate = +(est_era / 9).toFixed(3);
     result.f1 = {
       bf: combined.bf,
-      era1: +est_era.toFixed(2),
+      era1: est_era,
       runRate,
       whip1: combined.whip,
       hr9_1: combined.hr9,
-      estimated: true, // flag that this is derived, not real splits
+      estimated: true,
     };
   }
 
