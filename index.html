@@ -4108,7 +4108,7 @@ function renderTargets(){
           ? `<span style="font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">-EV ${r.evEdge}%</span>`
           : `<span style="font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--t3);border:1px solid var(--bd)">FAIR</span>`)
       : '';
-    return `<div class="tcard ${i<3?'t3':''}" id="tc-${i}" onclick="expandTarget(${i})" style="cursor:pointer">
+    return `<div class="tcard ${i<3?'t3':''}" id="tc-${i}" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" style="cursor:pointer">
       <div class="trk">${i+1}</div>
       <div class="tn">${r.name} ${src} <span style="font-size:13px">${STREAK[r.name]?.flame||''}</span>${(()=>{const kp=getBatter(r.name)?.k_pct;return kp>=28?`<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);margin-left:3px">K ${kp.toFixed(0)}%</span>`:'';})()}${parkBadge(r.name,true)}</div>
       <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
