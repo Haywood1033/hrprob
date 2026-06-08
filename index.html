@@ -327,7 +327,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 </nav>
 <div class="fbar" id="fbar">
   <input type="text" id="srch" placeholder="Search player…" oninput="renderPlayers()">
-  <select id="tsel" onchange="renderPlayers()"><option value="">All Teams</option></select>
+  <select id="gsel" onchange="filterByGame(this.value)" style="min-width:160px"><option value="">All Games</option></select>
   <select id="ssel" onchange="sortBy(this.value)">
     <option value="hrp">HR Prob %</option>
     <option value="barrel">Barrel %</option>
@@ -605,7 +605,7 @@ Object.assign(BATTER, BATTER_REAL);
 
 
 let games=SLATE.games.map(g=>({...g,awayLineup:[],homeLineup:[]}));
-let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, statReady=false;
+let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, statReady=false;
 let curView='players';
 
 function getPark(t){return PARKS[t]||PARKS[(t||'').replace(/\s+/g,'')]||null;}
@@ -2768,6 +2768,7 @@ function filtered(){
     if(q&&!r.name.toLowerCase().includes(q)&&!r.team.toLowerCase().includes(q))return false;
     if(wxFilt&&!hasWxEdge(r))return false;
     if(signalFilt&&getSignals(r).count<3)return false;
+    if(gameFilt&&r.gamePk!==gameFilt)return false;
     return true;
   });
 }
@@ -3409,7 +3410,8 @@ function renderPitchers() {
     return { avgXwoba: +avgXwoba.toFixed(3), avgBarrel: +avgBarrel.toFixed(1), hotCount, count: oppRows.length };
   }
 
-  const html = pitcherCards.map(({pit, team, oppTeam, side, g}) => {
+  // Build card HTML (also used by filtered render)
+  function buildPitcherCard(pit, team, oppTeam, side, g) {
     const ps = PITCHER_SPLITS[pit.name] || {};
     const kp = getKProj(pit);
     const opp = getOppQuality(oppTeam, pit.hand);
@@ -3522,17 +3524,43 @@ function renderPitchers() {
         : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading lineup…</div>')
       + '</div>'
       + '</div>';
-  }).join('');
+  }
+
+  // Pre-build all cards
+  pitcherCards.forEach(p => p._html = buildPitcherCard(p.pit, p.team, p.oppTeam, p.side, p.g));
+
+  // Apply pitcher filters
+  const pitFilter = document.getElementById('pit-filter')?.value || 'all';
+  const pitGameFilter = +document.getElementById('pit-game-sel')?.value || 0;
+  let filteredPitchers = pitcherCards;
+  if (pitGameFilter) filteredPitchers = filteredPitchers.filter(p => p.g.pk === pitGameFilter);
+  if (pitFilter === 'target') filteredPitchers = filteredPitchers.filter(p => {
+    const pit = p.pit; const xera = pit.xera||pit.era||4.50; const hr9 = pit.hr9||1.20;
+    return xera >= 4.80 || hr9 >= 1.40;
+  });
+  if (pitFilter === 'nrfi') filteredPitchers = filteredPitchers.filter(p => {
+    const cached = F1_CACHE.find(d => d.g.pk === p.g.pk);
+    if (!cached) return false;
+    const f1Prob = p.side==='home' ? cached.homeF1 : cached.awayF1;
+    return Math.round(f1Prob * 100) <= 28;
+  });
+
+  const filteredHtml = filteredPitchers.map(p => p._html||buildPitcherCard(p.pit,p.team,p.oppTeam,p.side,p.g)).join('');
+
+  const gameOptions = '<option value="">All Games</option>'
+    + games.map(g=>'<option value="'+g.pk+'">'+g.away+' @ '+g.home+' · '+g.time+'</option>').join('');
 
   grid.innerHTML = '<div class="pit-grid">'
-    + '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">'
-    + '<div style="font-size:22px;font-weight:700;color:var(--t1)">'+pitcherCards.length+' Starters</div>'
-    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">Sorted by projected Ks</div>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bd)">'
+    + '<select id="pit-game-sel" onchange="renderPitchers()" style="background:var(--bg3);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px;min-width:180px">'+gameOptions+'</select>'
+    + '<select id="pit-filter" onchange="renderPitchers()" style="background:var(--bg3);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px">'
+    + '<option value="all">All Pitchers</option>'
+    + '<option value="target">🎯 Targets Only</option>'
+    + '<option value="nrfi">🔒 NRFI Targets</option>'
+    + '</select>'
+    + '<div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-left:auto">'+filteredPitchers.length+' of '+pitcherCards.length+' starters · sorted by proj Ks</div>'
     + '</div>'
-    + '<div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">'
-    + new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
-    + '</div>'
-    + '<div class="pit-cards">'+html+'</div>'
+    + (filteredPitchers.length ? '<div class="pit-cards">'+filteredHtml+'</div>' : '<div class="empty" style="padding:40px"><h3>No pitchers match this filter</h3></div>')
     + '</div>';
 }
 
@@ -3786,6 +3814,11 @@ function setView(v,el){
   renderAll();
 }
 function hand(h,el){handFilt=h;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el?.classList.add('on');wxFilt=false;signalFilt=false;document.getElementById('wxfilt')?.classList.remove('on');document.getElementById('sigfilt')?.classList.remove('on');renderPlayers();}
+
+function filterByGame(pk) {
+  gameFilt = pk ? +pk : 0;
+  renderPlayers();
+}
 
 function toggleSignalFilter(btn) {
   signalFilt = !signalFilt;
