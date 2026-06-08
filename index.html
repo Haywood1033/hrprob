@@ -3426,9 +3426,11 @@ function renderPitchers() {
     const hr9Color = hr9 <= 0.90 ? 'var(--green)' : hr9 >= 1.50 ? 'var(--red)' : 'var(--t2)';
     const kColor = kp.projK >= 7 ? 'var(--green)' : kp.projK >= 5 ? 'var(--teal)' : 'var(--t2)';
 
-    // F1 probability
+    // F1 probability — pitcher faces the OPPOSING team's batters
+    // home pitcher (side='home') → away team scores = awayF1
+    // away pitcher (side='away') → home team scores = homeF1
     const f1Cached = F1_CACHE.find(d => d.g.pk === g.pk);
-    const f1Prob = f1Cached ? (side==='home' ? f1Cached.homeF1 : f1Cached.awayF1) : null;
+    const f1Prob = f1Cached ? (side==='home' ? f1Cached.awayF1 : f1Cached.homeF1) : null;
     const f1Pct = f1Prob !== null ? Math.round(f1Prob * 100) : null;
     const f1Color = f1Pct !== null ? (f1Pct <= 25 ? 'var(--green)' : f1Pct >= 40 ? 'var(--red)' : 'var(--amber)') : 'var(--t3)';
     const nrfiFlag = f1Pct !== null && f1Pct <= 25 ? '<span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.25)">🔒 NRFI</span>' : '';
@@ -3540,8 +3542,11 @@ function renderPitchers() {
   if (pitFilter === 'nrfi') filteredPitchers = filteredPitchers.filter(p => {
     const cached = F1_CACHE.find(d => d.g.pk === p.g.pk);
     if (!cached) return false;
-    const f1Prob = p.side==='home' ? cached.homeF1 : cached.awayF1;
-    return Math.round(f1Prob * 100) <= 38;
+    // Use individual pitcher's half-inning run probability (not combined either-team)
+    // homeF1 = prob home team scores vs away pitcher (away pitcher's NRFI quality)
+    // awayF1 = prob away team scores vs home pitcher (home pitcher's NRFI quality)
+    const f1Prob = p.side==='away' ? cached.homeF1 : cached.awayF1;
+    return Math.round(f1Prob * 100) <= 25; // tighter threshold for individual half-inning
   });
 
   const filteredHtml = filteredPitchers.map(p => p._html||buildPitcherCard(p.pit,p.team,p.oppTeam,p.side,p.g)).join('');
