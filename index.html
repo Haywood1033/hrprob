@@ -1742,10 +1742,10 @@ function renderForecast() {
             const calcKProj = (pit) => {
               // K% via calibrated whiff% regression (K% ≈ Whiff% × 0.68 + 3.5, r²=0.84)
               const whiff = pit.whiff || 22;
-              const k_pct = pit.k_pct || +(whiff * 0.68 + 3.5).toFixed(1);
+              const k_pct = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
               // Expected IP — modern starters avg ~5.5 IP, better pitchers go deeper
               const xera = pit.xera || pit.era || 4.20;
-              const expIP = Math.min(7.0, Math.max(3.5, 5.5 - (xera - 4.50) * 0.6));
+              const expIP = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
               const expBF = +(expIP * 3.3).toFixed(0);
               const projK = +(k_pct / 100 * expBF).toFixed(1);
               return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, projK, hasDirectK: !!pit.k_pct };
@@ -2910,10 +2910,10 @@ function openGameModal(gamePk) {
   // K projections
   const calcKProj = (pit) => {
     const whiff = pit.whiff || 22;
-    const k_pct = pit.k_pct || +(whiff * 0.68 + 3.5).toFixed(1);
+    const k_pct = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
     const xera  = pit.xera || pit.era || 4.20;
-    const expIP = Math.min(7.0, Math.max(3.5, 5.5 - (xera - 4.50) * 0.6));
-    const expBF = +(expIP * 3.3).toFixed(0);
+    const expIP = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
+    const expBF = +(expIP * 3.4).toFixed(0);
     return { projK: +(k_pct/100*expBF).toFixed(1), k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1) };
   };
   const awayKProj = calcKProj(ap);
@@ -3381,10 +3381,10 @@ function renderPitchers() {
   // K projection helper (reuse from Forecast logic)
   function getKProj(pit) {
     const whiff = pit.whiff || 22;
-    const k_pct = pit.k_pct || +(whiff * 0.68 + 3.5).toFixed(1);
+    const k_pct = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
     const xera  = pit.xera || pit.era || 4.20;
-    const expIP = Math.min(7.0, Math.max(3.5, 5.5 - (xera - 4.50) * 0.6));
-    const expBF = +(expIP * 3.3).toFixed(0);
+    const expIP = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
+    const expBF = +(expIP * 3.4).toFixed(0);
     const projK = +(k_pct / 100 * expBF).toFixed(1);
     return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, projK };
   }
