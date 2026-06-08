@@ -3494,9 +3494,11 @@ function renderPitchers() {
         ? '<div class="pit-row"><span class="pit-row-label">Run probability</span><span class="pit-row-val" style="color:'+f1Color+'">'+f1Pct+'%</span></div>'
           + '<div class="pit-nrfi-bar"><div class="pit-nrfi-fill" style="width:'+Math.min(100,f1Pct)+'%;background:'+f1Color+'"></div></div>'
           + (f1Era != null
-            ? '<div class="pit-row" style="margin-top:6px"><span class="pit-row-label">1st inn ERA</span><span class="pit-row-val" style="color:'+f1EraColor+'">'+f1Era.toFixed(2)+'</span></div>'
+            ? '<div class="pit-row" style="margin-top:6px"><span class="pit-row-label">1st inn ERA est.</span><span class="pit-row-val" style="color:'+f1EraColor+'">'+f1Era.toFixed(2)+'</span></div>'
               + '<div class="pit-row"><span class="pit-row-label">Run rate/inn</span><span class="pit-row-val" style="color:'+(f1RunRate>0.55?'var(--red)':f1RunRate<0.35?'var(--green)':'var(--amber)')+'">'+f1RunRate.toFixed(2)+'</span></div>'
-              + '<div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-top:3px">✓ Real 1st inning splits · '+f1Splits.bf+' BF</div>'
+              + (f1Splits?.estimated
+                ? '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ Derived from season ERA</div>'
+                : '<div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-top:3px">✓ Real 1st inning splits · '+f1Splits.bf+' BF</div>')
             : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ General model estimate</div>')
         : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Visit Forecast tab first to load F1 data</div>')
       + '</div>'
