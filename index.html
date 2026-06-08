@@ -2182,14 +2182,15 @@ function rebuild(){
     });
   }
   allRows.sort((a,b)=>sortAsc?a[sortKey]-b[sortKey]:b[sortKey]-a[sortKey]);
-  // team selector
+  // game selector — populate with today's matchups
   const sel=document.getElementById('gsel');
-  const prev=sel.value;
-  sel.innerHTML='<option value="">All Teams</option>';
-  [...new Set(games.flatMap(g=>[g.away,g.home]))].sort().forEach(t=>{
-    const o=document.createElement('option');o.value=t;o.textContent=t;sel.appendChild(o);
-  });
-  if(prev)sel.value=prev;
+  if(sel){
+    const prev=sel.value;
+    sel.innerHTML='<option value="">All Games</option>'
+      + games.map(g=>`<option value="${g.pk}">${g.away} @ ${g.home} · ${g.time}</option>`).join('');
+    if(prev&&games.some(g=>g.pk===+prev))sel.value=prev;
+    else if(gameFilt)sel.value=gameFilt;
+  }
   console.log(`rebuild: ${allRows.length} rows, batters:${Object.keys(BATTER).length}`);
 }
 
@@ -3540,22 +3541,25 @@ function renderPitchers() {
     const cached = F1_CACHE.find(d => d.g.pk === p.g.pk);
     if (!cached) return false;
     const f1Prob = p.side==='home' ? cached.homeF1 : cached.awayF1;
-    return Math.round(f1Prob * 100) <= 28;
+    return Math.round(f1Prob * 100) <= 38;
   });
 
   const filteredHtml = filteredPitchers.map(p => p._html||buildPitcherCard(p.pit,p.team,p.oppTeam,p.side,p.g)).join('');
 
+  // Preserve current dropdown values before re-render
+  const prevPitGame = document.getElementById('pit-game-sel')?.value || '';
+  const prevPitFilter = document.getElementById('pit-filter')?.value || 'all';
+
   const gameOptions = '<option value="">All Games</option>'
-    + games.map(g=>'<option value="'+g.pk+'">'+g.away+' @ '+g.home+' · '+g.time+'</option>').join('');
+    + games.map(g=>'<option value="'+g.pk+'"'+(g.pk===+prevPitGame?' selected':'')+'>'+g.away+' @ '+g.home+' · '+g.time+'</option>').join('');
+  const filterOptions = '<option value="all"'+(prevPitFilter==='all'?' selected':'')+'>All Pitchers</option>'
+    + '<option value="target"'+(prevPitFilter==='target'?' selected':'')+'>🎯 Targets Only</option>'
+    + '<option value="nrfi"'+(prevPitFilter==='nrfi'?' selected':'')+'>🔒 NRFI Targets</option>';
 
   grid.innerHTML = '<div class="pit-grid">'
     + '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px;padding-bottom:12px;border-bottom:1px solid var(--bd)">'
     + '<select id="pit-game-sel" onchange="renderPitchers()" style="background:var(--bg3);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px;min-width:180px">'+gameOptions+'</select>'
-    + '<select id="pit-filter" onchange="renderPitchers()" style="background:var(--bg3);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px">'
-    + '<option value="all">All Pitchers</option>'
-    + '<option value="target">🎯 Targets Only</option>'
-    + '<option value="nrfi">🔒 NRFI Targets</option>'
-    + '</select>'
+    + '<select id="pit-filter" onchange="renderPitchers()" style="background:var(--bg3);border:1px solid var(--bd);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px">'+filterOptions+'</select>'
     + '<div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-left:auto">'+filteredPitchers.length+' of '+pitcherCards.length+' starters · sorted by proj Ks</div>'
     + '</div>'
     + (filteredPitchers.length ? '<div class="pit-cards">'+filteredHtml+'</div>' : '<div class="empty" style="padding:40px"><h3>No pitchers match this filter</h3></div>')
