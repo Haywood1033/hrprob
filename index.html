@@ -3168,12 +3168,12 @@ async function loadH2HForModal(batterName, pitcherName, batterId, pitcherId) {
   if (!el) return;
   try {
     // Get pitcher ID if not cached
-    let pid = pitcherId || PIT_IDS[pitcherName];
+    let pid = pitcherId || PITCHER_IDS[pitcherName];
     if (!pid) {
       const sr = await fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(pitcherName)}&sportId=1`);
       const sd = await sr.json();
       pid = sd.people?.[0]?.id;
-      if (pid && pitcherName) PIT_IDS[pitcherName] = pid;
+      if (pid && pitcherName) PITCHER_IDS[pitcherName] = pid;
     }
     // Get batter ID
     let bid = batterId;
