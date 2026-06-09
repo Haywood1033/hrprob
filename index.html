@@ -2081,6 +2081,23 @@ function ciBadge(hrp, pa, compact=false) {
 }
 
 
+
+function pullBadge(name, compact=false) {
+  const b = getBatter(name);
+  if (!b?.pull_pct) return '';
+  const pull = b.pull_pct;
+  const fb   = b.fb_pct;
+  // League avg pull% ~38%, strong pull = 40%+, elite = 44%+
+  if (pull < 40) return '';
+  const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
+  const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
+  const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
+  const label = pull >= 44 ? `🏏 ${pull.toFixed(0)}% pull` : `🏏 ${pull.toFixed(0)}%`;
+  return compact
+    ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}" title="Pull air%: ${pull.toFixed(1)}%">${label}</span>`
+    : `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}">${label} pull air</span>`;
+}
+
 function parkBadge(name, compact=false) {
   const ps = PARK_SPLITS[name];
   if (!ps || ps.ab < 10) return '';
@@ -2886,7 +2903,7 @@ function renderPlayers(){
       : '—';
     return `<tr onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" id="pr${i}">
       <td class="rk">${i+1}</td>
-      <td><div class="pn">${r.name}${sb}${kFlag}${parkBadge(r.name,true)}</div><div class="pt">${r.team} · ${r.time}</div></td>
+      <td><div class="pn">${r.name}${sb}${kFlag}${parkBadge(r.name,true)}${pullBadge(r.name,true)}</div><div class="pt">${r.team} · ${r.time}</div></td>
       <td class="mono" style="color:var(--t2)">${r.team}</td>
       <td style="font-size:12px;color:var(--t2)">${r.pitName||'—'}</td>
       <td style="font-size:11px;color:var(--t3)">${r.park?.name||'—'}</td>
@@ -3055,6 +3072,7 @@ function openPlayerModal(name) {
       ${signalPanel(r, false)}
       ${kHTML}
       ${parkBadge(r.name, false)}
+      ${pullBadge(r.name, false)}
     </div>
 
     <!-- Detail grid -->
@@ -3076,6 +3094,15 @@ function openPlayerModal(name) {
         <div class="pm-cell-title">Park</div>
         <div class="pm-cell-val">${parkEdge}</div>
         <div class="pm-cell-sub">${pk.name||'—'} · ${pk.elev||0}ft elev${parkHistHTML}</div>
+      </div>
+      <div class="pm-cell">
+        <div class="pm-cell-title">Batted Ball Profile</div>
+        <div class="pm-cell-val" style="font-size:13px">${b.pull_pct?'🏏 '+b.pull_pct.toFixed(0)+'% Pull':'—'}</div>
+        <div class="pm-cell-sub">
+          ${b.fb_pct?'FB '+b.fb_pct.toFixed(0)+'%':'—'} ·
+          ${b.gb_pct?'GB '+b.gb_pct.toFixed(0)+'%':'—'}
+          ${b.pull_pct>=44?'<br><span style="color:var(--amber)">Elite pull tendency — HR upside</span>':b.pull_pct>=40?'<br><span style="color:var(--teal)">Above avg pull tendency</span>':b.pull_pct&&b.pull_pct<=33?'<br><span style="color:var(--t3)">Opposite field tendency</span>':''}
+        </div>
       </div>
       <div class="pm-cell">
         <div class="pm-cell-title">Weather</div>
@@ -3805,6 +3832,13 @@ function renderPitchers() {
         ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.25)">🎯 Target</span>'
         : '';
 
+      // (header and stats built above)
+
+      // K Projection
+      const gbPct = pit.gb_pct;
+      const fbPct = pit.fb_pct;
+      const gbColor = gbPct ? (gbPct>=50?'var(--green)':gbPct<=38?'var(--red)':'var(--t2)') : 'var(--t3)';
+
       return '<div class="pit-card'+(isStrongTarget?' strong-target':isTarget?' target':'')+'">'
       // Header
       + '<div class="pit-card-header">'
@@ -3816,14 +3850,14 @@ function renderPitchers() {
       + (targetBadge ? '<div style="margin-top:2px">'+targetBadge+'</div>' : '')
       + '</div></div>'
 
-      // Key stats row
-      + '<div class="pit-stats">'
+      // Key stats row — 4 columns when GB% available
+      + '<div class="pit-stats" style="grid-template-columns:'+(gbPct?'repeat(4,1fr)':'repeat(3,1fr)')+'">'
       + '<div class="pit-stat"><div class="pit-stat-val" style="color:'+xeraColor+'">'+xera.toFixed(2)+'</div><div class="pit-stat-lbl">xERA</div></div>'
       + '<div class="pit-stat"><div class="pit-stat-val" style="color:'+whiffColor+'">'+whiff.toFixed(1)+'%</div><div class="pit-stat-lbl">Whiff%</div></div>'
       + '<div class="pit-stat"><div class="pit-stat-val" style="color:'+hr9Color+'">'+hr9.toFixed(2)+'</div><div class="pit-stat-lbl">HR/9</div></div>'
+      + (gbPct?'<div class="pit-stat"><div class="pit-stat-val" style="color:'+gbColor+'">'+gbPct.toFixed(0)+'%</div><div class="pit-stat-lbl">GB%</div></div>':'')
       + '</div>'
 
-      // K Projection
       + '<div class="pit-section">'
       + '<div class="pit-section-title">Strikeout Projection</div>'
       + '<div style="display:flex;align-items:center;justify-content:space-between">'
