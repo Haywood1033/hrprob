@@ -2151,19 +2151,26 @@ function getSignals(r) {
   const ci = getCI(r.hrp, pa);
   const confActive = ci.tier === 'high' || ci.tier === 'mid';
 
+  // ── SIGNAL 6: Pull air% + Pitcher GB% edge ───────────────────
+  const bPull  = batter.pull_pct || null;
+  const pitGb  = pit.gb_pct || null;
+  const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38;
+
   const signals = [
-    { key:'park',    active:parkActive,   icon:'🏟', label:'Hitter Park',        dim:'opacity:0.2' },
-    { key:'weather', active:wxActive,     icon:'💨', label:'Wind Out',            dim:'opacity:0.2' },
-    { key:'pitcher', active:pitchActive,  icon:'🎯', label:'Pitcher Matchup',     dim:'opacity:0.2' },
-    { key:'streak',  active:streakActive, icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
-    { key:'conf',    active:confActive,   icon:'🔒', label:ci.label+' Confidence',dim:'opacity:0.2' },
+    { key:'park',    active:parkActive,      icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
+    { key:'weather', active:wxActive,        icon:'💨', label:'Wind Out',                   dim:'opacity:0.2' },
+    { key:'pitcher', active:pitchActive,     icon:'🎯', label:'Pitcher Matchup',            dim:'opacity:0.2' },
+    { key:'streak',  active:streakActive,    icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
+    { key:'conf',    active:confActive,      icon:'🔒', label:ci.label+' Confidence',       dim:'opacity:0.2' },
+    { key:'pulledge',active:pullEdgeActive,  icon:'🏏', label:'Pull% vs Fly Ball Pitcher',  dim:'opacity:0.2' },
   ];
 
   const count = signals.filter(s=>s.active).length;
 
-  // Composite badge
+  // Composite badge — now based on 6 signals
   let badge = null;
-  if (count >= 5)      badge = { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' };
+  if (count >= 6)      badge = { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' };
+  else if (count >= 5) badge = { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' };
   else if (count >= 4) badge = { label:'⭐ All-Star Play', color:'var(--teal)',   bg:'rgba(45,212,191,.10)',  bd:'rgba(45,212,191,.25)' };
   else if (count >= 3) badge = { label:'💡 Value Play',    color:'var(--purple)', bg:'rgba(167,139,250,.10)', bd:'rgba(167,139,250,.25)' };
 
@@ -4625,15 +4632,16 @@ init();
     <div class="guide-row"><span class="guide-tag teal">🎯</span><div class="guide-text"><strong>Pitcher matchup</strong> — pitcher is vulnerable (xERA ≥4.80 or HR/9 ≥1.40). Also factors in pitcher's FIP vs this batter's handedness specifically.</div></div>
     <div class="guide-row"><span class="guide-tag amber">🔥</span><div class="guide-text"><strong>Hot streak</strong> — player has hit at least 1 HR in their last 20 plate appearances. 🔥🔥 = scorching (3+ HR).</div></div>
     <div class="guide-row"><span class="guide-tag green">🔒</span><div class="guide-text"><strong>Confidence</strong> — MID (75-199 PA) or HIGH (200+ PA) sample size. Enough data to trust the probability number.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🏏</span><div class="guide-text"><strong>Pull Air% Edge</strong> — batter pull% ≥40% facing a fly ball pitcher (GB% ≤38%). Pulled fly balls against pitchers who give them up — the specific batted ball edge.</div></div>
     <div class="guide-tip">💡 You can filter the Players tab to only show Signal Plays using the 🎯 Signal Plays chip in the filter bar.</div>
   </div>
 
   <div class="guide-section">
     <div class="guide-h2">Composite Play Badges</div>
     <div class="guide-text" style="margin-bottom:10px">Awarded when multiple signals converge on a player. Completely independent of probability — a 10% player with 4 signals gets the same badge as a 20% player with 4 signals.</div>
-    <div class="guide-row"><span class="guide-tag amber">🏆 Elite Play</span><div class="guide-text">All 5 signals firing simultaneously. Rare alignment — the model is converging from every angle on this player today.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">⭐ All-Star Play</span><div class="guide-text">4 of 5 signals active. Strong multi-factor conviction. These are the plays to prioritize regardless of raw probability ranking.</div></div>
-    <div class="guide-row"><span class="guide-tag gray">💡 Value Play</span><div class="guide-text">3 of 5 signals active. Multiple reasons to like this player — worth a closer look even if probability is modest.</div></div>
+<div class="guide-row"><span class="guide-tag amber">🏆 Elite Play</span><div class="guide-text">5 or 6 signals firing. Rare alignment — the model is converging from every angle including batted ball profile.</div></div>
+<div class="guide-row"><span class="guide-tag teal">⭐ All-Star Play</span><div class="guide-text">4 of 6 signals active. Strong multi-factor conviction. These are the plays to prioritize regardless of raw probability ranking.</div></div>
+<div class="guide-row"><span class="guide-tag gray">💡 Value Play</span><div class="guide-text">3 of 6 signals active. Multiple reasons to like this player — worth a closer look even if probability is modest.</div></div>
     <div class="guide-tip">💡 The ⚡ Today tab shows the Best Play of the Day — a single card combining signal count, streak heat, park history, confidence, and probability into one composite score.</div>
   </div>
 
