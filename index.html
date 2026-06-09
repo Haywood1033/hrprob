@@ -645,6 +645,22 @@ function hrProb(b,park,wx,pit,order){
   const pa = b.pa || 0;
 
   // League average anchors (2026 qualified batters)
+  // ── BATTED BALL PROFILE ──────────────────────────────────────
+  // Pull air% boosts HR probability — pulled fly balls have highest HR rate
+  // League avg pull% ~38% — high pull tendency = more HR upside
+  const pull_pct = b.pull_pct || null;
+  if (pull_pct !== null) {
+    if (pull_pct >= 40) p += (pull_pct - 40) * 0.0015;       // strong pull → HR upside
+    else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;  // opposite field → fewer HR
+  }
+  // Pitcher GB% — high ground ball pitchers suppress HRs significantly
+  // League avg GB% ~43% — above 50% = heavy GB pitcher
+  const pit_gb = pit.gb_pct || null;
+  if (pit_gb !== null) {
+    if (pit_gb >= 50) p -= (pit_gb - 50) * 0.003;    // heavy GB pitcher = fewer HR
+    else if (pit_gb <= 38) p += (38 - pit_gb) * 0.003; // fly ball pitcher = more HR
+  }
+
   const LG_BARREL = 8.0,   K_BARREL = 50;   // barrel% stabilizes ~100 PA
   const LG_EV     = 88.0,  K_EV     = 100;  // EV stabilizes ~200 PA
   const LG_XW     = 0.310, K_XW     = 75;   // xwOBA stabilizes ~150 PA
@@ -4391,20 +4407,21 @@ async function init(){
         const d = await r.json();
         if (d.batters) {
           for (const [name,s] of Object.entries(d.batters)) {
-            if ((s.ev||0)>0) BATTER[name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R'};
+            if ((s.ev||0)>0) BATTER[name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null};
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
         if (d.pitchers) {
           for (const [name,s] of Object.entries(d.pitchers)) {
             PITCHER[name] = {
-              xera:  +(s.xera||4.50).toFixed(2),
-              whiff: +(s.whiff||22).toFixed(1),
-              hr9:   +(s.hr9||1.2).toFixed(2),
-              hh:    +(s.hh_pct||s.hh||38).toFixed(1),
-              hand:  PITCHER[name]?.hand || 'R',
+              xera:   +(s.xera||4.50).toFixed(2),
+              whiff:  +(s.whiff||22).toFixed(1),
+              hr9:    +(s.hr9||1.2).toFixed(2),
+              hh:     +(s.hh_pct||s.hh||38).toFixed(1),
+              hand:   PITCHER[name]?.hand || 'R',
               k_pct:  s.k_pct||null,
-              bb_pct: s.bb_pct||null,
+              gb_pct: s.gb_pct||null,
+              fb_pct: s.fb_pct||null,
             };
           }
           console.log('/api/statcast pitchers:', Object.keys(d.pitchers).length);
