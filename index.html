@@ -645,22 +645,6 @@ function hrProb(b,park,wx,pit,order){
   const pa = b.pa || 0;
 
   // League average anchors (2026 qualified batters)
-  // ── BATTED BALL PROFILE ──────────────────────────────────────
-  // Pull air% boosts HR probability — pulled fly balls have highest HR rate
-  // League avg pull% ~38% — high pull tendency = more HR upside
-  const pull_pct = b.pull_pct || null;
-  if (pull_pct !== null) {
-    if (pull_pct >= 40) p += (pull_pct - 40) * 0.0015;       // strong pull → HR upside
-    else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;  // opposite field → fewer HR
-  }
-  // Pitcher GB% — high ground ball pitchers suppress HRs significantly
-  // League avg GB% ~43% — above 50% = heavy GB pitcher
-  const pit_gb = pit.gb_pct || null;
-  if (pit_gb !== null) {
-    if (pit_gb >= 50) p -= (pit_gb - 50) * 0.003;    // heavy GB pitcher = fewer HR
-    else if (pit_gb <= 38) p += (38 - pit_gb) * 0.003; // fly ball pitcher = more HR
-  }
-
   const LG_BARREL = 8.0,   K_BARREL = 50;   // barrel% stabilizes ~100 PA
   const LG_EV     = 88.0,  K_EV     = 100;  // EV stabilizes ~200 PA
   const LG_XW     = 0.310, K_XW     = 75;   // xwOBA stabilizes ~150 PA
@@ -714,6 +698,20 @@ function hrProb(b,park,wx,pit,order){
 
   // Whiff%: high K rate = fewer balls in play = slightly fewer HR
   p -= (whiff - 22) * 0.0004;
+
+  // ── BATTED BALL PROFILE ──────────────────────────────────────
+  // Pull air% — pulled fly balls have highest HR rate, lg avg ~38%
+  const pull_pct = b.pull_pct || null;
+  if (pull_pct !== null) {
+    if (pull_pct >= 40) p += (pull_pct - 40) * 0.0015;       // strong pull → HR upside
+    else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;  // oppo field → fewer HR
+  }
+  // Pitcher GB% — heavy GB pitchers suppress HRs, lg avg ~43%
+  const pit_gb = pit.gb_pct || null;
+  if (pit_gb !== null) {
+    if (pit_gb >= 50) p -= (pit_gb - 50) * 0.003;      // GB specialist = fewer HR
+    else if (pit_gb <= 38) p += (38 - pit_gb) * 0.003; // fly ball pitcher = more HR
+  }
 
   // ── PLATOON SPLIT (real splits from MLB Stats API) ──────────
   const bats = b.bats || 'R';
