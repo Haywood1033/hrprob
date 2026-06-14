@@ -3244,6 +3244,69 @@ function goToPlayer(playerName) {
   }, 150);
 }
 
+
+function calcGameRunProjection(g) {
+  const park  = getPark(g.home) || {f:1.0, elev:0};
+  const wx    = WX[g.home] || {};
+  const ap    = {...g.ap, ...(getPitcher(g.ap.name)||{})};
+  const hp    = {...g.hp, ...(getPitcher(g.hp.name)||{})};
+
+  // Get batters for each team
+  const awayBatters = allRows.filter(r => r.gamePk===g.pk && r.team===g.away)
+    .sort((a,b) => a.order-b.order).slice(0,9);
+  const homeBatters = allRows.filter(r => r.gamePk===g.pk && r.team===g.home)
+    .sort((a,b) => a.order-b.order).slice(0,9);
+
+  // Project runs per team using OBP-based run scoring model
+  // Base: ~4.5 runs/game league avg, adjusted for pitcher quality and lineup
+  function projectTeamRuns(batters, pit) {
+    const lgRuns = 4.5;
+
+    // Pitcher quality adjustment — xERA relative to league avg 4.20
+    const xera = pit.xera || pit.era || 4.20;
+    const pitAdj = 1 - (xera - 4.20) * 0.08; // each 1 ERA point = 8% run change
+
+    // Lineup quality — avg xwOBA relative to league avg 0.310
+    const avgXwoba = batters.length > 0
+      ? batters.reduce((s,r) => s+(r.xwoba||0.310),0) / batters.length
+      : 0.310;
+    const lineupAdj = (avgXwoba / 0.310);
+
+    // Park factor
+    const parkAdj = park.f || 1.0;
+
+    // Weather — temp affects run scoring slightly
+    const tempAdj = wx.t ? 1 + ((wx.t - 72) * 0.003) : 1.0;
+
+    // Wind — blowing out adds offense
+    const orient = park.orient || 180;
+    const diff   = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : 180;
+    const windOut = diff < 45 || diff > 315;
+    const windAdj = (park.roof !== 'dome' && wx.ws && windOut)
+      ? 1 + (wx.ws * 0.005) : 1.0;
+
+    // Hot batters bonus
+    const hotCount = batters.filter(r => STREAK[r.name]?.flame).length;
+    const streakAdj = 1 + (hotCount * 0.02);
+
+    return Math.max(1.0, lgRuns * pitAdj * lineupAdj * parkAdj * tempAdj * windAdj * streakAdj);
+  }
+
+  const awayRuns = projectTeamRuns(awayBatters, hp); // away bats face home pitcher
+  const homeRuns = projectTeamRuns(homeBatters, ap); // home bats face away pitcher
+  const total    = awayRuns + homeRuns;
+  const ou       = GAME_ODDS[g.away+'@'+g.home]?.ou;
+  const lean     = ou ? (total > ou ? 'over' : total < ou ? 'under' : 'push') : null;
+  const leanAmt  = ou ? +(total - ou).toFixed(1) : null;
+
+  return {
+    awayRuns: +awayRuns.toFixed(1),
+    homeRuns: +homeRuns.toFixed(1),
+    total:    +total.toFixed(1),
+    ou, lean, leanAmt,
+  };
+}
+
 function openGameModal(gamePk) {
   const g = games.find(g => g.pk === gamePk);
   if (!g) return;
@@ -3540,6 +3603,32 @@ function renderToday() {
       }).join('')+'</div></div></div>';
   })();
 
+  // Highest scoring projected game
+  const runProjections = games.map(g => ({g, rp: calcGameRunProjection(g)}))
+    .sort((a,b) => b.rp.total - a.rp.total);
+  const topGame = runProjections[0];
+  const topGameHTML = topGame ? (()=>{
+    const {g, rp} = topGame;
+    const park = getPark(g.home)||{};
+    const tc = rp.total>=9?'var(--green)':rp.total>=7.5?'var(--teal)':'var(--amber)';
+    const leanHtml = rp.lean
+      ? `<span style="font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:${rp.lean==='over'?'rgba(52,211,153,.1)':'rgba(248,113,113,.1)'};color:${rp.lean==='over'?'var(--green)':'var(--red)'};border:1px solid ${rp.lean==='over'?'rgba(52,211,153,.25)':'rgba(248,113,113,.25)'}">Model ${rp.lean==='over'?'▲ OVER':'▼ UNDER'} ${rp.leanAmt>0?'+':''}${rp.leanAmt}</span>`
+      : '';
+    return '<div class="today-section" style="margin-bottom:12px;cursor:pointer" onclick="openGameModal('+g.pk+')">'
+      + '<div class="today-section-hdr"><span>🔥 Highest Scoring Game</span><span style="color:var(--t3);font-size:9px">Projected run total</span></div>'
+      + '<div class="today-section-body">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<div><div style="font-size:15px;font-weight:700;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
+      + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">'+g.time+' · '+park.name+'</div></div>'
+      + '<div style="font-size:32px;font-weight:700;font-family:var(--mono);color:'+tc+'">'+rp.total+'</div>'
+      + '</div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center">'
+      + '<div style="font-family:var(--mono);font-size:11px;color:var(--t3)">'+g.away+' <span style="color:var(--t1);font-weight:600">'+rp.awayRuns+'</span> · '+g.home+' <span style="color:var(--t1);font-weight:600">'+rp.homeRuns+'</span>'+(rp.ou?' · O/U '+rp.ou:'')+'</div>'
+      + leanHtml
+      + '</div>'
+      + '</div></div>';
+  })() : '';
+
   const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
@@ -3571,6 +3660,7 @@ function renderToday() {
     + bestHTML
     + fringeHTML
     + multiPropHTML
+    + topGameHTML
     + envHTML
     + '</div>';
 }
@@ -4030,6 +4120,18 @@ function renderGames(){
         <span>${wstr}</span>
         ${GAME_ODDS[g.away+'@'+g.home]?`<span style="color:var(--bd)">·</span><span style="color:var(--amber);font-weight:600">O/U ${GAME_ODDS[g.away+'@'+g.home].ou}</span>`:''}
       </div>
+      ${(()=>{
+        const rp = calcGameRunProjection(g);
+        const tc = rp.total>=9?'var(--green)':rp.total>=7.5?'var(--teal)':'var(--t2)';
+        const leanHtml = rp.lean ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${rp.lean==='over'?'rgba(52,211,153,.1)':'rgba(248,113,113,.1)'};color:${rp.lean==='over'?'var(--green)':'var(--red)'};border:1px solid ${rp.lean==='over'?'rgba(52,211,153,.25)':'rgba(248,113,113,.25)'}">Model ${rp.lean==='over'?'▲':'▼'} ${rp.leanAmt>0?'+':''}${rp.leanAmt}</span>` : '';
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 12px;background:var(--bg3);border-top:1px solid var(--bd)">
+          <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${g.away} <span style="color:var(--t2);font-weight:600">${rp.awayRuns}</span> · ${g.home} <span style="color:var(--t2);font-weight:600">${rp.homeRuns}</span></div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${tc}">${rp.total} proj</span>
+            ${leanHtml}
+          </div>
+        </div>`;
+      })()}
       <div style="display:flex;border-top:1px solid var(--bd)">
         ${teamSection(awayRows,g.away,g.hp.name,hp)}
         <div style="width:1px;background:var(--bd)"></div>
