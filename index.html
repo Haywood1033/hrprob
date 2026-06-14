@@ -718,24 +718,6 @@ function hrProb(b,park,wx,pit,order){
   const pa = b.pa || 0;
 
   // League average anchors (2026 qualified batters)
-  // ── SWEET SPOT % ─────────────────────────────────────────────
-  // Launch angle 8-32° — high rate = more balls hit with HR trajectory
-  // League avg ~33%, elite = 38%+
-  const ss_pct = b.sweet_spot_pct || null;
-  if (ss_pct !== null) {
-    if (ss_pct >= 36) p += (ss_pct - 33) * 0.0012;
-    else if (ss_pct <= 28) p -= (33 - ss_pct) * 0.0008;
-  }
-
-  // ── EV50 ─────────────────────────────────────────────────────
-  // Top 50% hardest-hit EV average — more stable than mean EV
-  // League avg ~93mph, elite = 98mph+
-  const ev50 = b.ev50 || null;
-  if (ev50 !== null && ev50 > 0) {
-    if (ev50 >= 95) p += (ev50 - 93) * 0.0008;
-    else if (ev50 <= 90) p -= (93 - ev50) * 0.0006;
-  }
-
   const LG_BARREL = 8.0,   K_BARREL = 50;   // barrel% stabilizes ~100 PA
   const LG_EV     = 88.0,  K_EV     = 100;  // EV stabilizes ~200 PA
   const LG_XW     = 0.310, K_XW     = 75;   // xwOBA stabilizes ~150 PA
@@ -876,6 +858,22 @@ function hrProb(b,park,wx,pit,order){
     // Capped at 15% max reduction (even Judge still gets PAs)
     const walkPenalty = Math.min(0.15, (bb_pct - LG_BB) * 0.004);
     p *= (1 - walkPenalty);
+  }
+
+  // ── SWEET SPOT % ─────────────────────────────────────────────
+  // Launch angle 8-32° — high rate = more balls hit with HR trajectory
+  const ss_pct = b.sweet_spot_pct || null;
+  if (ss_pct !== null) {
+    if (ss_pct >= 36) p += (ss_pct - 33) * 0.0012;
+    else if (ss_pct <= 28) p -= (33 - ss_pct) * 0.0008;
+  }
+
+  // ── EV50 ─────────────────────────────────────────────────────
+  // Top 50% hardest-hit EV — more stable than mean EV, lg avg ~93mph
+  const ev50_val = b.ev50 || null;
+  if (ev50_val !== null && ev50_val > 0) {
+    if (ev50_val >= 95) p += (ev50_val - 93) * 0.0008;
+    else if (ev50_val <= 90) p -= (93 - ev50_val) * 0.0006;
   }
 
   // ── BATTING ORDER POSITION ────────────────────────────────────
