@@ -1,0 +1,20 @@
+// schema.prisma (root of repo)
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "./generated/prisma-client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model DailyPrediction {
+  id           Int      @id @default(autoincrement())
+  date         String   @unique
+  predictions  Json
+  resultsAdded Boolean  @default(false)
+  summary      String?
+  savedAt      DateTime @default(now())
+  fetchedAt    DateTime?
+}
