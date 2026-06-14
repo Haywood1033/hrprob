@@ -1,9 +1,10 @@
 {
   "functions": {
-    "api/streaks.js": { "maxDuration": 60 },
-    "api/splits.js":  { "maxDuration": 60 },
-    "api/slate.js":   { "maxDuration": 30 },
-    "api/statcast.js":{ "maxDuration": 30 },
-    "api/history.js": { "maxDuration": 30 }
-  }
+    "api/slate.js":    { "maxDuration": 30 },
+    "api/statcast.js": { "maxDuration": 60 },
+    "api/streaks.js":  { "maxDuration": 90 },
+    "api/splits.js":   { "maxDuration": 90 },
+    "api/history.js":  { "maxDuration": 30 }
+  },
+  "buildCommand": "npx prisma generate --schema=prisma/schema.prisma"
 }
