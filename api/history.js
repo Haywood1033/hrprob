@@ -3,7 +3,7 @@
 let prisma;
 async function getPrisma() {
   if (!prisma) {
-    const { PrismaClient } = require('../generated/prisma-client');
+    const { PrismaClient } = require('./generated/prisma-client');
     if (!global._prisma) global._prisma = new PrismaClient();
     prisma = global._prisma;
   }
