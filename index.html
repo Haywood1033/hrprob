@@ -3350,9 +3350,16 @@ function openGameModal(gamePk) {
   const awayKProj = calcKProj(ap);
   const homeKProj = calcKProj(hp);
 
+  // Run projection
+  const rp = calcGameRunProjection(g);
+  const rpColor = rp.total>=9.5?'var(--amber)':rp.total>=8.5?'var(--teal)':'var(--t2)';
+  const leanStr = rp.lean ? ` · Model ${rp.lean==='over'?'▲ OVER':'▼ UNDER'} ${rp.leanAmt>0?'+':''}${rp.leanAmt}` : '';
+
   // Header
   document.getElementById('gm-title').textContent = `${g.away} @ ${g.home}`;
-  document.getElementById('gm-meta').textContent  = `${g.time} · ${park.name||g.home} · PF ${(park.f||1).toFixed(2)} · ${wstr}${ou ? ' · O/U '+ou.ou : ''}`;
+  document.getElementById('gm-meta').innerHTML = `${g.time} · ${park.name||g.home} · PF ${(park.f||1).toFixed(2)} · ${wstr}${ou ? ' · O/U '+ou.ou : ''}
+    <span style="margin-left:10px;font-family:var(--mono);font-weight:700;color:${rpColor}">${rp.total} proj total</span>
+    <span style="font-size:10px;font-family:var(--mono);color:var(--t3)"> (${g.away} ${rp.awayRuns} · ${g.home} ${rp.homeRuns})${leanStr}</span>`;
 
   // Lineup rows
   const playerRow = (r) => {
@@ -3424,11 +3431,15 @@ function openGameModal(gamePk) {
     <!-- LINEUPS -->
     <div class="gm-lineups">
       <div class="gm-lineup">
-        <div class="gm-lineup-label">${g.away} batting vs ${hp.name||'TBD'}</div>
+        <div class="gm-lineup-label">${g.away} batting vs ${hp.name||'TBD'}
+          <span style="font-family:var(--mono);font-weight:700;color:${rpColor};float:right">${rp.awayRuns} proj runs</span>
+        </div>
         ${awayRows.length ? awayRows.map(r=>playerRow(r)).join('') : '<div style="font-size:11px;color:var(--t3);padding:8px 0">Lineup loading…</div>'}
       </div>
       <div class="gm-lineup">
-        <div class="gm-lineup-label">${g.home} batting vs ${ap.name||'TBD'}</div>
+        <div class="gm-lineup-label">${g.home} batting vs ${ap.name||'TBD'}
+          <span style="font-family:var(--mono);font-weight:700;color:${rpColor};float:right">${rp.homeRuns} proj runs</span>
+        </div>
         ${homeRows.length ? homeRows.map(r=>playerRow(r)).join('') : '<div style="font-size:11px;color:var(--t3);padding:8px 0">Lineup loading…</div>'}
       </div>
     </div>
