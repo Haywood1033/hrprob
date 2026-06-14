@@ -3251,52 +3251,48 @@ function calcGameRunProjection(g) {
   const ap    = {...g.ap, ...(getPitcher(g.ap.name)||{})};
   const hp    = {...g.hp, ...(getPitcher(g.hp.name)||{})};
 
-  // Get batters for each team
   const awayBatters = allRows.filter(r => r.gamePk===g.pk && r.team===g.away)
     .sort((a,b) => a.order-b.order).slice(0,9);
   const homeBatters = allRows.filter(r => r.gamePk===g.pk && r.team===g.home)
     .sort((a,b) => a.order-b.order).slice(0,9);
 
-  // Project runs per team using OBP-based run scoring model
-  // Base: ~4.5 runs/game league avg, adjusted for pitcher quality and lineup
   function projectTeamRuns(batters, pit) {
-    const lgRuns = 4.5;
+    // Start from league average ~4.2 runs/game per team (8.4 total)
+    let runs = 4.2;
 
-    // Pitcher quality adjustment — xERA relative to league avg 4.20
+    // Pitcher quality — additive, capped
     const xera = pit.xera || pit.era || 4.20;
-    const pitAdj = 1 - (xera - 4.20) * 0.08; // each 1 ERA point = 8% run change
+    runs += (xera - 4.20) * 0.30;  // each ERA point above avg adds 0.30 runs
 
-    // Lineup quality — avg xwOBA relative to league avg 0.310
+    // Lineup quality — additive
     const avgXwoba = batters.length > 0
       ? batters.reduce((s,r) => s+(r.xwoba||0.310),0) / batters.length
       : 0.310;
-    const lineupAdj = (avgXwoba / 0.310);
+    runs += (avgXwoba - 0.310) * 12; // 10pt xwOBA diff ≈ +0.12 runs
 
-    // Park factor
-    const parkAdj = park.f || 1.0;
+    // Park factor — additive
+    runs += ((park.f||1.0) - 1.0) * 2.5; // PF 1.10 adds 0.25 runs
 
-    // Weather — temp affects run scoring slightly
-    const tempAdj = wx.t ? 1 + ((wx.t - 72) * 0.003) : 1.0;
-
-    // Wind — blowing out adds offense
+    // Wind blowing out — small bonus
     const orient = park.orient || 180;
     const diff   = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : 180;
     const windOut = diff < 45 || diff > 315;
-    const windAdj = (park.roof !== 'dome' && wx.ws && windOut)
-      ? 1 + (wx.ws * 0.005) : 1.0;
+    if (park.roof !== 'dome' && wx.ws && windOut && wx.ws >= 8) {
+      runs += Math.min(0.3, wx.ws * 0.015); // max +0.3 for wind
+    }
 
-    // Hot batters bonus
+    // Hot batters — small bonus
     const hotCount = batters.filter(r => STREAK[r.name]?.flame).length;
-    const streakAdj = 1 + (hotCount * 0.02);
+    runs += hotCount * 0.10; // each hot batter adds 0.1 runs, max ~0.9
 
-    return Math.max(1.0, lgRuns * pitAdj * lineupAdj * parkAdj * tempAdj * windAdj * streakAdj);
+    return Math.max(1.5, Math.min(9.0, runs));
   }
 
-  const awayRuns = projectTeamRuns(awayBatters, hp); // away bats face home pitcher
-  const homeRuns = projectTeamRuns(homeBatters, ap); // home bats face away pitcher
+  const awayRuns = projectTeamRuns(awayBatters, hp);
+  const homeRuns = projectTeamRuns(homeBatters, ap);
   const total    = awayRuns + homeRuns;
   const ou       = GAME_ODDS[g.away+'@'+g.home]?.ou;
-  const lean     = ou ? (total > ou ? 'over' : total < ou ? 'under' : 'push') : null;
+  const lean     = ou ? (total > ou + 0.5 ? 'over' : total < ou - 0.5 ? 'under' : null) : null;
   const leanAmt  = ou ? +(total - ou).toFixed(1) : null;
 
   return {
