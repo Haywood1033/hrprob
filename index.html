@@ -2599,6 +2599,13 @@ async function loadStreakData() {
       for (const [name, stats] of Object.entries(d.streaks)) {
         STREAK[name] = stats;
       }
+      // Store player IDs for headshots
+      if (d.playerIds) {
+        for (const [name, id] of Object.entries(d.playerIds)) {
+          STREAK_ID_CACHE[name] = id;
+        }
+        console.log(`Headshot IDs cached: ${Object.keys(d.playerIds).length} players`);
+      }
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
       console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       rebuild(); renderAll();
