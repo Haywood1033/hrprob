@@ -6,6 +6,5 @@
     "api/streaks.js":  { "maxDuration": 90 },
     "api/splits.js":   { "maxDuration": 90 },
     "api/history.js":  { "maxDuration": 30 }
-  },
-  "buildCommand": "npm install prisma@5 @prisma/client@5 && npx prisma generate --schema=schema.prisma && npx prisma db push --schema=schema.prisma"
+  }
 }
