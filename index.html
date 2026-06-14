@@ -304,8 +304,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 
 #player-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;overflow-y:auto;padding:20px}
 .pm-box{background:#0a0c10;border:1px solid var(--bd);border-radius:10px;max-width:820px;margin:0 auto;overflow:hidden}
-.pm-header{padding:16px 20px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-bottom:1px solid var(--teal);display:flex;justify-content:space-between;align-items:flex-start}
-.pm-name{font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-.02em;margin-bottom:2px}
+.pm-header{padding:16px 20px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-bottom:1px solid var(--teal)}
+.pm-name{flex:1}
 .pm-sub{font-size:11px;font-family:var(--mono);color:var(--t3)}
 .pm-close{background:none;border:1px solid var(--bd);color:var(--t2);border-radius:4px;padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:12px;flex-shrink:0}
 .pm-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--bd)}
@@ -344,6 +344,53 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .gs-total-runs{font-size:13px;font-weight:700;font-family:var(--mono)}
 .gs-meta{font-size:8px;font-family:var(--mono);color:var(--t3)}
 @media(max-width:600px){.gs-card{width:150px}}
+
+/* ── REDESIGNED PITCHER CARDS ─────────────────────────────── */
+.pit-card{background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;transition:border-color .2s}
+.pit-card.target{border-color:rgba(245,158,11,.4)}
+.pit-card.strong-target{border-color:rgba(248,113,113,.5);box-shadow:0 0 0 1px rgba(248,113,113,.15)}
+.pit-card-header{display:flex;align-items:center;gap:12px;padding:14px 16px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-bottom:1px solid var(--bd)}
+.pit-avatar{width:48px;height:48px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);object-fit:cover;flex-shrink:0}
+.pit-avatar-fallback{width:48px;height:48px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.pit-header-info{flex:1;min-width:0}
+.pit-name{font-size:16px;font-weight:700;color:var(--t1);letter-spacing:-.02em}
+.pit-matchup{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+.pit-header-badges{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+/* Stat table */
+.pit-stat-table{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border-bottom:1px solid var(--bd)}
+.pit-stat-cell{padding:10px 12px;text-align:center;border-right:1px solid var(--bd)}
+.pit-stat-cell:last-child{border-right:none}
+.pit-stat-val{font-size:17px;font-weight:700;font-family:var(--mono);line-height:1}
+.pit-stat-lbl{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-top:3px}
+/* Row sections */
+.pit-row-section{padding:10px 14px;border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+.pit-row-section:last-child{border-bottom:none}
+.pit-row-label{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em}
+.pit-row-val{font-size:12px;font-family:var(--mono);font-weight:600;color:var(--t1)}
+.pit-row-sub{font-size:10px;font-family:var(--mono);color:var(--t3)}
+/* Platoon table */
+.pit-platoon{display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--bd)}
+.pit-platoon-side{padding:10px 14px}
+.pit-platoon-side+.pit-platoon-side{border-left:1px solid var(--bd)}
+.pit-platoon-title{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.pit-platoon-row{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);padding:1px 0}
+/* Redesigned player modal */
+.pm-avatar{width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--teal);object-fit:cover;flex-shrink:0}
+.pm-avatar-fb{width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0}
+.pm-stat-table{display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:var(--bd)}
+.pm-stat-cell{background:var(--bg2);padding:12px 8px;text-align:center}
+.pm-stat-cell-val{font-size:22px;font-weight:700;font-family:var(--mono);line-height:1}
+.pm-stat-cell-lbl{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-top:3px}
+.pm-stat-cell-sub{font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+.pm-section{padding:12px 16px;border-top:1px solid var(--bd)}
+.pm-section-title{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
+.pm-data-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;font-size:11px;font-family:var(--mono)}
+.pm-data-label{color:var(--t3)}
+.pm-data-val{color:var(--t1);font-weight:600}
+.pm-props{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.pm-prop-card{background:var(--bg3);border-radius:6px;padding:8px;text-align:center}
+.pm-prop-val{font-size:18px;font-weight:700;font-family:var(--mono)}
+.pm-prop-lbl{font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:2px}
 </style>
 </head>
 <body>
@@ -2111,6 +2158,16 @@ function ciBadge(hrp, pa, compact=false) {
 
 
 
+
+function headshot(id, size=48, alt='') {
+  if (!id) return `<div class="pit-avatar-fallback" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.4)}px">⚾</div>`;
+  return `<img src="https://img.mlb.com/headshots/current/60x60/${id}.jpg" 
+    width="${size}" height="${size}" alt="${alt}"
+    style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;background:var(--bg3);border:2px solid var(--bd)"
+    onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+    <div style="display:none;width:${size}px;height:${size}px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);align-items:center;justify-content:center;font-size:${Math.round(size*0.4)}px;flex-shrink:0">⚾</div>`;
+}
+
 function pullBadge(name, compact=false) {
   const b = getBatter(name);
   if (!b?.pull_pct) return '';
@@ -3020,9 +3077,25 @@ function openPlayerModal(name) {
   const { signals, badge, ci } = getSignals(r);
 
   // Header
-  document.getElementById('pm-name').innerHTML = r.name
-    + (badge ? ` <span style="font-size:11px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd};margin-left:6px">${badge.label}</span>` : '');
-  document.getElementById('pm-sub').textContent = `${r.team} · ${r.bats}HB · Batting ${r.order||'?'} · ${r.time}`;
+  // Get batter ID for headshot
+  const batterId = STREAK_ID_CACHE[r.name] || null;
+  const headshotHtml = batterId
+    ? `<img src="https://img.mlb.com/headshots/current/60x60/${batterId}.jpg" 
+        style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--teal);flex-shrink:0;background:var(--bg3)"
+        onerror="this.style.display='none'">`
+    : `<div style="width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">⚾</div>`;
+
+  document.getElementById('pm-name').innerHTML = 
+    `<div style="display:flex;align-items:center;gap:14px">
+      ${headshotHtml}
+      <div>
+        <div style="font-size:22px;font-weight:700;color:var(--t1);letter-spacing:-.02em">${r.name}
+          ${badge ? `<span style="font-size:11px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd};margin-left:6px;vertical-align:middle">${badge.label}</span>` : ''}
+        </div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:4px">${r.team} · ${r.bats}HB · Batting ${r.order||'?'} · ${r.time}</div>
+      </div>
+    </div>`;
+  document.getElementById('pm-sub').textContent = '';
 
   // Pitcher / matchup info
   const pitHand    = pit.hand||'R';
@@ -3964,130 +4037,6 @@ function renderPitchers() {
     return { avgXwoba: +avgXwoba.toFixed(3), avgBarrel: +avgBarrel.toFixed(1), hotCount, count: oppRows.length };
   }
 
-  // Build card HTML (also used by filtered render)
-  function buildPitcherCard(pit, team, oppTeam, side, g) {
-    const ps = PITCHER_SPLITS[pit.name] || {};
-    const kp = getKProj(pit);
-    const opp = getOppQuality(oppTeam, pit.hand);
-    const park = getPark(side==='home' ? team : oppTeam) || {};
-    const wx = WX[side==='home' ? team : oppTeam] || {};
-    const xera = pit.xera || pit.era || 4.50;
-    const whiff = pit.whiff || 22;
-    const hr9 = pit.hr9 || 1.20;
-
-    // Color helpers
-    const xeraColor = xera <= 3.50 ? 'var(--green)' : xera >= 5.00 ? 'var(--red)' : 'var(--amber)';
-    const whiffColor = whiff >= 28 ? 'var(--green)' : whiff <= 18 ? 'var(--red)' : 'var(--t2)';
-    const hr9Color = hr9 <= 0.90 ? 'var(--green)' : hr9 >= 1.50 ? 'var(--red)' : 'var(--t2)';
-    const kColor = kp.projK >= 7 ? 'var(--green)' : kp.projK >= 5 ? 'var(--teal)' : 'var(--t2)';
-
-    // F1 probability — pitcher faces the OPPOSING team's batters
-    // home pitcher (side='home') → away team scores = awayF1
-    // away pitcher (side='away') → home team scores = homeF1
-    const f1Cached = F1_CACHE.find(d => d.g.pk === g.pk);
-    const f1Prob = f1Cached ? (side==='home' ? f1Cached.awayF1 : f1Cached.homeF1) : null;
-    const f1Pct = f1Prob !== null ? Math.round(f1Prob * 100) : null;
-    const f1Color = f1Pct !== null ? (f1Pct <= 25 ? 'var(--green)' : f1Pct >= 40 ? 'var(--red)' : 'var(--amber)') : 'var(--t3)';
-    const nrfiFlag = f1Pct !== null && f1Pct <= 25 ? '<span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.25)">🔒 NRFI</span>' : '';
-
-    // Platoon splits
-    const vsLHB = ps.vsLHB;
-    const vsRHB = ps.vsRHB;
-
-    // Opp quality indicator
-    const oppXwoba = opp?.avgXwoba || 0.310;
-    const oppQualColor = oppXwoba >= 0.340 ? 'var(--red)' : oppXwoba <= 0.290 ? 'var(--green)' : 'var(--t2)';
-
-    // (header/stats/K built above in target section)
-
-      // First Inning
-      const f1Splits = ps.f1;
-      const f1Era = f1Splits?.era1;
-      const f1RunRate = f1Splits?.runRate;
-      const f1EraColor = f1Era != null ? (f1Era <= 2.50 ? 'var(--green)' : f1Era >= 5.00 ? 'var(--red)' : 'var(--amber)') : 'var(--t3)';
-
-      // ── TARGET INDICATOR ──────────────────────────────────────
-      // Flag pitcher as a target when: xERA ≥ 4.80 OR HR/9 ≥ 1.40 OR f1 run rate high
-      // Combined with opp lineup quality
-      const isTarget = (xera >= 4.80 || hr9 >= 1.40 || (f1RunRate != null && f1RunRate > 0.55))
-        && (opp ? opp.avgXwoba >= 0.310 : true);
-      const isStrongTarget = (xera >= 5.20 || hr9 >= 1.60)
-        && (opp ? opp.avgXwoba >= 0.330 : true);
-      const targetBadge = isStrongTarget
-        ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(248,113,113,.12);color:var(--red);border:1px solid rgba(248,113,113,.3);font-weight:700">🎯 Strong Target</span>'
-        : isTarget
-        ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.25)">🎯 Target</span>'
-        : '';
-
-      // (header and stats built above)
-
-      // K Projection
-      const gbPct = pit.gb_pct;
-      const fbPct = pit.fb_pct;
-      const gbColor = gbPct ? (gbPct>=50?'var(--green)':gbPct<=38?'var(--red)':'var(--t2)') : 'var(--t3)';
-
-      return '<div class="pit-card'+(isStrongTarget?' strong-target':isTarget?' target':'')+'">'
-      // Header
-      + '<div class="pit-card-header">'
-      + '<div><div class="pit-name">'+pit.name+'</div>'
-      + '<div class="pit-team">'+team+' vs '+oppTeam+' · '+g.time+'</div></div>'
-      + '<div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">'
-      + '<span class="pit-hand">'+(pit.hand||'R')+'HP</span>'
-      + nrfiFlag
-      + (targetBadge ? '<div style="margin-top:2px">'+targetBadge+'</div>' : '')
-      + '</div></div>'
-
-      // Key stats row — 4 columns when GB% available
-      + '<div class="pit-stats" style="grid-template-columns:'+(gbPct?'repeat(4,1fr)':'repeat(3,1fr)')+'">'
-      + '<div class="pit-stat"><div class="pit-stat-val" style="color:'+xeraColor+'">'+xera.toFixed(2)+'</div><div class="pit-stat-lbl">xERA</div></div>'
-      + '<div class="pit-stat"><div class="pit-stat-val" style="color:'+whiffColor+'">'+whiff.toFixed(1)+'%</div><div class="pit-stat-lbl">Whiff%</div></div>'
-      + '<div class="pit-stat"><div class="pit-stat-val" style="color:'+hr9Color+'">'+hr9.toFixed(2)+'</div><div class="pit-stat-lbl">HR/9</div></div>'
-      + (gbPct?'<div class="pit-stat"><div class="pit-stat-val" style="color:'+gbColor+'">'+gbPct.toFixed(0)+'%</div><div class="pit-stat-lbl">GB%</div></div>':'')
-      + '</div>'
-
-      + '<div class="pit-section">'
-      + '<div class="pit-section-title">Strikeout Projection</div>'
-      + '<div style="display:flex;align-items:center;justify-content:space-between">'
-      + '<div class="pit-k-proj"><div class="pit-k-big" style="color:'+kColor+'">'+kp.projK+'K</div><div style="font-size:11px;font-family:var(--mono);color:var(--t3)">~'+kp.expIP+' IP · '+kp.expBF+' BF</div></div>'
-      + '<div style="text-align:right"><div style="font-size:11px;font-family:var(--mono);color:var(--t3)">K% '+kp.k_pct+'%</div><div style="font-size:9px;font-family:var(--mono);color:var(--t3)">via whiff regression</div></div>'
-      + '</div></div>'
-
-      // First Inning
-      + '<div class="pit-section">'
-      + '<div class="pit-section-title">First Inning</div>'
-      + (f1Pct !== null
-        ? '<div class="pit-row"><span class="pit-row-label">Run probability</span><span class="pit-row-val" style="color:'+f1Color+'">'+f1Pct+'%</span></div>'
-          + '<div class="pit-nrfi-bar"><div class="pit-nrfi-fill" style="width:'+Math.min(100,f1Pct)+'%;background:'+f1Color+'"></div></div>'
-          + (f1Era != null
-            ? '<div class="pit-row" style="margin-top:6px"><span class="pit-row-label">1st inn ERA est.</span><span class="pit-row-val" style="color:'+f1EraColor+'">'+f1Era.toFixed(2)+'</span></div>'
-              + '<div class="pit-row"><span class="pit-row-label">Run rate/inn</span><span class="pit-row-val" style="color:'+(f1RunRate>0.55?'var(--red)':f1RunRate<0.35?'var(--green)':'var(--amber)')+'">'+f1RunRate.toFixed(2)+'</span></div>'
-              + (f1Splits?.estimated
-                ? '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ Derived from season ERA</div>'
-                : '<div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-top:3px">✓ Real 1st inning splits · '+f1Splits.bf+' BF</div>')
-            : '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">~ General model estimate</div>')
-        : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Visit Forecast tab first to load F1 data</div>')
-      + '</div>'
-
-      // Platoon splits
-      + '<div class="pit-section">'
-      + '<div class="pit-section-title">Platoon Splits</div>'
-      + (vsRHB && vsLHB
-        ? '<div class="pit-row"><span class="pit-row-label">vs RHB</span><span class="pit-row-val" style="color:'+(vsRHB.fip>vsLHB.fip?'var(--red)':'var(--green)')+'">FIP '+vsRHB.fip+' · HR/9 '+vsRHB.hr9+'</span></div>'
-          + '<div class="pit-row"><span class="pit-row-label">vs LHB</span><span class="pit-row-val" style="color:'+(vsLHB.fip>vsRHB.fip?'var(--red)':'var(--green)')+'">FIP '+vsLHB.fip+' · HR/9 '+vsLHB.hr9+'</span></div>'
-        : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading platoon splits…</div>')
-      + '</div>'
-
-      // Opposing lineup
-      + '<div class="pit-section">'
-      + '<div class="pit-section-title">Opposing Lineup · '+oppTeam+'</div>'
-      + (opp
-        ? '<div class="pit-row"><span class="pit-row-label">Avg xwOBA</span><span class="pit-row-val" style="color:'+oppQualColor+'">'+opp.avgXwoba+'</span></div>'
-          + '<div class="pit-row"><span class="pit-row-label">Avg Barrel%</span><span class="pit-row-val">'+opp.avgBarrel+'%</span></div>'
-          + '<div class="pit-row"><span class="pit-row-label">Hot batters 🔥</span><span class="pit-row-val" style="color:'+(opp.hotCount>=3?'var(--red)':opp.hotCount>=1?'var(--amber)':'var(--green)')+'">'+opp.hotCount+' of '+opp.count+'</span></div>'
-        : '<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading lineup…</div>')
-      + '</div>'
-      + '</div>';
-  }
 
   // Pre-build all cards
   pitcherCards.forEach(p => p._html = buildPitcherCard(p.pit, p.team, p.oppTeam, p.side, p.g));
