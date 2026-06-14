@@ -718,6 +718,24 @@ function hrProb(b,park,wx,pit,order){
   const pa = b.pa || 0;
 
   // League average anchors (2026 qualified batters)
+  // ── SWEET SPOT % ─────────────────────────────────────────────
+  // Launch angle 8-32° — high rate = more balls hit with HR trajectory
+  // League avg ~33%, elite = 38%+
+  const ss_pct = b.sweet_spot_pct || null;
+  if (ss_pct !== null) {
+    if (ss_pct >= 36) p += (ss_pct - 33) * 0.0012;
+    else if (ss_pct <= 28) p -= (33 - ss_pct) * 0.0008;
+  }
+
+  // ── EV50 ─────────────────────────────────────────────────────
+  // Top 50% hardest-hit EV average — more stable than mean EV
+  // League avg ~93mph, elite = 98mph+
+  const ev50 = b.ev50 || null;
+  if (ev50 !== null && ev50 > 0) {
+    if (ev50 >= 95) p += (ev50 - 93) * 0.0008;
+    else if (ev50 <= 90) p -= (93 - ev50) * 0.0006;
+  }
+
   const LG_BARREL = 8.0,   K_BARREL = 50;   // barrel% stabilizes ~100 PA
   const LG_EV     = 88.0,  K_EV     = 100;  // EV stabilizes ~200 PA
   const LG_XW     = 0.310, K_XW     = 75;   // xwOBA stabilizes ~150 PA
@@ -3208,9 +3226,10 @@ function openPlayerModal(name) {
         <div class="pm-cell-title">Batted Ball Profile</div>
         <div class="pm-cell-val" style="font-size:13px">${b.pull_pct?'🏏 '+b.pull_pct.toFixed(0)+'% Pull':'—'}</div>
         <div class="pm-cell-sub">
-          ${b.fb_pct?'FB '+b.fb_pct.toFixed(0)+'%':'—'} ·
-          ${b.gb_pct?'GB '+b.gb_pct.toFixed(0)+'%':'—'}
-          ${b.pull_pct>=44?'<br><span style="color:var(--amber)">Elite pull tendency — HR upside</span>':b.pull_pct>=40?'<br><span style="color:var(--teal)">Above avg pull tendency</span>':b.pull_pct&&b.pull_pct<=33?'<br><span style="color:var(--t3)">Opposite field tendency</span>':''}
+          ${b.fb_pct?'FB '+b.fb_pct.toFixed(0)+'%':'—'} · ${b.gb_pct?'GB '+b.gb_pct.toFixed(0)+'%':'—'}
+          ${b.sweet_spot_pct?'<br>Sweet Spot <span style="color:'+(b.sweet_spot_pct>=38?'var(--green)':b.sweet_spot_pct<=28?'var(--red)':'var(--t2)')+'">'+b.sweet_spot_pct.toFixed(0)+'%</span>':''}
+          ${b.ev50?'· EV50 <span style="color:'+(b.ev50>=98?'var(--green)':b.ev50<=89?'var(--red)':'var(--t2)')+'">'+b.ev50.toFixed(1)+'</span>':''}
+          ${b.pull_pct>=44?'<br><span style="color:var(--amber)">Elite pull tendency</span>':b.pull_pct>=40?'<br><span style="color:var(--teal)">Above avg pull tendency</span>':''}
         </div>
       </div>
       <div class="pm-cell">
@@ -4683,7 +4702,7 @@ async function init(){
         const d = await r.json();
         if (d.batters) {
           for (const [name,s] of Object.entries(d.batters)) {
-            if ((s.ev||0)>0) BATTER[name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null};
+            if ((s.ev||0)>0) BATTER[name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
