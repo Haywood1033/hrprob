@@ -20,12 +20,14 @@ module.exports = async function handler(req, res) {
 
     const batterCount  = Object.keys(data.batters  || {}).length;
     const pitcherCount = Object.keys(data.pitchers || {}).length;
-    console.log(`Statcast: ${batterCount} batters, ${pitcherCount} pitchers`);
+    // Debug: check if ev50 populated
+    const withEv50 = Object.values(data.batters||{}).filter(b=>b.ev50!=null).length;
+    console.log(`Statcast: ${batterCount} batters (${withEv50} with ev50), ${pitcherCount} pitchers`);
 
     // Only cache if we got real data
     if (batterCount > 0) cache = { data, timestamp: Date.now() };
 
-    return res.status(200).json(data);
+    return res.status(200).json({ ...data, debug: { withEv50, batterCount, pitcherCount } });
   } catch (e) {
     console.error('Statcast fetch error:', e.message);
     // Return stale cache if available, otherwise empty structure
