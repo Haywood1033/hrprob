@@ -112,9 +112,17 @@ module.exports = async function handler(req, res) {
     ...teams.map(team => safe(fetchActiveRoster(team), 6000)),
   ]);
 
-  // Step 4: fetch weather
+  // Step 4: fetch weather using live venue coordinates
   const homeTeams = pitchers.map(g => g.homeTeam).filter(Boolean);
-  const weather = await safe(fetchAllWeather(targetDate, homeTeams), 9000);
+  // Build venue coord map from live schedule data
+  const venueCoords = {};
+  for (const g of pitchers) {
+    if (g.homeTeam && g.venue?.lat && g.venue?.lon) {
+      venueCoords[g.homeTeam] = g.venue;
+    }
+  }
+  console.log(`Venue coords from MLB API: ${Object.keys(venueCoords).length} teams`);
+  const weather = await safe(fetchAllWeather(targetDate, homeTeams, venueCoords), 9000);
 
   // Build rosters map
   const rosters = {};
