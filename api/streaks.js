@@ -87,16 +87,17 @@ module.exports = async function handler(req, res) {
   if (!names.length) return res.status(400).json({ error: 'No names' });
 
   const results = {};
+  const playerIds = {}; // include IDs for headshots
   const start = Date.now();
 
   // Process in larger batches (10 concurrent) to handle full 270-player slates
-  // Each batch: 2 API calls per player (search + gameLog) = ~1-2s per batch
   for (let i = 0; i < names.length; i += 10) {
     const batch = names.slice(i, i+10);
     await Promise.allSettled(batch.map(async name => {
       try {
         const id = await searchPlayer(name);
         if (!id) return;
+        playerIds[name] = id;
         const stats = await getLast20PA(id);
         if (stats) results[name] = stats;
       } catch(e) { console.warn(`Streak ${name}:`, e.message); }
@@ -104,7 +105,7 @@ module.exports = async function handler(req, res) {
   }
 
   console.log(`Streaks: ${Object.keys(results).length}/${names.length} in ${Date.now()-start}ms`);
-  cache = { data: { streaks: results }, timestamp: Date.now() };
+  cache = { data: { streaks: results, playerIds }, timestamp: Date.now() };
   res.setHeader('Cache-Control', 's-maxage=1800');
-  return res.status(200).json({ streaks: results, elapsed: Date.now()-start });
+  return res.status(200).json({ streaks: results, playerIds, elapsed: Date.now()-start });
 };
