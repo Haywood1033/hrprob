@@ -637,7 +637,14 @@ let games=SLATE.games.map(g=>({...g,awayLineup:[],homeLineup:[]}));
 let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, teamFilt='', statReady=false;
 let curView='players';
 
-function getPark(t){return PARKS[t]||PARKS[(t||'').replace(/\s+/g,'')]||null;}
+// Live venue overrides from MLB schedule API — updated each day
+const VENUE_OVERRIDES = {};
+
+function getPark(t) {
+  // Live venue data takes priority over hardcoded PARKS
+  if (VENUE_OVERRIDES[t]) return VENUE_OVERRIDES[t];
+  return PARKS[t] || PARKS[(t||'').replace(/\s+/g,'')] || null;
+}
 
 // ── HR PROBABILITY MODEL ──
 function hrProb(b,park,wx,pit,order){
@@ -4385,6 +4392,30 @@ async function init(){
 
         // Merge weather — API format: {t, w, d, dome, l, s}
         // Frontend format: {t, ws, wd, dome, label}
+        // Store live venue data from MLB schedule API
+        if (slate.pitchers) {
+          for (const g of slate.pitchers) {
+            if (g.venue?.lat && g.venue?.lon && g.homeTeam) {
+              const v = g.venue;
+              const base = PARKS[g.homeTeam] || {};
+              // Merge live coords with hardcoded park factor (we don't have live PF)
+              VENUE_OVERRIDES[g.homeTeam] = {
+                ...base,
+                name: v.name || base.name || g.homeTeam,
+                city: v.city || base.city || '',
+                lat:  v.lat,
+                lon:  v.lon,
+                roof: v.roof || base.roof || 'open',
+                // Keep hardcoded f (park factor) and elev — not in MLB API
+                f:    base.f    || 1.0,
+                elev: base.elev || 0,
+                orient: base.orient || 180,
+              };
+            }
+          }
+          console.log(`Live venue overrides: ${Object.keys(VENUE_OVERRIDES).length} parks`);
+        }
+
         if (slate.weather) {
           for (const [team, wx] of Object.entries(slate.weather)) {
             WX[team] = {
