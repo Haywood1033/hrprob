@@ -3102,11 +3102,16 @@ function openPlayerModal(name) {
   // Header
   // Get batter ID for headshot
   const batterId = STREAK_ID_CACHE[r.name] || null;
-  const headshotHtml = batterId
-    ? `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${batterId}/headshot/67/current" 
-        style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--teal);flex-shrink:0;background:var(--bg3)"
-        onerror="this.style.display='none'">`
-    : `<div style="width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">⚾</div>`;
+  const hsId = `pm-headshot-${Date.now()}`;
+  const headshotHtml = `
+    <div id="${hsId}" style="width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden">
+      ${batterId
+        ? `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${batterId}/headshot/67/current"
+            style="width:72px;height:72px;object-fit:cover"
+            onload="this.parentElement.style.fontSize='0'"
+            onerror="this.remove()">`
+        : '⚾'}
+    </div>`;
 
   document.getElementById('pm-name').innerHTML = 
     `<div style="display:flex;align-items:center;gap:14px">
@@ -3284,6 +3289,21 @@ function openPlayerModal(name) {
   document.getElementById('pm-p-tb').textContent  = props.p_2tb + '%';
   document.getElementById('pm-p-rbi').textContent = props.p_rbi + '%';
   document.getElementById('pm-p-run').textContent = props.p_run + '%';
+
+  // If ID not cached yet, fetch it async and update headshot
+  if (!batterId) {
+    getPlayerId(r.name).then(id => {
+      if (!id) return;
+      STREAK_ID_CACHE[r.name] = id;
+      const el = document.getElementById(hsId);
+      if (el) {
+        el.innerHTML = `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${id}/headshot/67/current"
+          style="width:72px;height:72px;object-fit:cover"
+          onload="this.parentElement.style.fontSize='0'"
+          onerror="this.remove()">`;
+      }
+    }).catch(()=>{});
+  }
 
   // Load H2H data async
   loadH2HForModal(r.name, r.pitName, b.id, pit.id);
