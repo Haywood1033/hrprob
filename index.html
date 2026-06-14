@@ -2177,7 +2177,7 @@ function ciBadge(hrp, pa, compact=false) {
 
 function headshot(id, size=48, alt='') {
   if (!id) return `<div class="pit-avatar-fallback" style="width:${size}px;height:${size}px;font-size:${Math.round(size*0.4)}px">⚾</div>`;
-  return `<img src="https://img.mlb.com/headshots/current/60x60/${id}.jpg" 
+  return `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${id}/headshot/67/current" 
     width="${size}" height="${size}" alt="${alt}"
     style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;background:var(--bg3);border:2px solid var(--bd)"
     onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
@@ -3096,7 +3096,7 @@ function openPlayerModal(name) {
   // Get batter ID for headshot
   const batterId = STREAK_ID_CACHE[r.name] || null;
   const headshotHtml = batterId
-    ? `<img src="https://img.mlb.com/headshots/current/60x60/${batterId}.jpg" 
+    ? `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${batterId}/headshot/67/current" 
         style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid var(--teal);flex-shrink:0;background:var(--bg3)"
         onerror="this.style.display='none'">`
     : `<div style="width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">⚾</div>`;
@@ -4025,7 +4025,7 @@ function buildPitcherCard(pit, team, oppTeam, side, g) {
       +'<div class="pit-platoon-row"><span>BF</span><span>'+split.bf+'</span></div></div>';
   };
   const hsHtml = pitId
-    ? '<img src="https://img.mlb.com/headshots/current/120x120/'+pitId+'.jpg" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--bd);background:var(--bg3);flex-shrink:0" onerror="this.style.display=\'none\'">'
+    ? '<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/'+pitId+'/headshot/67/current" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid var(--bd);background:var(--bg3);flex-shrink:0" onerror="this.style.display=\'none\'">'
     : '';
   const fbHtml = '<div style="'+(pitId?'display:none;':'')+'width:48px;height:48px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">&#9918;</div>';
   return '<div class="pit-card'+(isStrongTarget?' strong-target':isTarget?' target':'')+'">'
