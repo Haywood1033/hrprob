@@ -1,68 +1,82 @@
-// api/history.js — Prisma 5 + PostgreSQL
-
-let prisma;
-function getPrisma() {
-  if (!prisma) {
-    const { PrismaClient } = require('./generated/prisma-client');
-    if (!global._prisma) global._prisma = new PrismaClient();
-    prisma = global._prisma;
-  }
-  return prisma;
-}
+// api/history.js — using @vercel/postgres directly (no Prisma needed)
+const { sql } = require('@vercel/postgres');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  const db = getPrisma();
-
   try {
+    // Ensure table exists
+    await sql`
+      CREATE TABLE IF NOT EXISTS daily_predictions (
+        id           SERIAL PRIMARY KEY,
+        date         VARCHAR(10) UNIQUE NOT NULL,
+        predictions  JSONB,
+        results_added BOOLEAN DEFAULT FALSE,
+        summary      TEXT,
+        saved_at     TIMESTAMP DEFAULT NOW(),
+        fetched_at   TIMESTAMP
+      )
+    `;
+
+    // ── GET ──────────────────────────────────────────────────
     if (req.method === 'GET') {
-      const records = await db.dailyPrediction.findMany({
-        orderBy: { date: 'desc' },
-        take: 30,
-      });
+      const { rows } = await sql`
+        SELECT * FROM daily_predictions ORDER BY date DESC LIMIT 30
+      `;
       return res.status(200).json({
-        records: records.map(r => ({
+        records: rows.map(r => ({
           date:         r.date,
           predictions:  r.predictions,
-          resultsAdded: r.resultsAdded,
+          resultsAdded: r.results_added,
           summary:      r.summary,
-          savedAt:      r.savedAt,
-          fetchedAt:    r.fetchedAt,
+          savedAt:      r.saved_at,
+          fetchedAt:    r.fetched_at,
         })),
-        count: records.length,
+        count: rows.length,
       });
     }
 
+    // ── POST ─────────────────────────────────────────────────
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const { action, date, predictions } = body;
 
+      // SAVE today's predictions
       if (action === 'save') {
         if (!date || !predictions?.length)
           return res.status(400).json({ error: 'Missing date or predictions' });
 
-        const existing = await db.dailyPrediction.findUnique({ where: { date } });
-        if (existing?.resultsAdded)
+        const { rows: existing } = await sql`
+          SELECT results_added FROM daily_predictions WHERE date = ${date}
+        `;
+        if (existing[0]?.results_added)
           return res.status(200).json({ ok: true, date, skipped: true });
 
-        await db.dailyPrediction.upsert({
-          where:  { date },
-          update: { predictions: predictions.map(p => ({ ...p, hit: null })), savedAt: new Date() },
-          create: { date, predictions: predictions.map(p => ({ ...p, hit: null })) },
-        });
+        const preds = JSON.stringify(predictions.map(p => ({ ...p, hit: null })));
+        await sql`
+          INSERT INTO daily_predictions (date, predictions)
+          VALUES (${date}, ${preds}::jsonb)
+          ON CONFLICT (date) DO UPDATE
+          SET predictions = ${preds}::jsonb, saved_at = NOW()
+        `;
+        console.log(`Saved ${predictions.length} predictions for ${date}`);
         return res.status(200).json({ ok: true, date, count: predictions.length });
       }
 
+      // FETCH results for a date
       if (action === 'results') {
         if (!date) return res.status(400).json({ error: 'Missing date' });
 
-        const record = await db.dailyPrediction.findUnique({ where: { date } });
+        const { rows } = await sql`
+          SELECT * FROM daily_predictions WHERE date = ${date}
+        `;
+        const record = rows[0];
         if (!record) return res.status(404).json({ error: 'No predictions for ' + date });
-        if (record.resultsAdded) return res.status(200).json({ ok: true, record, alreadyAdded: true });
+        if (record.results_added) return res.status(200).json({ ok: true, record, alreadyAdded: true });
 
+        // Fetch MLB box scores
         const mlbR = await fetch(
           `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=linescore`,
           { headers: { 'User-Agent': 'Mozilla/5.0' } }
@@ -88,16 +102,23 @@ module.exports = async function handler(req, res) {
           } catch(e) {}
         }));
 
-        const updated = record.predictions.map(p => ({ ...p, hit: hrPlayers.has(p.name) ? 1 : 0 }));
-        const hits = updated.filter(p => p.hit === 1).length;
-        const summary = `${hits}/${updated.length} HR · ${((hits/updated.length)*100).toFixed(1)}% hit rate`;
+        const updated = record.predictions.map(p => ({
+          ...p, hit: hrPlayers.has(p.name) ? 1 : 0
+        }));
+        const hits    = updated.filter(p => p.hit === 1).length;
+        const total   = updated.length;
+        const summary = `${hits}/${total} HR · ${((hits/total)*100).toFixed(1)}% hit rate`;
 
-        await db.dailyPrediction.update({
-          where: { date },
-          data:  { predictions: updated, resultsAdded: true, summary, fetchedAt: new Date() },
-        });
+        await sql`
+          UPDATE daily_predictions
+          SET predictions = ${JSON.stringify(updated)}::jsonb,
+              results_added = TRUE,
+              summary = ${summary},
+              fetched_at = NOW()
+          WHERE date = ${date}
+        `;
 
-        return res.status(200).json({ ok: true, date, summary, hits, total: updated.length });
+        return res.status(200).json({ ok: true, date, summary, hits, total });
       }
 
       return res.status(400).json({ error: 'Unknown action' });
