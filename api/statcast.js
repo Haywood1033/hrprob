@@ -9,7 +9,8 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=3600');
 
   const age = cache.timestamp ? Date.now() - cache.timestamp : Infinity;
-  if (age < CACHE_TTL && cache.data && Object.keys(cache.data.batters||{}).length > 0) {
+  const force = req.query.force === 'true';
+  if (!force && age < CACHE_TTL && cache.data && Object.keys(cache.data.batters||{}).length > 0) {
     return res.status(200).json({ ...cache.data, cached: true });
   }
 
