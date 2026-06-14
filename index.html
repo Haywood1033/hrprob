@@ -4401,15 +4401,15 @@ async function init(){
               // Merge live coords with hardcoded park factor (we don't have live PF)
               VENUE_OVERRIDES[g.homeTeam] = {
                 ...base,
-                name: v.name || base.name || g.homeTeam,
-                city: v.city || base.city || '',
-                lat:  v.lat,
-                lon:  v.lon,
-                roof: v.roof || base.roof || 'open',
-                // Keep hardcoded f (park factor) and elev — not in MLB API
-                f:    base.f    || 1.0,
-                elev: base.elev || 0,
-                orient: base.orient || 180,
+                name:   v.name || base.name || g.homeTeam,
+                city:   v.city || base.city || '',
+                lat:    v.lat,
+                lon:    v.lon,
+                roof:   v.roof || base.roof || 'open',
+                // Use live venue f/elev/orient if available, fall back to hardcoded
+                f:      v.f      || base.f      || 1.0,
+                elev:   v.elev   != null ? v.elev   : (base.elev   || 0),
+                orient: v.orient != null ? v.orient : (base.orient || 180),
               };
             }
           }
