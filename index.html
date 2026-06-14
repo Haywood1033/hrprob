@@ -1428,13 +1428,16 @@ async function saveToHistory() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
-  // Get top 40 unique players
+  // Save all unique players with confirmed lineup spots (or top 150 if no confirmed)
   const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
-  const top40 = [...seen.values()].sort((a,b)=>b.hrp-a.hrp).slice(0,40); // accuracy tracking keeps top 40
-  if (!top40.length) return;
+  const allPlayers = [...seen.values()].sort((a,b)=>b.hrp-a.hrp);
+  // Prefer confirmed lineup players, fall back to top 150
+  const confirmed = allPlayers.filter(r => r.source === 'live');
+  const toSave = (confirmed.length >= 50 ? confirmed : allPlayers).slice(0, 200);
+  if (!toSave.length) return;
 
   try {
     const r = await fetch('/api/history', {
@@ -1443,7 +1446,7 @@ async function saveToHistory() {
       body: JSON.stringify({
         action: 'save',
         date: today,
-        predictions: top40.map(r=>({
+        predictions: toSave.map(r=>({
           name:     r.name,
           team:     r.team,
           hrp:      +r.hrp.toFixed(1),
