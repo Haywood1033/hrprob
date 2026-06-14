@@ -327,6 +327,23 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   .pm-grid{grid-template-columns:1fr}
   #player-modal{padding:10px}
 }
+
+.game-strip{display:flex;gap:8px;overflow-x:auto;padding:0 0 8px 0;margin-bottom:14px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent}
+.game-strip::-webkit-scrollbar{height:4px}
+.game-strip::-webkit-scrollbar-track{background:transparent}
+.game-strip::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
+.gs-card{flex-shrink:0;width:170px;background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.gs-card:hover{border-color:var(--teal)}
+.gs-card.high-scoring{border-color:rgba(245,158,11,.3)}
+.gs-status{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.gs-team{display:flex;justify-content:space-between;align-items:center;padding:2px 0}
+.gs-team-name{font-size:12px;font-weight:600;color:var(--t1)}
+.gs-team-hrp{font-size:10px;font-family:var(--mono);color:var(--teal)}
+.gs-divider{height:1px;background:var(--bd);margin:4px 0}
+.gs-total{display:flex;justify-content:space-between;align-items:center;margin-top:6px}
+.gs-total-runs{font-size:13px;font-weight:700;font-family:var(--mono)}
+.gs-meta{font-size:8px;font-family:var(--mono);color:var(--t3)}
+@media(max-width:600px){.gs-card{width:150px}}
 </style>
 </head>
 <body>
@@ -345,7 +362,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <nav class="tabs">
   <div class="tab active" onclick="setView('today',this)">⚡ Today</div>
   <div class="tab" onclick="setView('players',this)">☰ Players</div>
-  <div class="tab" onclick="setView('games',this)">⬡ Games</div>
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Top Targets</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
@@ -3639,7 +3655,60 @@ function renderToday() {
       +'</div>';
   }).join('')+'</div></div></div>';
 
+
+  // ── GAME STRIP ──────────────────────────────────────────────
+  const stripHTML = '<div class="game-strip">'
+    + games.map(g => {
+      const rp   = calcGameRunProjection(g);
+      const park = getPark(g.home) || {};
+      const wx   = WX[g.home] || {};
+
+      // Top HR threat per side
+      const awayRows2 = players.filter(r => r.gamePk===g.pk && r.team===g.away);
+      const homeRows2 = players.filter(r => r.gamePk===g.pk && r.team===g.home);
+      const topAway = awayRows2.sort((a,b)=>b.hrp-a.hrp)[0];
+      const topHome = homeRows2.sort((a,b)=>b.hrp-a.hrp)[0];
+
+      const tc = rp.total>=9.5?'var(--amber)':rp.total>=8.5?'var(--teal)':'var(--t2)';
+      const isHigh = rp.total >= 9.5;
+
+      // Park + weather icons
+      const orient = park.orient||180;
+      const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+      const windOut = diff<45||diff>315;
+      const icons  = [(park.f||1)>=1.05?'📈':'', park.roof==='dome'?'🏟':'', windOut&&(wx.ws||0)>=8?'💨':''].filter(Boolean).join('');
+
+      const leanBadge = rp.lean
+        ? `<span style="font-size:8px;font-family:var(--mono);color:${rp.lean==='over'?'var(--green)':'var(--red)'}">O/U ${rp.lean==='over'?'▲':'▼'}</span>`
+        : '';
+
+      return `<div class="gs-card${isHigh?' high-scoring':''}" onclick="openGameModal(${g.pk})">
+        <div class="gs-status">${g.time}${icons?' · '+icons:''}</div>
+        <div class="gs-team">
+          <span class="gs-team-name">${g.away}</span>
+          ${topAway?`<span class="gs-team-hrp">${topAway.hrp.toFixed(0)}% ${topAway.name.split(' ').pop()}</span>`:''}
+        </div>
+        <div class="gs-team">
+          <span class="gs-team-name">${g.home}</span>
+          ${topHome?`<span class="gs-team-hrp">${topHome.hrp.toFixed(0)}% ${topHome.name.split(' ').pop()}</span>`:''}
+        </div>
+        <div class="gs-divider"></div>
+        <div class="gs-total">
+          <div>
+            <span class="gs-total-runs" style="color:${tc}">${rp.total}</span>
+            <span class="gs-meta"> proj</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            ${rp.ou?`<span class="gs-meta">O/U ${rp.ou}</span>`:''}
+            ${leanBadge}
+          </div>
+        </div>
+      </div>`;
+    }).join('')
+    + '</div>';
+
   grid.innerHTML = '<div class="today-wrap">'
+    + stripHTML
     + '<div class="today-hero"><div class="today-hero-date">'+dayName+' · '+dateStr+'</div>'
     + '<div class="today-hero-title">'+games.length+'-Game Slate</div>'
     + '<div class="today-hero-sub">'+confirmed+' of '+games.length*2+' lineups confirmed · '+players.length+' batters · '+(statReady?'Statcast live':'Statcast loading…')+'</div></div>'
@@ -4309,7 +4378,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','games','targets','parlay','forecast','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','parlay','forecast','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   renderAll();
 }
