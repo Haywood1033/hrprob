@@ -6,5 +6,5 @@
     "api/splits.js":   { "maxDuration": 90 },
     "api/history.js":  { "maxDuration": 30 }
   },
-  "buildCommand": "npx prisma generate --schema=prisma/schema.prisma"
+  "buildCommand": "npx prisma generate --schema=schema.prisma"
 }
