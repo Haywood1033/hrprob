@@ -3952,7 +3952,7 @@ function renderToday() {
     const homeF5 = calcF5Projection(ap,'away',g,g.home);
     const f5Total = +(awayF5.runsAllowed + homeF5.runsAllowed).toFixed(1);
     const edge = +(awayF5.runsAllowed - homeF5.runsAllowed).toFixed(1);
-    const mlLean = edge > 0.3 ? g.home : edge < -0.3 ? g.away : null;
+    const mlLean = edge > 0.3 ? g.away : edge < -0.3 ? g.home : null; // away scores more when edge>0
     const ou = GAME_ODDS[g.away+'@'+g.home]?.ou;
     const f5Ou = ou ? +(ou * 0.55).toFixed(1) : null;
     const totalLean = f5Ou ? (f5Total > f5Ou + 0.3 ? 'over' : f5Total < f5Ou - 0.3 ? 'under' : null) : null;
@@ -4332,7 +4332,7 @@ function renderF5Section(g) {
 
   // ML lean — who has the better starter head-to-head?
   const awayAdv = awayF5.runsAllowed - homeF5.runsAllowed; // positive = home team scoring more = away pitcher worse
-  const mlLean  = awayAdv > 0.3 ? g.home : awayAdv < -0.3 ? g.away : 'Push';
+  const mlLean  = awayAdv > 0.3 ? g.away : awayAdv < -0.3 ? g.home : 'Push'; // away scores more when awayAdv>0
   const mlEdge  = Math.abs(awayAdv).toFixed(1);
 
   const tcAway = awayF5.runsAllowed>=4?'var(--red)':awayF5.runsAllowed>=3?'var(--amber)':'var(--green)';
