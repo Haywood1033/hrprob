@@ -3917,6 +3917,47 @@ function renderToday() {
       + '</div></div>';
   })() : '';
 
+  // ── F5 LEANS ─────────────────────────────────────────────────
+  const f5Leans = games.map(g => {
+    const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
+    const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
+    const awayF5 = calcF5Projection(hp,'home',g,g.away);
+    const homeF5 = calcF5Projection(ap,'away',g,g.home);
+    const f5Total = +(awayF5.runsAllowed + homeF5.runsAllowed).toFixed(1);
+    const edge = +(awayF5.runsAllowed - homeF5.runsAllowed).toFixed(1);
+    const mlLean = edge > 0.3 ? g.home : edge < -0.3 ? g.away : null;
+    const ou = GAME_ODDS[g.away+'@'+g.home]?.ou;
+    const f5Ou = ou ? +(ou * 0.55).toFixed(1) : null;
+    const totalLean = f5Ou ? (f5Total > f5Ou + 0.3 ? 'over' : f5Total < f5Ou - 0.3 ? 'under' : null) : null;
+    const confidence = Math.abs(edge); // higher = stronger ML lean
+    return { g, ap, hp, awayF5, homeF5, f5Total, edge, mlLean, ou, f5Ou, totalLean, confidence };
+  })
+  .filter(d => d.mlLean || d.totalLean) // only games with a clear lean
+  .sort((a,b) => b.confidence - a.confidence)
+  .slice(0,5);
+
+  const f5HTML = f5Leans.length ? '<div class="today-section" style="margin-bottom:12px">'
+    + '<div class="today-section-hdr"><span>⚡ F5 Leans</span><span style="color:var(--t3);font-size:9px">First 5 innings · ML · RL · Total</span></div>'
+    + '<div class="today-section-body">'
+    + f5Leans.map(({g,ap,hp,awayF5,homeF5,f5Total,edge,mlLean,ou,f5Ou,totalLean})=>{
+        const tcTotal = f5Total>=7?'var(--red)':f5Total>=5.5?'var(--amber)':'var(--green)';
+        const mlColor = 'var(--teal)';
+        const totalColor = totalLean==='over'?'var(--red)':'var(--green)';
+        const rlEdge = Math.abs(edge)>=0.75;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg3);cursor:pointer" onclick="openPitcherModal(\''+hp.name+'\',\''+g.away+'\',\''+g.home+'\',\'away\','+g.pk+')">'
+          + '<div style="flex:1">'
+          + '<div style="font-size:12px;font-weight:600;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
+          + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px">'+hp.name+' vs '+ap.name+'</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:12px;align-items:center;flex-shrink:0">'
+          + (mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">ML'+(rlEdge?' · RL':'')+'</div></div>':'')
+          + (totalLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+totalColor+'">'+(totalLean==='over'?'OVER':'UNDER')+(f5Ou?' '+f5Ou:'')+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">F5 Total</div></div>':'')
+          + '<div style="text-align:right"><div style="font-size:13px;font-weight:700;font-family:var(--mono);color:'+tcTotal+'">'+f5Total+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">proj</div></div>'
+          + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div></div>' : '';
+
   const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
@@ -4003,6 +4044,7 @@ function renderToday() {
     + fringeHTML
     + multiPropHTML
     + topGameHTML
+    + f5HTML
     + envHTML
     + '</div>';
 }
