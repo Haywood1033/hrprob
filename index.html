@@ -1602,10 +1602,9 @@ async function autoFetchResults() {
     });
     const d = await r.json();
     if (d.ok) {
-      // Update local copy
-      const idx = historyRecords.findIndex(r=>r.date===yesterday.date);
-      if (idx>=0) historyRecords[idx] = d.record;
-      console.log('Results fetched:', d.record?.summary);
+      console.log('Results fetched:', d.summary || d.record?.summary);
+      // Reload history to get the updated record with hit values
+      await loadHistory();
       if (curView==='history') renderHistory();
     }
   } catch(e) {
