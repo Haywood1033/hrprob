@@ -4111,6 +4111,7 @@ function renderToday() {
       + '</div>';
   };
 
+  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
   const f1HTML = '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id="pane-f1">'
     + (nrfiGames.length?
         '<div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🔒 NRFI Leans ('+nrfiGames.length+')</div>'
@@ -4126,7 +4127,6 @@ function renderToday() {
     + '</div>';
 
 
-  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
 
   grid.innerHTML = '<div class="today-wrap">'
     + stripHTML
