@@ -1634,8 +1634,8 @@ function computeAccuracy(records, window='all') {
       const tier = tiers[p.tier];
       if (!tier) continue;
       tier.predictions.push(p.hrp);
-      if (p.hit === true)  { tier.hits++;  tier.total++; }
-      if (p.hit === false) { tier.total++; }
+      if (p.hit === true  || p.hit === 1) { tier.hits++;  tier.total++; }
+      if (p.hit === false || p.hit === 0) { tier.total++; }
     }
   }
   return tiers;
@@ -2125,8 +2125,8 @@ function renderHistory() {
   const logDays = [...historyRecords].filter(r=>r.date<today).reverse().slice(0,30);
 
   for (const day of logDays) {
-    const tracked = day.predictions?.filter(p=>p.hit!==null)||[];
-    const hits    = tracked.filter(p=>p.hit).length;
+    const tracked = day.predictions?.filter(p=>p.hit!==null&&p.hit!==undefined)||[];
+    const hits    = tracked.filter(p=>p.hit===1||p.hit===true).length;
     const pending = (day.predictions?.length||0) - tracked.length;
     const hitRate = tracked.length>0 ? (hits/tracked.length*100).toFixed(0)+'%' : '—';
     html += `<div class="hday">
