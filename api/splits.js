@@ -134,51 +134,111 @@ async function getBatterSplits(playerId) {
 }
 
 async function getPitcherSplits(playerId) {
-  // Fetch platoon splits only — sitCodes=1st is unreliable mid-season
-  const r = await fetch(
-    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=vr,vl`,
-    { headers: { 'User-Agent': 'Mozilla/5.0' } }
-  );
-  if (!r.ok) return null;
-  const d = await r.json();
-  const allStats = d.stats || [];
-  let splits = [];
-  for (const statGroup of allStats) {
-    const s = statGroup.splits || [];
-    if (s.length) { splits = s; break; }
+  // Fetch platoon splits + home/away splits + game log (recent outings) in parallel
+  const [platoonRes, homeAwayRes, gameLogRes] = await Promise.allSettled([
+    fetch(
+      `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=vr,vl`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    ),
+    fetch(
+      `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=hm,aw`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    ),
+    fetch(
+      `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=pitching&sportId=1&limit=5`,
+      { headers: { 'User-Agent': 'Mozilla/5.0' } }
+    ),
+  ]);
+
+  const result = { vsLHB: null, vsRHB: null, f1: null, home: null, away: null, recentOutings: [] };
+
+  // ── Platoon splits ──────────────────────────────────────────
+  if (platoonRes.status === 'fulfilled' && platoonRes.value.ok) {
+    const d = await platoonRes.value.json();
+    const allStats = d.stats || [];
+    let splits = [];
+    for (const statGroup of allStats) {
+      const s = statGroup.splits || [];
+      if (s.length) { splits = s; break; }
+    }
+    for (const s of splits) {
+      const code = s.split?.code;
+      const stat = s.stat || {};
+      const ab  = stat.atBats || 0;
+      const bf  = stat.battersFaced || ab;
+      if (bf < 15) continue;
+      const h  = stat.hits || 0, hr = stat.homeRuns || 0;
+      const bb = stat.baseOnBalls || 0, so = stat.strikeOuts || 0;
+      const ip = parseFloat(stat.inningsPitched || '0') || 0;
+      const er = stat.earnedRuns || 0;
+      const era  = ip > 0 ? +(er/ip*9).toFixed(2) : 4.50;
+      const whip = ip > 0 ? +((h+bb)/ip).toFixed(2) : 1.30;
+      const kp9  = ip > 0 ? +(so/ip*9).toFixed(1) : 8.0;
+      const hr9  = ip > 0 ? +(hr/ip*9).toFixed(2) : 1.20;
+      const fip  = ip > 0 ? +((13*hr+3*bb-2*so)/ip+3.10).toFixed(2) : 4.50;
+      const babip = (ab-so-hr) > 0 ? +((h-hr)/(ab-so-hr)).toFixed(3) : 0.300;
+      const entry = { bf, ab, era, fip, whip, kp9, hr9, babip, hr, bb, so };
+      if (code === 'vr') result.vsRHB = entry;
+      if (code === 'vl') result.vsLHB = entry;
+    }
   }
 
-  const result = { vsLHB: null, vsRHB: null, f1: null };
-
-  for (const s of splits) {
-    const code = s.split?.code;
-    const stat = s.stat || {};
-    const ab  = stat.atBats  || 0;
-    const bf  = stat.battersFaced || ab;
-    if (bf < 15) continue;
-
-    const h   = stat.hits        || 0;
-    const hr  = stat.homeRuns    || 0;
-    const bb  = stat.baseOnBalls || 0;
-    const so  = stat.strikeOuts  || 0;
-    const ip  = parseFloat(stat.inningsPitched || '0') || 0;
-    const er  = stat.earnedRuns  || 0;
-
-    const era  = ip > 0 ? +(er / ip * 9).toFixed(2)   : 4.50;
-    const whip = ip > 0 ? +((h + bb) / ip).toFixed(2) : 1.30;
-    const kp9  = ip > 0 ? +(so / ip * 9).toFixed(1)   : 8.0;
-    const hr9  = ip > 0 ? +(hr / ip * 9).toFixed(2)   : 1.20;
-    const fip  = ip > 0 ? +((13*hr + 3*bb - 2*so) / ip + 3.10).toFixed(2) : 4.50;
-    const babip = (ab - so - hr) > 0 ? +((h - hr) / (ab - so - hr)).toFixed(3) : 0.300;
-
-    const entry = { bf, ab, era, fip, whip, kp9, hr9, babip, hr, bb, so };
-    if (code === 'vr') result.vsRHB = entry;
-    if (code === 'vl') result.vsLHB = entry;
+  // ── Home/Away splits ────────────────────────────────────────
+  if (homeAwayRes.status === 'fulfilled' && homeAwayRes.value.ok) {
+    const d = await homeAwayRes.value.json();
+    const allStats = d.stats || [];
+    let splits = [];
+    for (const statGroup of allStats) {
+      const s = statGroup.splits || [];
+      if (s.length) { splits = s; break; }
+    }
+    for (const s of splits) {
+      const code = s.split?.code;
+      const stat = s.stat || {};
+      const ip = parseFloat(stat.inningsPitched || '0') || 0;
+      const er = stat.earnedRuns || 0;
+      const h  = stat.hits || 0, bb = stat.baseOnBalls || 0;
+      const so = stat.strikeOuts || 0, hr = stat.homeRuns || 0;
+      if (ip < 5) continue;
+      const era  = ip > 0 ? +(er/ip*9).toFixed(2) : 4.50;
+      const whip = ip > 0 ? +((h+bb)/ip).toFixed(2) : 1.30;
+      const fip  = ip > 0 ? +((13*hr+3*bb-2*so)/ip+3.10).toFixed(2) : 4.50;
+      const entry = { ip: +ip.toFixed(1), era, whip, fip, so, hr };
+      if (code === 'hm') result.home = entry;
+      if (code === 'aw') result.away = entry;
+    }
   }
 
-  // Derive F1 estimate from platoon stats
-  // Use FIP as primary since ERA can be 0 from small samples
-  // First inning ERA ≈ FIP × 0.90 (pitchers sharper early, FIP more stable)
+  // ── Recent outings (last 5 starts) ─────────────────────────
+  if (gameLogRes.status === 'fulfilled' && gameLogRes.value.ok) {
+    const d = await gameLogRes.value.json();
+    const games = d.stats?.[0]?.splits || [];
+    result.recentOutings = games.slice(0, 5).map(g => {
+      const stat = g.stat || {};
+      const ip = parseFloat(stat.inningsPitched || '0') || 0;
+      const er = stat.earnedRuns || 0;
+      const so = stat.strikeOuts || 0;
+      const h  = stat.hits || 0;
+      const bb = stat.baseOnBalls || 0;
+      return {
+        date:   g.date,
+        ip:     +ip.toFixed(1),
+        er,
+        era:    ip > 0 ? +(er/ip*9).toFixed(2) : null,
+        so,
+        h,
+        bb,
+        whip:   ip > 0 ? +((h+bb)/ip).toFixed(2) : null,
+      };
+    }).filter(g => g.ip > 0);
+    // Avg IP over last 5 starts — key for F5 pitcher stamina
+    if (result.recentOutings.length > 0) {
+      result.avgIP = +(result.recentOutings.reduce((s,g)=>s+g.ip,0)/result.recentOutings.length).toFixed(1);
+      result.recentERA = +(result.recentOutings.filter(g=>g.era!==null).reduce((s,g)=>s+(g.era||0),0)/result.recentOutings.length).toFixed(2);
+    }
+  }
+
+  // Derive F1/F5 estimate from platoon stats
   const combined = result.vsLHB || result.vsRHB;
   if (combined) {
     const baseFip = combined.fip > 0 ? combined.fip : 4.20;
