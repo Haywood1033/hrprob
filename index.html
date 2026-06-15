@@ -868,14 +868,6 @@ function hrProb(b,park,wx,pit,order){
     else if (ss_pct <= 28) p -= (33 - ss_pct) * 0.0008;
   }
 
-  // ── EV50 ─────────────────────────────────────────────────────
-  // Top 50% hardest-hit EV — more stable than mean EV, lg avg ~93mph
-  const ev50_val = b.ev50 || null;
-  if (ev50_val !== null && ev50_val > 0) {
-    if (ev50_val >= 95) p += (ev50_val - 93) * 0.0008;
-    else if (ev50_val <= 90) p -= (93 - ev50_val) * 0.0006;
-  }
-
   // ── BATTING ORDER POSITION ────────────────────────────────────
   const ord = order || 5;
   if (ord >= 3 && ord <= 5) p *= 1.02;
