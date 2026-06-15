@@ -413,6 +413,13 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 #pitcher-modal .pm-box{max-width:900px}
 .pit-modal-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)}
 @media(max-width:600px){.pit-modal-grid{grid-template-columns:1fr}#pitcher-modal{padding:10px}}
+
+.today-pills{display:flex;gap:6px;padding:10px 16px;border-bottom:1px solid var(--bd);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.today-pills::-webkit-scrollbar{display:none}
+.today-pill{font-size:11px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid var(--bd);color:var(--t3);cursor:pointer;white-space:nowrap;transition:all .15s;background:var(--bg2)}
+.today-pill.on{background:var(--teal);color:#000;border-color:var(--teal);font-weight:700}
+.today-pill:hover:not(.on){border-color:var(--teal);color:var(--teal)}
+.today-pane{display:none}.today-pane.on{display:block}
 </style>
 </head>
 <body>
@@ -456,7 +463,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button class="chip" id="wxfilt" onclick="toggleWxFilter(this)" title="Hitter-friendly park + wind blowing out">⚡ Park+Wind Edge</button>
   <button class="chip" id="sigfilt" onclick="toggleSignalFilter(this)" title="Players with 3+ signals firing">🎯 Signal Plays</button>
 </div>
-<div id="vtoday"><div id="today-grid"></div></div>
+<div id="vtoday"><span id="today-pill-active" data-pill="overview" style="display:none"></span><div id="today-grid"></div></div>
 <div id="vplayers"><div class="twrap"><table><thead><tr>
   <th class="rk">#</th><th>Player</th><th>Team</th><th>vs Pitcher</th>
   <th>Park</th><th>Weather</th>
@@ -3226,6 +3233,26 @@ function openPitcherModal(pitName, team, oppTeam, side, gamePk) {
   document.body.style.overflow = 'hidden';
 }
 
+
+let _todayPill = 'overview';
+
+function goToTargets(){setView('targets',document.querySelector('.tab[onclick*=targets]'));}
+function goToSignals(){signalFilt=true;document.getElementById('sigfilt')?.classList.add('on');setView('players',document.querySelector('.tab[onclick*=players]'));}
+
+function setTodayPill(pill, btn) {
+  _todayPill = pill;
+  // Update pill buttons
+  document.querySelectorAll('.today-pill').forEach(b => b.classList.remove('on'));
+  btn?.classList.add('on');
+  // Set active marker
+  const marker = document.getElementById('today-pill-active');
+  if (marker) marker.dataset.pill = pill;
+  // Show correct pane
+  document.querySelectorAll('.today-pane').forEach(p => p.classList.remove('on'));
+  const pane = document.getElementById('pane-'+pill);
+  if (pane) pane.classList.add('on');
+}
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -4026,6 +4053,8 @@ function renderToday() {
     }).join('')
     + '</div>';
 
+  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
+
   grid.innerHTML = '<div class="today-wrap">'
     + stripHTML
     + '<div class="today-hero"><div class="today-hero-date">'+dayName+' · '+dateStr+'</div>'
@@ -4038,15 +4067,47 @@ function renderToday() {
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
     + '</div>'
     + '<div class="today-two-col">'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span onclick="setView(\'targets\',document.querySelector(\'.tab[onclick*=targets]\'))" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span onclick="signalFilt=true;document.getElementById(\'sigfilt\')?.classList.add(\'on\');setView(\'players\',document.querySelector(\'.tab[onclick*=players]\'))" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span onclick="goToTargets()" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span onclick="goToSignals()" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
     + '</div>'
+    // ── PILL NAV ──────────────────────────────────────────────
+    + '<div class="today-pills" id="today-pills">'
+    + ['overview','signals','props','f5','envs'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',envs:'Environments'};
+        return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
+      }).join('')
+    + '</div>'
+
+    // ── OVERVIEW PANE ─────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
     + bestHTML
-    + fringeHTML
-    + multiPropHTML
+    + '<div class="today-two-col">'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
+    + '</div>'
     + topGameHTML
+    + '</div>'
+
+    // ── SIGNALS PANE ──────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
+    + fringeHTML
+    + '</div>'
+
+    // ── PROPS PANE ────────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
+    + multiPropHTML
+    + '</div>'
+
+    // ── F5 PANE ───────────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
     + f5HTML
+    + '</div>'
+
+    // ── ENVIRONMENTS PANE ─────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='envs'?' on':'')+'" id="pane-envs">'
     + envHTML
+    + '</div>'
+
     + '</div>';
 }
 
