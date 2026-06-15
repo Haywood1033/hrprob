@@ -48,14 +48,17 @@ module.exports = async function handler(req, res) {
         if (!date || !predictions?.length)
           return res.status(400).json({ error: 'Missing date or predictions' });
 
-        const { rows: ex } = await query(`SELECT results_added FROM daily_predictions WHERE date=$1`, [date]);
-        if (ex[0]?.results_added) return res.status(200).json({ ok: true, date, skipped: true });
+        const existing = await query(`SELECT results_added, saved_at FROM daily_predictions WHERE date=$1`, [date]);
+        if (existing.rows[0]) {
+          // Already saved today — don't overwrite pre-game probabilities
+          return res.status(200).json({ ok: true, date, skipped: true, reason: 'Already saved for ' + date });
+        }
 
         const preds = JSON.stringify(predictions.map(p => ({ ...p, hit: null })));
         await query(`
           INSERT INTO daily_predictions (date, predictions)
           VALUES ($1, $2::jsonb)
-          ON CONFLICT (date) DO UPDATE SET predictions=$2::jsonb, saved_at=NOW()
+          ON CONFLICT (date) DO NOTHING
         `, [date, preds]);
 
         return res.status(200).json({ ok: true, date, count: predictions.length });
