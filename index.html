@@ -4052,53 +4052,6 @@ function renderToday() {
     }).join('')
     + '</div>';
 
-  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
-
-  grid.innerHTML = '<div class="today-wrap">'
-    + stripHTML
-    + '<div class="today-hero"><div class="today-hero-date">'+dayName+' · '+dateStr+'</div>'
-    + '<div class="today-hero-title">'+games.length+'-Game Slate</div>'
-    + '<div class="today-hero-sub">'+confirmed+' of '+games.length*2+' lineups confirmed · '+players.length+' batters · '+(statReady?'Statcast live':'Statcast loading…')+'</div></div>'
-    + '<div class="today-kpis">'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+confirmed+'</div><div class="today-kpi-lbl">Lineups In</div></div>'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
-    + '</div>'
-    // ── PILL NAV ──────────────────────────────────────────────
-    + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','props','f5','f1','envs'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',envs:'Environments'};
-        return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
-      }).join('')
-    + '</div>'
-
-    // ── OVERVIEW PANE ─────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
-    + bestHTML
-    + '<div class="today-two-col">'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
-    + '</div>'
-    + topGameHTML
-    + '</div>'
-
-    // ── SIGNALS PANE ──────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
-    + fringeHTML
-    + '</div>'
-
-    // ── PROPS PANE ────────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
-    + multiPropHTML
-    + '</div>'
-
-    // ── F5 PANE ───────────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
-    + f5HTML
-    + '</div>'
-    + f1HTML
-
 
   // ── FIRST INNING LEANS ───────────────────────────────────────
   const f1Games = F1_CACHE.map(({g,eitherF1,awayF1,homeF1,park}) => {
@@ -4171,6 +4124,55 @@ function renderToday() {
         + '</div>' : '')
     + (!nrfiGames.length&&!yrfiGames.length?'<div class="empty"><h3>No strong F1 leans today</h3><p style="color:var(--t3)">Model needs pitcher splits to load</p></div>':'')
     + '</div>';
+
+
+  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
+
+  grid.innerHTML = '<div class="today-wrap">'
+    + stripHTML
+    + '<div class="today-hero"><div class="today-hero-date">'+dayName+' · '+dateStr+'</div>'
+    + '<div class="today-hero-title">'+games.length+'-Game Slate</div>'
+    + '<div class="today-hero-sub">'+confirmed+' of '+games.length*2+' lineups confirmed · '+players.length+' batters · '+(statReady?'Statcast live':'Statcast loading…')+'</div></div>'
+    + '<div class="today-kpis">'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+confirmed+'</div><div class="today-kpi-lbl">Lineups In</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
+    + '</div>'
+    // ── PILL NAV ──────────────────────────────────────────────
+    + '<div class="today-pills" id="today-pills">'
+    + ['overview','signals','props','f5','f1','envs'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',envs:'Environments'};
+        return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
+      }).join('')
+    + '</div>'
+
+    // ── OVERVIEW PANE ─────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
+    + bestHTML
+    + '<div class="today-two-col">'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
+    + '</div>'
+    + topGameHTML
+    + '</div>'
+
+    // ── SIGNALS PANE ──────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
+    + fringeHTML
+    + '</div>'
+
+    // ── PROPS PANE ────────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
+    + multiPropHTML
+    + '</div>'
+
+    // ── F5 PANE ───────────────────────────────────────────────
+    + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
+    + f5HTML
+    + '</div>'
+    + f1HTML
+
 
 
     // ── ENVIRONMENTS PANE ─────────────────────────────────────
