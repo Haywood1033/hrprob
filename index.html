@@ -1535,6 +1535,13 @@ async function saveToHistory() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
+  // Don't overwrite if today's predictions already saved — locks pre-game probabilities
+  const alreadySaved = historyRecords.find(r => r.date === today);
+  if (alreadySaved) {
+    console.log('saveToHistory: predictions already locked for', today, '— skipping');
+    return;
+  }
+
   // Save all unique players with confirmed lineup spots (or top 150 if no confirmed)
   const seen = new Map();
   for (const r of allRows) {
