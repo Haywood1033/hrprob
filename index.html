@@ -4066,10 +4066,6 @@ function renderToday() {
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
     + '</div>'
-    + '<div class="today-two-col">'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span onclick="goToTargets()" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span onclick="goToSignals()" style="cursor:pointer;color:var(--teal)">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
-    + '</div>'
     // ── PILL NAV ──────────────────────────────────────────────
     + '<div class="today-pills" id="today-pills">'
     + ['overview','signals','props','f5','envs'].map(p=>{
