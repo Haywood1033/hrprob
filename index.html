@@ -4262,14 +4262,14 @@ function renderF5Section(g) {
     <div class="f5-score">
       <div class="f5-team">
         <div class="f5-team-score" style="color:${tcAway}">${awayF5.runsAllowed}</div>
-        <div class="f5-team-lbl">${g.away} runs allowed${staminaWarning('away',awayF5)}</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">vs ${hp.name}</div>
+        <div class="f5-team-lbl">${hp.name} allows${staminaWarning('away',awayF5)}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">proj runs vs ${g.away}</div>
       </div>
       <div class="f5-vs">—</div>
       <div class="f5-team">
         <div class="f5-team-score" style="color:${tcHome}">${homeF5.runsAllowed}</div>
-        <div class="f5-team-lbl">${g.home} runs allowed${staminaWarning('home',homeF5)}</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">vs ${ap.name}</div>
+        <div class="f5-team-lbl">${ap.name} allows${staminaWarning('home',homeF5)}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">proj runs vs ${g.home}</div>
       </div>
     </div>
 
