@@ -3950,7 +3950,8 @@ function renderToday() {
           + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px">'+hp.name+' vs '+ap.name+'</div>'
           + '</div>'
           + '<div style="display:flex;gap:12px;align-items:center;flex-shrink:0">'
-          + (mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">ML'+(rlEdge?' &amp; RL -0.5':'')+'</div></div>':'')
+          + (mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">ML</div></div>':'')
+          + (rlEdge&&mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+' -0.5</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">RL</div></div>':'')
           + (totalLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+totalColor+'">'+(totalLean==='over'?'OVER':'UNDER')+(f5Ou?' '+f5Ou:'')+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">F5 Total</div></div>':'')
           + '<div style="text-align:right"><div style="font-size:13px;font-weight:700;font-family:var(--mono);color:'+tcTotal+'">'+f5Total+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">proj</div></div>'
           + '</div>'
