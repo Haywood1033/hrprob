@@ -391,6 +391,23 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .pm-prop-card{background:var(--bg3);border-radius:6px;padding:8px;text-align:center}
 .pm-prop-val{font-size:18px;font-weight:700;font-family:var(--mono)}
 .pm-prop-lbl{font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+
+.f5-section{padding:0;border-top:1px solid var(--bd)}
+.f5-header{padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--bd);display:flex;justify-content:space-between;align-items:center}
+.f5-header-title{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em}
+.f5-score{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:center;padding:12px 16px;border-bottom:1px solid var(--bd)}
+.f5-team{text-align:center}
+.f5-team-score{font-size:28px;font-weight:700;font-family:var(--mono);line-height:1}
+.f5-team-lbl{font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+.f5-vs{font-size:11px;font-family:var(--mono);color:var(--t3);text-align:center;padding:0 8px}
+.f5-total{text-align:center;font-size:13px;font-family:var(--mono);font-weight:700}
+.f5-stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)}
+.f5-stat-side{background:var(--bg2);padding:10px 14px}
+.f5-stat-title{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
+.f5-stat-row{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);padding:2px 0}
+.f5-lean{display:flex;justify-content:space-between;align-items:center;padding:10px 14px}
+.f5-recent{padding:10px 14px;border-top:1px solid var(--bd)}
+.f5-outing{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:10px;font-family:var(--mono);color:var(--t3);border-bottom:1px solid rgba(255,255,255,.04)}
 </style>
 </head>
 <body>
@@ -3998,6 +4015,178 @@ async function renderTomorrow() {
 }
 
 
+
+function calcF5Projection(pit, side, g, oppTeam) {
+  // F5 runs ≈ 55% of full game projection (5 innings of 9)
+  // But adjusted for starter quality specifically
+  const ps     = PITCHER_SPLITS[pit.name] || {};
+  const park   = getPark(side==='home' ? g.home : g.away) || {f:1.0};
+  const wx     = WX[g.home] || {};
+
+  // Use xERA as base — more stable than ERA for projection
+  const xera    = pit.xera || pit.era || 4.20;
+  const whiff   = pit.whiff || 22;
+
+  // Stamina: avg IP from recent outings — key for F5
+  // If pitcher typically goes <5 innings, F5 becomes a bullpen prop
+  const avgIP   = ps.avgIP || null;
+  const likelyPitches5 = avgIP === null || avgIP >= 5.0;
+
+  // Opp lineup quality
+  const oppRows = allRows.filter(r=>r.team===oppTeam).sort((a,b)=>a.order-b.order).slice(0,9);
+  const avgXwoba = oppRows.length ? oppRows.reduce((s,r)=>s+(r.xwoba||0.310),0)/oppRows.length : 0.310;
+
+  // Home/away split adjustment
+  const haSplit = side==='home' ? ps.home : ps.away;
+  const haEraAdj = haSplit?.era ? (haSplit.era - xera) * 0.3 : 0; // blend with season
+
+  // Recent form — last 5 starts ERA
+  const recentERA = ps.recentERA || null;
+  const recentAdj = recentERA ? (recentERA - xera) * 0.25 : 0; // 25% weight to recent
+
+  // Base F5 ERA = weighted blend
+  const f5Era = xera + haEraAdj + recentAdj;
+
+  // F5 runs allowed = ERA/9 × 5 innings × park × lineup × weather
+  let runsAllowed = (f5Era / 9) * 5;
+  runsAllowed *= (park.f || 1.0);
+  runsAllowed *= (avgXwoba / 0.310);
+
+  // Wind adjustment
+  const orient = park.orient || 180;
+  const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+  const windOut = diff<45||diff>315;
+  if (park.roof!=='dome' && wx.ws && windOut && wx.ws>=8) runsAllowed += 0.15;
+
+  // Hot batters
+  const hotCount = oppRows.filter(r=>STREAK[r.name]?.flame).length;
+  runsAllowed += hotCount * 0.05;
+
+  return {
+    f5Era:         +f5Era.toFixed(2),
+    runsAllowed:   +Math.max(0.5, Math.min(6.0, runsAllowed)).toFixed(1),
+    avgIP,
+    likelyPitches5,
+    recentERA,
+    haSplit,
+    recentOutings: ps.recentOutings || [],
+    oppXwoba:      +avgXwoba.toFixed(3),
+    hotCount,
+  };
+}
+
+function renderF5Section(g) {
+  const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
+  const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
+
+  const awayF5 = calcF5Projection(hp, 'home', g, g.away); // home pitcher vs away batters
+  const homeF5 = calcF5Projection(ap, 'away', g, g.home); // away pitcher vs home batters
+
+  // F5 total and lean
+  const f5Total = +(awayF5.runsAllowed + homeF5.runsAllowed).toFixed(1);
+  const ou = GAME_ODDS[g.away+'@'+g.home]?.ou;
+  const f5Ou = ou ? +(ou * 0.55).toFixed(1) : null; // F5 O/U ≈ 55% of full game
+
+  // ML lean — who has the better starter head-to-head?
+  const awayAdv = awayF5.runsAllowed - homeF5.runsAllowed; // positive = home team scoring more = away pitcher worse
+  const mlLean  = awayAdv > 0.3 ? g.home : awayAdv < -0.3 ? g.away : 'Push';
+  const mlEdge  = Math.abs(awayAdv).toFixed(1);
+
+  const tcAway = awayF5.runsAllowed>=4?'var(--red)':awayF5.runsAllowed>=3?'var(--amber)':'var(--green)';
+  const tcHome = homeF5.runsAllowed>=4?'var(--red)':homeF5.runsAllowed>=3?'var(--amber)':'var(--green)';
+  const tcTotal = f5Total>=7?'var(--red)':f5Total>=5.5?'var(--amber)':'var(--green)';
+
+  const staminaWarning = (side, f5) => !f5.likelyPitches5
+    ? `<span style="font-size:8px;font-family:var(--mono);color:var(--red);margin-left:4px">⚠ avg ${f5.avgIP}IP</span>` : '';
+
+  const recentHtml = (f5, pitName) => {
+    if (!f5.recentOutings.length) return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">Loading recent outings…</div>';
+    return f5.recentOutings.slice(0,3).map(o => {
+      const eraColor = o.era<=3.00?'var(--green)':o.era>=6.00?'var(--red)':'var(--amber)';
+      return `<div class="f5-outing">
+        <span style="color:var(--t3);width:55px">${o.date?.slice(5)||'—'}</span>
+        <span style="color:var(--t2)">${o.ip}IP</span>
+        <span style="color:${eraColor}">${o.era!=null?o.era.toFixed(2)+' ERA':'—'}</span>
+        <span>${o.so}K</span>
+        <span style="color:var(--t3)">${o.h}H ${o.bb}BB</span>
+      </div>`;
+    }).join('');
+  };
+
+  return `<div class="f5-section">
+    <div class="f5-header">
+      <span class="f5-header-title">F5 Projection</span>
+      <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">First 5 innings model</span>
+    </div>
+
+    <!-- F5 Score -->
+    <div class="f5-score">
+      <div class="f5-team">
+        <div class="f5-team-score" style="color:${tcAway}">${awayF5.runsAllowed}</div>
+        <div class="f5-team-lbl">${g.away} runs allowed${staminaWarning('away',awayF5)}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">vs ${hp.name}</div>
+      </div>
+      <div class="f5-vs">—</div>
+      <div class="f5-team">
+        <div class="f5-team-score" style="color:${tcHome}">${homeF5.runsAllowed}</div>
+        <div class="f5-team-lbl">${g.home} runs allowed${staminaWarning('home',homeF5)}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">vs ${ap.name}</div>
+      </div>
+    </div>
+
+    <!-- Lean + Total -->
+    <div class="f5-lean">
+      <div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">ML Lean</div>
+        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${mlLean==='Push'?'var(--t3)':'var(--teal)'}">${mlLean}${mlLean!=='Push'?' -0.5':''}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${mlEdge} run edge</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">F5 Total</div>
+        <div style="font-size:24px;font-weight:700;font-family:var(--mono);color:${tcTotal}">${f5Total}</div>
+        ${f5Ou?`<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">~O/U ${f5Ou} est</div>`:''}
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">RL Lean</div>
+        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${Math.abs(awayAdv)>=0.75?'var(--teal)':'var(--t3)'}">${Math.abs(awayAdv)>=0.75?(mlLean==='Push'?'—':mlLean+' -0.5'):'Too close'}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${Math.abs(awayAdv)>=0.75?mlEdge+' run edge':'<0.75 runs'}</div>
+      </div>
+    </div>
+
+    <!-- Pitcher Stats -->
+    <div class="f5-stats">
+      <div class="f5-stat-side">
+        <div class="f5-stat-title">${hp.name} (${g.away} host)</div>
+        <div class="f5-stat-row"><span>F5 ERA est.</span><span style="color:${awayF5.f5Era<=3.50?'var(--green)':awayF5.f5Era>=5.00?'var(--red)':'var(--amber)'}">${awayF5.f5Era}</span></div>
+        <div class="f5-stat-row"><span>Avg IP (L5)</span><span style="color:${awayF5.avgIP&&awayF5.avgIP>=6?'var(--green)':awayF5.avgIP&&awayF5.avgIP<5?'var(--red)':'var(--t2)'}">${awayF5.avgIP||'—'}</span></div>
+        <div class="f5-stat-row"><span>Recent ERA (L5)</span><span style="color:${awayF5.recentERA&&awayF5.recentERA<=3.50?'var(--green)':awayF5.recentERA&&awayF5.recentERA>=5?'var(--red)':'var(--t2)'}">${awayF5.recentERA||'—'}</span></div>
+        ${awayF5.haSplit?`<div class="f5-stat-row"><span>Away ERA</span><span style="color:${awayF5.haSplit.era<=3.50?'var(--green)':awayF5.haSplit.era>=5.00?'var(--red)':'var(--t2)'}">${awayF5.haSplit.era}</span></div>`:''}
+        <div class="f5-stat-row"><span>Opp xwOBA</span><span style="color:${awayF5.oppXwoba>=0.340?'var(--red)':awayF5.oppXwoba<=0.290?'var(--green)':'var(--t2)'}">${awayF5.oppXwoba}</span></div>
+      </div>
+      <div class="f5-stat-side">
+        <div class="f5-stat-title">${ap.name} (${g.home} host)</div>
+        <div class="f5-stat-row"><span>F5 ERA est.</span><span style="color:${homeF5.f5Era<=3.50?'var(--green)':homeF5.f5Era>=5.00?'var(--red)':'var(--amber)'}">${homeF5.f5Era}</span></div>
+        <div class="f5-stat-row"><span>Avg IP (L5)</span><span style="color:${homeF5.avgIP&&homeF5.avgIP>=6?'var(--green)':homeF5.avgIP&&homeF5.avgIP<5?'var(--red)':'var(--t2)'}">${homeF5.avgIP||'—'}</span></div>
+        <div class="f5-stat-row"><span>Recent ERA (L5)</span><span style="color:${homeF5.recentERA&&homeF5.recentERA<=3.50?'var(--green)':homeF5.recentERA&&homeF5.recentERA>=5?'var(--red)':'var(--t2)'}">${homeF5.recentERA||'—'}</span></div>
+        ${homeF5.haSplit?`<div class="f5-stat-row"><span>Home ERA</span><span style="color:${homeF5.haSplit.era<=3.50?'var(--green)':homeF5.haSplit.era>=5.00?'var(--red)':'var(--amber)'}">${homeF5.haSplit.era}</span></div>`:''}
+        <div class="f5-stat-row"><span>Opp xwOBA</span><span style="color:${homeF5.oppXwoba>=0.340?'var(--red)':homeF5.oppXwoba<=0.290?'var(--green)':'var(--t2)'}">${homeF5.oppXwoba}</span></div>
+      </div>
+    </div>
+
+    <!-- Recent outings -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)">
+      <div class="f5-recent">
+        <div class="f5-stat-title">${hp.name} Last 3</div>
+        ${recentHtml(awayF5, hp.name)}
+      </div>
+      <div class="f5-recent">
+        <div class="f5-stat-title">${ap.name} Last 3</div>
+        ${recentHtml(homeF5, ap.name)}
+      </div>
+    </div>
+  </div>`;
+}
+
 function buildPitcherCard(pit, team, oppTeam, side, g) {
   const ps      = PITCHER_SPLITS[pit.name] || {};
   const xera    = pit.xera || pit.era || 4.50;
@@ -4067,6 +4256,7 @@ function buildPitcherCard(pit, team, oppTeam, side, g) {
     +'<div class="pit-platoon">'+mkSide('vs LHB',vsLHB,vsRHB)+mkSide('vs RHB',vsRHB,vsLHB)+'</div>'
     +'<div class="pit-row-section"><div><div class="pit-row-label">Opp Lineup · '+oppTeam+'</div>'
     +'<div class="pit-row-sub">avg xwOBA <span style="color:'+oppQualColor+'">'+avgXwoba+'</span> · barrel '+avgBarrel+'% · '+hotCount+' hot 🔥</div></div></div>'
+    + renderF5Section(g)
     +'</div>';
 }
 
