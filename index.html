@@ -1766,6 +1766,8 @@ function renderForecast(silent=false) {
   const avgEither = f1Games.reduce((s,d)=>s+d.eitherF1,0)/f1Games.length;
   const nrfi = f1Games.filter(d=>Math.round(d.eitherF1*100)<=38).sort((a,b)=>a.eitherF1-b.eitherF1);
   const yrfi = f1Games.filter(d=>Math.round(d.eitherF1*100)>=55).sort((a,b)=>b.eitherF1-a.eitherF1);
+  window._nrfiGames = nrfi;
+  window._yrfiGames = yrfi;
   F1_CACHE = f1Games; // share with Today tab
 
   const flagCard = ({g,eitherF1,awayF1,homeF1}) => {
@@ -4049,125 +4051,46 @@ function renderToday() {
     + '</div>';
 
 
-  // ── FIRST INNING LEANS ───────────────────────────────────────
-  const f1Games = F1_CACHE.map(({g,eitherF1,awayF1,homeF1,park}) => {
-    const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
-    const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
-    const wx = WX[g.home]||{};
-    const nrfiPct  = Math.round((1-eitherF1)*100);
-    const yrfiPct  = Math.round(eitherF1*100);
-    const awayPct  = Math.round(awayF1*100);
-    const homePct  = Math.round(homeF1*100);
-    const nrfiLean = yrfiPct <= 38;  // matches Forecast: eitherF1 <= 38%
-    const yrfiLean = yrfiPct >= 55;  // matches Forecast: eitherF1 >= 55%
-    // Top F1 threat — batter most likely to score in 1st
-    const topF1Batter = allRows.filter(r=>r.gamePk===g.pk)
-      .filter(r=>r.order<=3)
-      .sort((a,b)=>b.hrp-a.hrp)[0];
-    return {g,hp,ap,park,wx,nrfiPct,yrfiPct,awayPct,homePct,nrfiLean,yrfiLean,topF1Batter,eitherF1};
-  }).sort((a,b)=>Math.abs(a.nrfiPct-50)-Math.abs(b.nrfiPct-50)); // strongest lean first
+  // ── FIRST INNING LEANS — mirrors Forecast pill exactly ─────────
+  const _nrfi = window._nrfiGames || [];
+  const _yrfi = window._yrfiGames || [];
 
-  const nrfiGames  = f1Games.filter(d=>d.nrfiLean).sort((a,b)=>b.nrfiPct-a.nrfiPct);
-  const yrfiGames  = f1Games.filter(d=>d.yrfiLean).sort((a,b)=>b.yrfiPct-a.yrfiPct);
-
-  const mkF1Card = ({g,hp,ap,park,nrfiPct,yrfiPct,awayPct,homePct,nrfiLean,yrfiLean,topF1Batter}) => {
-    const lean    = nrfiLean ? 'NRFI' : 'YRFI';
-    const leanPct = nrfiLean ? nrfiPct : yrfiPct;
-    const lc      = nrfiLean ? 'var(--green)' : 'var(--red)';
-    const lbg     = nrfiLean ? 'rgba(52,211,153,.08)' : 'rgba(248,113,113,.08)';
-    const lbd     = nrfiLean ? 'rgba(52,211,153,.25)' : 'rgba(248,113,113,.25)';
-    return '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;cursor:pointer" data-pname="'+hp.name+'" data-team="'+g.away+'" data-opp="'+g.home+'" data-side="away" data-pk="'+g.pk+'" onclick="openPitcherModal(this.dataset.pname,this.dataset.team,this.dataset.opp,this.dataset.side,this.dataset.pk)">'
-      // Lean badge + matchup
+  const mkF1PillCard = (d) => {
+    const {g, eitherF1, awayF1, homeF1, park} = d;
+    const hasReal = PITCHER_SPLITS[g.hp?.name]?.f1 || PITCHER_SPLITS[g.ap?.name]?.f1;
+    const pct  = Math.round(eitherF1*100);
+    const aPct = Math.round(awayF1*100);
+    const hPct = Math.round(homeF1*100);
+    const isNrfi = pct <= 38;
+    const lc  = isNrfi ? 'var(--green)' : 'var(--red)';
+    const lbg = isNrfi ? 'rgba(52,211,153,.08)' : 'rgba(248,113,113,.08)';
+    const lbd = isNrfi ? 'rgba(52,211,153,.25)' : 'rgba(248,113,113,.25)';
+    const topBatter = allRows.filter(r=>r.gamePk===g.pk&&r.order<=3).sort((a,b)=>b.hrp-a.hrp)[0];
+    return '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;cursor:pointer"'
+      + ' data-pname="'+g.hp.name+'" data-team="'+g.away+'" data-opp="'+g.home+'" data-side="away" data-pk="'+g.pk+'"'
+      + ' onclick="openPitcherModal(this.dataset.pname,this.dataset.team,this.dataset.opp,this.dataset.side,this.dataset.pk)">'
       + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
-      + '<div>'
-      + '<div style="font-size:13px;font-weight:700;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
-      + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">'+hp.name+' vs '+ap.name+' · '+g.time+'</div>'
+      + '<div><div style="font-size:13px;font-weight:700;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
+      + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">'+g.hp.name+' vs '+g.ap.name+' · '+g.time+'</div></div>'
+      + '<span style="font-size:11px;font-weight:700;font-family:var(--mono);padding:3px 10px;border-radius:4px;background:'+lbg+';color:'+lc+';border:1px solid '+lbd+'">'+(isNrfi?'NRFI':'YRFI')+' '+(isNrfi?(100-pct):pct)+'%</span>'
       + '</div>'
-      + '<span style="font-size:11px;font-weight:700;font-family:var(--mono);padding:3px 10px;border-radius:4px;background:'+lbg+';color:'+lc+';border:1px solid '+lbd+'">'+lean+' '+leanPct+'%</span>'
-      + '</div>'
-      // Run probs
       + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">'
-      + '<div style="text-align:center;background:var(--bg3);border-radius:6px;padding:6px">'
-      + '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--green)">'+(100-yrfiPct)+'%</div>'
-      + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3)">NRFI</div></div>'
-      + '<div style="text-align:center;background:var(--bg3);border-radius:6px;padding:6px">'
-      + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">Scores 1st</div>'
-      + '<div style="font-size:10px;font-family:var(--mono)"><span style="color:var(--t2)">'+g.away+' '+awayPct+'%</span></div>'
-      + '<div style="font-size:10px;font-family:var(--mono)"><span style="color:var(--t2)">'+g.home+' '+homePct+'%</span></div>'
+      + '<div style="text-align:center;background:var(--bg3);border-radius:6px;padding:6px"><div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--green)">'+(100-pct)+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">NRFI</div></div>'
+      + '<div style="text-align:center;background:var(--bg3);border-radius:6px;padding:6px"><div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">Scores 1st</div><div style="font-size:10px;font-family:var(--mono)">'+g.away+' '+aPct+'%</div><div style="font-size:10px;font-family:var(--mono)">'+g.home+' '+hPct+'%</div></div>'
+      + '<div style="text-align:center;background:var(--bg3);border-radius:6px;padding:6px"><div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--red)">'+pct+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">YRFI</div></div>'
       + '</div>'
-      + '<div style="text-align:center;background:var(--bg3);border-radius:6px;padding:6px">'
-      + '<div style="font-size:16px;font-weight:700;font-family:var(--mono);color:var(--red)">'+yrfiPct+'%</div>'
-      + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3)">YRFI</div></div>'
-      + '</div>'
-      // Park + top batter
-      + '<div style="display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);color:var(--t3)">'
-      + '<span>'+park.name+' · PF '+(park.f||1).toFixed(2)+'</span>'
-      + (topF1Batter?'<span style="color:var(--teal)">Top threat: '+topF1Batter.name.split(' ').pop()+' '+topF1Batter.hrp.toFixed(0)+'%</span>':'')
-      + '</div>'
-      + '</div>';
+      + '<div style="display:flex;justify-content:space-between;font-size:9px;font-family:var(--mono);color:var(--t3)">'
+      + '<span>'+(park?.name||g.home)+' · PF '+((park?.f||1).toFixed(2))+'</span>'
+      + (hasReal?'<span style="color:var(--green)">✓ Real splits</span>':'<span>~ Est.</span>')
+      + (topBatter?'<span style="color:var(--teal)">'+topBatter.name.split(' ').pop()+' '+topBatter.hrp.toFixed(0)+'%</span>':'')
+      + '</div></div>';
   };
 
-  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
-  const f1HTML = '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id="pane-f1">'
-    + (nrfiGames.length?
-        '<div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🔒 NRFI Leans ('+nrfiGames.length+')</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px">'
-        + nrfiGames.map(mkF1Card).join('')
-        + '</div>' : '')
-    + (yrfiGames.length?
-        '<div style="font-size:9px;font-family:var(--mono);color:var(--red);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">💥 YRFI Leans ('+yrfiGames.length+')</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'
-        + yrfiGames.map(mkF1Card).join('')
-        + '</div>' : '')
-    + (!nrfiGames.length&&!yrfiGames.length?'<div class="empty"><h3>No strong F1 leans today</h3><p style="color:var(--t3)">Model needs pitcher splits to load</p></div>':'')
-    + '</div>';
-
-
-
-  grid.innerHTML = '<div class="today-wrap">'
-    + stripHTML
-    + '<div class="today-hero"><div class="today-hero-date">'+dayName+' · '+dateStr+'</div>'
-    + '<div class="today-hero-title">'+games.length+'-Game Slate</div>'
-    + '<div class="today-hero-sub">'+confirmed+' of '+games.length*2+' lineups confirmed · '+players.length+' batters · '+(statReady?'Statcast live':'Statcast loading…')+'</div></div>'
-    + '<div class="today-kpis">'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+confirmed+'</div><div class="today-kpi-lbl">Lineups In</div></div>'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
-    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
-    + '</div>'
-    // ── PILL NAV ──────────────────────────────────────────────
-    + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','props','f5','f1','forecast','envs'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',forecast:'Forecast',envs:'Environments'};
-        return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
-      }).join('')
-    + '</div>'
-
-    // ── OVERVIEW PANE ─────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
-    + bestHTML
-    + '<div class="today-two-col">'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
-    + '</div>'
-    + topGameHTML
-    + '</div>'
-
-    // ── SIGNALS PANE ──────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
-    + fringeHTML
-    + '</div>'
-
-    // ── PROPS PANE ────────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
-    + multiPropHTML
-    + '</div>'
-
-    // ── F5 PANE ───────────────────────────────────────────────
-    + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
-    + f5HTML
-    + '</div>'
-    + f1HTML
+  const f1HTML = '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id=\"pane-f1\">'
+    + (_nrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🔒 NRFI Leans ('+_nrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px">'+_nrfi.map(mkF1PillCard).join('')+'</div>' : '')
+    + (_yrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--red);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">💥 YRFI Leans ('+_yrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'+_yrfi.map(mkF1PillCard).join('')+'</div>' : '')
+    + (!_nrfi.length&&!_yrfi.length ? '<div class="empty" style="padding:40px"><h3>Open Forecast pill first</h3><p style="color:var(--t3)">1st inning data loads when Forecast is calculated</p></div>' : '')
+    + '</div>'  + f1HTML
 
 
 
