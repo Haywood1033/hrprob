@@ -442,7 +442,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Top Targets</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
-  <div class="tab" onclick="setView('forecast',this)">🔮 Forecast</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
@@ -1675,9 +1674,9 @@ function toggleFcastHot(header) {
   chevron.textContent = open ? '▼' : '▲';
 }
 
-function renderForecast() {
-  const grid = document.getElementById('fcast-grid');
-  if (!allRows.length) { grid.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
+function renderForecast(silent=false) {
+  const grid = document.getElementById('fcast-grid') || document.getElementById('vforecast');
+  if (!allRows.length) { if (!silent && grid) grid.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
 
   const seen = new Map();
   for (const r of allRows) {
@@ -1793,6 +1792,9 @@ function renderForecast() {
       +games.map(d => flagCard(d)).join('')
       +'</div></div>';
   };
+
+  if (silent) return; // F1_CACHE populated — don't render forecast UI
+  if (!grid) return;
 
   grid.innerHTML = `
   <div class="fcast-grid" style="padding:0">
@@ -2395,27 +2397,9 @@ function rebuild(){
   }
   console.log(`rebuild: ${allRows.length} rows, batters:${Object.keys(BATTER).length}`);
 
-  // Populate F1_CACHE here so it's ready when Today tab renders
-  if (!F1_CACHE.length && games.length) {
-    F1_CACHE = games.map(g => {
-      const park=getPark(g.home)||{f:1.0};const wx=WX[g.home]||{};
-      const awayBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
-      const homeBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
-      const calcF1=(pit,batters)=>{
-        let p=0.26;const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
-        if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
-        else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
-        if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
-        p*=(park.f||1.0);
-        if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
-        return Math.max(0.08,Math.min(0.65,p));
-      };
-      const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
-      const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
-      const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
-      const eitherF1=1-(1-af)*(1-hf);
-      return {g,eitherF1,park,awayF1:af,homeF1:hf};
-    });
+  // Pre-populate F1_CACHE silently so 1st Inning pill works without visiting Forecast
+  if (!F1_CACHE.length && games.length && allRows.length) {
+    renderForecast(true);
   }
 }
 
@@ -3281,6 +3265,8 @@ function setTodayPill(pill, btn) {
   document.querySelectorAll('.today-pane').forEach(p => p.classList.remove('on'));
   const pane = document.getElementById('pane-'+pill);
   if (pane) pane.classList.add('on');
+  if (pill === 'forecast') renderForecast();
+  if (pill === 'f1' && !F1_CACHE.length) renderForecast();
 }
 
 function closePlayerModal() {
@@ -4172,8 +4158,8 @@ function renderToday() {
     + '</div>'
     // ── PILL NAV ──────────────────────────────────────────────
     + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','props','f5','f1','envs'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',envs:'Environments'};
+    + ['overview','signals','props','f5','f1','forecast','envs'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',forecast:'Forecast',envs:'Environments'};
         return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
       }).join('')
     + '</div>'
@@ -4209,6 +4195,9 @@ function renderToday() {
     // ── ENVIRONMENTS PANE ─────────────────────────────────────
     + '<div class="today-pane'+(todayPill==='envs'?' on':'')+'" id="pane-envs">'
     + envHTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='forecast'?' on':'')+'" id="pane-forecast">'
+    + '<div id="fcast-grid" style="padding:0"></div>'
     + '</div>'
 
     + '</div>';
@@ -4985,7 +4974,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','parlay','forecast','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','parlay','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   renderAll();
 }
