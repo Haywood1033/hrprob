@@ -5062,6 +5062,13 @@ async function init(){
   setStatus('loading','Loading…');
   checkSlateDate();
 
+  // Load history early so yesterday's banner is ready
+  loadHistory().then(() => {
+    autoFetchResults();
+    const el = document.getElementById('yesterday-banner');
+    if (el) el.innerHTML = buildYesterdayBanner();
+  });
+
   // ── Try /api/slate first (Vercel) ──────────────────────────
   // This is the fast path — server-side fetches real schedule,
   // confirmed lineups from RotoWire, and weather in one call (~3 sec)
