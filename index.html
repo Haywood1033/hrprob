@@ -267,7 +267,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .today-game-teams{font-size:13px;font-weight:600;color:var(--t1);flex:1}
 .today-game-meta{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
 .today-pill{font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;flex-shrink:0}
-.today-ev-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.today-ev-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .today-ev-card{background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
 .today-ev-card:hover{border-color:var(--teal)}
 @media(max-width:600px){
@@ -2030,7 +2030,7 @@ function renderHistory() {
       + (todayRec ? todayRec.predictions.length+' players tracked · '+todayRec.date : 'Saving today\'s predictions\u2026')
       + '</div></div>'
       + (todayRec ? '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Today\'s Predictions ('+todayRec.date+')</div>'
-        + '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px">'
+        + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">'
         + ['20%+','15-19%','10-14%','5-9%'].map(tier => {
             const ps = todayRec.predictions.filter(p => p.tier === tier);
             if (!ps.length) return '';
@@ -2317,7 +2317,7 @@ function signalPanel(r, compact=false) {
   const badgeHtml = badge
     ? `<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 6px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd};white-space:nowrap;margin-left:4px">${badge.label}</span>`
     : '';
-  return `<div style="display:flex;align-items:center;gap:${gap};flex-wrap:nowrap">${icons}${badgeHtml}</div>`;
+  return `<div style="display:flex;align-items:center;gap:${gap};flex-wrap:wrap">${icons}${badgeHtml}</div>`;
 }
 
 function getBatSide(playerName, lineupBatSide, bsFromStatcast) {
@@ -3883,7 +3883,7 @@ function renderToday() {
     return '<div class="today-section" style="margin-bottom:12px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-color:'+(badge?.bd||'var(--bd)')+'"><div class="today-section-hdr" style="border-bottom-color:'+(badge?.bd||'var(--bd)')+'"><span>\u26A1 Best Play Today</span><span style="color:var(--t3);font-size:9px">Composite signal + probability score</span></div><div class="today-section-body"><div style="display:flex;gap:16px;align-items:flex-start" onclick="goToPlayer(\''+best.name.replace(/'/g,"\\'")+'\')" style="cursor:pointer"><div style="flex:1"><div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:2px">'+best.name+'</div><div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">'+best.team+' vs '+best.pitName+' · '+best.time+'</div><div style="margin-bottom:10px">'+signalPanel(best,false)+'</div><div style="display:flex;flex-direction:column;gap:4px">'+reasons.map(r=>'<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">· '+r+'</div>').join('')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:36px;font-weight:700;font-family:var(--mono);color:'+hc+';line-height:1">'+best.hrp.toFixed(1)+'%</div><div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>'+(badge?'<div style="margin-top:8px"><span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:4px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')+'<div style="margin-top:8px">'+ciBadge(best.hrp,getBatter(best.name)?.pa||0)+'</div></div></div></div></div>';
   })();
 
-  const fringeHTML = fringe.length ? '<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Hidden Edge</span><span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+fringe.map(r=>{
+  const fringeHTML = fringe.length ? '<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Hidden Edge</span><span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;max-width:100%">'+fringe.map(r=>{
     const barrel=getBatter(r.name)?.ba||r.barrel;const streak=STREAK[r.name];const ci=getCI(r.hrp,getBatter(r.name)?.pa||0);
     return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')" onmouseover="this.style.borderColor=\'var(--teal)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">'
       +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><div style="font-size:12px;font-weight:600;color:var(--t1)">'+r.name+'</div><div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--teal)">'+r.hrp.toFixed(1)+'%</div></div>'
@@ -3992,7 +3992,7 @@ function renderToday() {
       }).join('')
     + '</div></div>' : '';
 
-  const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
+  const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
     const wdir=diff<45||diff>315?'\u2191 out':diff>135&&diff<225?'\u2193 in':'\u2192 cross';
