@@ -407,6 +407,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .f5-stat-row{display:flex;justify-content:space-between;font-size:10px;font-family:var(--mono);padding:2px 0}
 .f5-lean{display:flex;justify-content:space-between;align-items:center;padding:10px 14px}
 .f5-recent{padding:10px 14px;border-top:1px solid var(--bd)}
+@media(max-width:500px){.f5-recent+.f5-recent{border-left:none;border-top:1px solid var(--bd)}}
 .f5-outing{display:flex;gap:8px;align-items:center;padding:3px 0;font-size:10px;font-family:var(--mono);color:var(--t3);border-bottom:1px solid rgba(255,255,255,.04)}
 
 #pitcher-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1001;overflow-y:auto;padding:20px}
@@ -4423,21 +4424,16 @@ function renderF5Section(g) {
 
   const recentHtml = (f5, pitName) => {
     if (!f5.recentOutings.length) return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">Loading…</div>';
-    return '<table style="width:100%;border-collapse:collapse;font-size:10px;font-family:var(--mono)">'
-      + '<tr style="color:var(--t3);font-size:8px;text-transform:uppercase;letter-spacing:.06em">'
-      + '<td>Date</td><td>IP</td><td>ERA</td><td>K</td><td>H</td><td>BB</td></tr>'
-      + f5.recentOutings.slice(0,3).map(o => {
-          const eraColor = o.era!=null?(o.era<=3.00?'var(--green)':o.era>=6.00?'var(--red)':'var(--amber)'):'var(--t3)';
-          return `<tr style="border-top:1px solid rgba(255,255,255,.04)">
-            <td style="color:var(--t3);padding:3px 0">${o.date?.slice(5)||'—'}</td>
-            <td style="color:var(--t2)">${o.ip}</td>
-            <td style="color:${eraColor}">${o.era!=null?o.era.toFixed(2):'—'}</td>
-            <td>${o.so}</td>
-            <td style="color:var(--t3)">${o.h}</td>
-            <td style="color:var(--t3)">${o.bb}</td>
-          </tr>`;
-        }).join('')
-      + '</table>';
+    return f5.recentOutings.slice(0,3).map(o => {
+      const eraColor = o.era!=null?(o.era<=3.00?'var(--green)':o.era>=6.00?'var(--red)':'var(--amber)'):'var(--t3)';
+      return `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:10px;font-family:var(--mono)">
+        <span style="color:var(--t3)">${o.date?.slice(5)||'—'}</span>
+        <span style="color:var(--t2)">${o.ip}ip</span>
+        <span style="color:${eraColor};font-weight:700">${o.era!=null?o.era.toFixed(2):' — '}</span>
+        <span style="color:var(--t2)">${o.so}K</span>
+        <span style="color:var(--t3)">${o.h}H/${o.bb}BB</span>
+      </div>`;
+    }).join('');
   };
 
   return `<div class="f5-section">
@@ -4500,15 +4496,17 @@ function renderF5Section(g) {
       </div>
     </div>
 
-    <!-- Recent outings -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)">
-      <div class="f5-recent">
-        <div class="f5-stat-title">${hp.name} Last 3</div>
-        ${recentHtml(awayF5, hp.name)}
-      </div>
-      <div class="f5-recent">
-        <div class="f5-stat-title">${ap.name} Last 3</div>
-        ${recentHtml(homeF5, ap.name)}
+    <!-- Recent outings - stacked vertically for readability -->
+    <div style="border-top:1px solid var(--bd)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)">
+        <div class="f5-recent">
+          <div class="f5-stat-title">${hp.name} Last 3</div>
+          ${recentHtml(awayF5, hp.name)}
+        </div>
+        <div class="f5-recent">
+          <div class="f5-stat-title">${ap.name} Last 3</div>
+          ${recentHtml(homeF5, ap.name)}
+        </div>
       </div>
     </div>
   </div>`;
