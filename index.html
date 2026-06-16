@@ -2398,11 +2398,6 @@ function rebuild(){
     if(tprev)tsel.value=tprev;
   }
   console.log(`rebuild: ${allRows.length} rows, batters:${Object.keys(BATTER).length}`);
-
-  // Pre-populate F1_CACHE silently so 1st Inning pill works without visiting Forecast
-  if (!F1_CACHE.length && games.length && allRows.length) {
-    renderForecast(true);
-  }
 }
 
 // ── RENDER PLAYERS ──
@@ -2796,6 +2791,8 @@ async function loadSplitsData() {
       console.log(`Park splits loaded: ${Object.keys(PARK_SPLITS).length} players`);
     }
     rebuild(); renderAll();
+    // Populate F1_CACHE with real splits — powers 1st Inning pill
+    renderForecast(true);
   } catch(e) {
     console.warn('Splits fetch failed:', e.message);
   }
