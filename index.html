@@ -3872,6 +3872,47 @@ function renderToday() {
       +'</div></div>';
   }).join('') : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
 
+
+  // ── YESTERDAY'S RESULTS BANNER ───────────────────────────────
+  const etStr0 = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const todayET = new Date(etStr0).toLocaleDateString('en-CA');
+  const yesterdayRec = historyRecords.find(r => r.date < todayET && r.resultsAdded);
+  const yesterdayHTML = yesterdayRec ? (()=>{
+    const preds = yesterdayRec.predictions || [];
+    const hits  = preds.filter(p=>p.hit===1||p.hit===true);
+    const total = preds.filter(p=>p.hit===0||p.hit===1||p.hit===true||p.hit===false);
+    const rate  = total.length ? (hits.length/total.length*100).toFixed(0) : '—';
+    const rateColor = hits.length/total.length >= 0.20 ? 'var(--green)' : hits.length/total.length >= 0.12 ? 'var(--teal)' : 'var(--amber)';
+
+    // Top hits — players who homered
+    const topHits = hits.sort((a,b)=>b.hrp-a.hrp).slice(0,5);
+    // Near misses — highest probability that didn't homer
+    const misses  = total.filter(p=>p.hit===0||p.hit===false).sort((a,b)=>b.hrp-a.hrp).slice(0,3);
+
+    return '<div style="background:linear-gradient(135deg,rgba(52,211,153,.06) 0%,rgba(52,211,153,.02) 100%);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:14px 16px;margin-bottom:12px">'
+      // Header row
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      + '<div><div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em">📊 Yesterday · '+yesterdayRec.date+'</div>'
+      + '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:2px">'+hits.length+' HR hit out of '+total.length+' tracked</div></div>'
+      + '<div style="text-align:right">'
+      + '<div style="font-size:28px;font-weight:700;font-family:var(--mono);color:'+rateColor+'">'+rate+'%</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">hit rate</div>'
+      + '</div></div>'
+      // HR hitters
+      + (topHits.length ? '<div style="margin-bottom:8px"><div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">✅ Homered</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px">'
+        + topHits.map(p=>'<span style="font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.2)">'
+          +p.name.split(' ').pop()+' <span style="color:var(--t3)">'+p.hrp+'%</span></span>').join('')
+        + '</div></div>' : '')
+      // Near misses
+      + (misses.length ? '<div><div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">❌ Top misses</div>'
+        + '<div style="display:flex;flex-wrap:wrap;gap:6px">'
+        + misses.map(p=>'<span style="font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--t3);border:1px solid var(--bd)">'
+          +p.name.split(' ').pop()+' <span style="color:var(--t2)">'+p.hrp+'%</span></span>').join('')
+        + '</div></div>' : '')
+      + '</div>';
+  })() : '';
+
   const bestHTML = !best ? '' : (()=>{
     const {signals,badge,ci}=getSignals(best);
     const streak=STREAK[best.name];const ps=PARK_SPLITS[best.name];const pit=best.pit||{};
@@ -4118,6 +4159,7 @@ function renderToday() {
       }).join('')
     + '</div>'
     + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
+    + yesterdayHTML
     + bestHTML
     + '<div class="today-two-col">'
     + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
