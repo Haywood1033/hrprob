@@ -3810,28 +3810,7 @@ function renderToday() {
     return {g,park,wx,windOut,score};
   }).sort((a,b)=>b.score-a.score);
 
-  // Use F1_CACHE for NRFI
-  if (!F1_CACHE.length && games.length) {
-    F1_CACHE = games.map(g => {
-      const park=getPark(g.home)||{f:1.0};const wx=WX[g.home]||{};
-      const awayBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
-      const homeBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
-      const calcF1=(pit,batters)=>{
-        let p=0.26;const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
-        if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
-        else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
-        if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
-        p*=(park.f||1.0);
-        if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
-        return Math.max(0.08,Math.min(0.65,p));
-      };
-      const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
-      const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
-      const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
-      const eitherF1=1-(1-af)*(1-hf);
-      return {g,eitherF1,park,awayF1:af,homeF1:hf};
-    });
-  }
+  // F1_CACHE populated by renderForecast(true) in rebuild()
 
   // Best play composite score
   const scorePlayer = (r) => {
@@ -4613,26 +4592,7 @@ function renderPitchers() {
   }).filter(p => p.pit.name && p.pit.name !== 'TBD');
 
   // Ensure F1_CACHE is populated
-  if (!F1_CACHE.length && games.length) {
-    F1_CACHE = games.map(g => {
-      const park=getPark(g.home)||{f:1.0};const wx=WX[g.home]||{};
-      const awayBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.away).sort((a,b)=>a.order-b.order).slice(0,3);
-      const homeBatters=allRows.filter(r=>r.gamePk===g.pk&&r.team===g.home).sort((a,b)=>a.order-b.order).slice(0,3);
-      const calcF1=(pit,batters)=>{
-        let p=0.26;const ps=PITCHER_SPLITS[pit.name];const f1=ps?.f1;
-        if(f1&&f1.bf>=5){const rr=f1.runRate??0.47;p+=(rr-0.47)*0.55;}
-        else{const xe=pit.xera||pit.era||4.20;p+=(xe-4.50)*0.022;p-=((pit.whiff||23)-22)*0.003;}
-        if(batters.length>0){const ax=batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;p+=(ax-0.310)*0.35;}
-        p*=(park.f||1.0);
-        if(park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws){const o=park.orient||180;const d=((wx.wd-o)%360+360)%360;if(d<45||d>315)p+=wx.ws*0.0006;else if(d>135&&d<225)p-=wx.ws*0.0004;p+=((wx.t||70)-70)*0.0003;}
-        return Math.max(0.08,Math.min(0.65,p));
-      };
-      const hp={...g.hp,...(getPitcher(g.hp.name)||{})};
-      const ap={...g.ap,...(getPitcher(g.ap.name)||{})};
-      const af=calcF1(hp,awayBatters);const hf=calcF1(ap,homeBatters);
-      return {g,eitherF1:1-(1-af)*(1-hf),park,awayF1:af,homeF1:hf};
-    });
-  }
+  // F1_CACHE populated by renderForecast(true) in rebuild()
 
   // Sort by K projection descending
   pitcherCards.sort((a,b) => {
