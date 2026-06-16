@@ -4079,8 +4079,8 @@ function renderToday() {
     const yrfiPct  = Math.round(eitherF1*100);
     const awayPct  = Math.round(awayF1*100);
     const homePct  = Math.round(homeF1*100);
-    const nrfiLean = nrfiPct >= 55;
-    const yrfiLean = yrfiPct >= 55;
+    const nrfiLean = yrfiPct <= 38;  // matches Forecast: eitherF1 <= 38%
+    const yrfiLean = yrfiPct >= 55;  // matches Forecast: eitherF1 >= 55%
     // Top F1 threat — batter most likely to score in 1st
     const topF1Batter = allRows.filter(r=>r.gamePk===g.pk)
       .filter(r=>r.order<=3)
