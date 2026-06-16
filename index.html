@@ -3794,6 +3794,13 @@ function renderToday() {
 
   const top5 = players.slice(0,5);
 
+  const kpiHTML = '<div class="today-kpis">'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+confirmed+'</div><div class="today-kpi-lbl">Lineups In</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
+    + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
+    + '</div>';
+
   // Top signal plays
   const signalPlays = [...players]
     .filter(r => { const {count}=getSignals(r); return count>=3; })
