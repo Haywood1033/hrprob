@@ -2793,6 +2793,9 @@ async function loadSplitsData() {
     rebuild(); renderAll();
     // Populate F1_CACHE with real splits — powers 1st Inning pill
     renderForecast(true);
+    // Re-render Today tab so 1st Inning pill picks up the new data
+    if (curView === 'today') renderToday();
+    else renderToday._stale = true; // flag for next time Today is opened
   } catch(e) {
     console.warn('Splits fetch failed:', e.message);
   }
@@ -3265,7 +3268,10 @@ function setTodayPill(pill, btn) {
   const pane = document.getElementById('pane-'+pill);
   if (pane) pane.classList.add('on');
   if (pill === 'forecast') renderForecast();
-  if (pill === 'f1' && !F1_CACHE.length) renderForecast();
+  if (pill === 'f1') {
+    if (!F1_CACHE.length) renderForecast(true);
+    renderToday(); // always re-render so _nrfi/_yrfi are fresh
+  }
 }
 
 function closePlayerModal() {
@@ -3767,6 +3773,7 @@ function openGameModal(gamePk) {
 
 
 function renderToday() {
+  renderToday._stale = false;
   const grid = document.getElementById('today-grid');
   if (!allRows.length) {
     grid.innerHTML = '<div class="empty" style="padding:60px 20px"><div style="font-size:32px;margin-bottom:12px">⚾</div><h3>Loading today\u2019s slate\u2026</h3></div>';
