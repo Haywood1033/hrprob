@@ -1549,9 +1549,15 @@ async function saveToHistory() {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
   const allPlayers = [...seen.values()].sort((a,b)=>b.hrp-a.hrp);
-  // Prefer confirmed lineup players, fall back to top 150
-  const confirmed = allPlayers.filter(r => r.source === 'live');
-  const toSave = (confirmed.length >= 50 ? confirmed : allPlayers).slice(0, 200);
+  // Top 40 by probability
+  const top40 = allPlayers.slice(0, 40);
+  // Signal plays (3+ signals) not already in top 40
+  const top40Names = new Set(top40.map(r=>r.name));
+  const signalPlays = allPlayers.filter(r => {
+    const {count} = getSignals(r);
+    return count >= 3 && !top40Names.has(r.name);
+  });
+  const toSave = [...top40, ...signalPlays];
   if (!toSave.length) return;
 
   try {
@@ -3780,30 +3786,44 @@ function openGameModal(gamePk) {
 function buildYesterdayBanner() {
   const etStr0 = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const todayET = new Date(etStr0).toLocaleDateString('en-CA');
-  const yesterdayRec = historyRecords.find(r => r.date < todayET && r.resultsAdded);
-  if (!yesterdayRec) return '';
-  const preds = yesterdayRec.predictions || [];
-  const hits  = preds.filter(p=>p.hit===1||p.hit===true);
-  const total = preds.filter(p=>p.hit===0||p.hit===1||p.hit===true||p.hit===false);
-  const rate  = total.length ? (hits.length/total.length*100).toFixed(0) : '—';
-  const rateColor = total.length && hits.length/total.length>=0.20 ? 'var(--green)' : total.length && hits.length/total.length>=0.12 ? 'var(--teal)' : 'var(--amber)';
-  const topHits = hits.sort((a,b)=>b.hrp-a.hrp).slice(0,5);
-  const misses  = total.filter(p=>p.hit===0||p.hit===false).sort((a,b)=>b.hrp-a.hrp).slice(0,3);
-  return '<div style="background:linear-gradient(135deg,rgba(52,211,153,.06) 0%,rgba(52,211,153,.02) 100%);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:14px 16px;margin-top:12px">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-    + '<div><div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em">📊 Yesterday · '+yesterdayRec.date+'</div>'
-    + '<div style="font-size:13px;font-weight:700;color:var(--t1);margin-top:2px">'+hits.length+' HR · '+total.length+' tracked</div></div>'
-    + '<div style="text-align:right"><div style="font-size:28px;font-weight:700;font-family:var(--mono);color:'+rateColor+'">'+rate+'%</div>'
-    + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">hit rate</div></div></div>'
-    + (topHits.length ? '<div style="margin-bottom:8px"><div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">✅ Homered</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px">'
-      + topHits.map(p=>'<span style="font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.2)">'+p.name.split(' ').pop()+' <span style="color:var(--t3)">'+p.hrp+'%</span></span>').join('')
-      + '</div></div>' : '')
-    + (misses.length ? '<div><div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">❌ Top misses</div>'
-      + '<div style="display:flex;flex-wrap:wrap;gap:6px">'
-      + misses.map(p=>'<span style="font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--t3);border:1px solid var(--bd)">'+p.name.split(' ').pop()+' <span style="color:var(--t2)">'+p.hrp+'%</span></span>').join('')
-      + '</div></div>' : '')
+  const rec = historyRecords.find(r => r.date < todayET && r.resultsAdded);
+  if (!rec) return '';
+
+  const preds   = rec.predictions || [];
+  const top40   = preds.slice(0, 40);
+  const signals = preds.slice(40); // signal plays saved after top 40
+
+  const calcGroup = (group) => {
+    const hits  = group.filter(p=>p.hit===1||p.hit===true);
+    const total = group.filter(p=>p.hit===0||p.hit===1||p.hit===true||p.hit===false);
+    const rate  = total.length ? (hits.length/total.length*100).toFixed(0) : '—';
+    const rateN = total.length ? hits.length/total.length : 0;
+    const rateColor = rateN>=0.20?'var(--green)':rateN>=0.12?'var(--teal)':'var(--amber)';
+    const topHits = hits.sort((a,b)=>b.hrp-a.hrp).slice(0,5);
+    const topMisses = total.filter(p=>p.hit===0||p.hit===false).sort((a,b)=>b.hrp-a.hrp).slice(0,3);
+    return {hits, total, rate, rateColor, topHits, topMisses};
+  };
+
+  const g1 = calcGroup(top40);
+  const g2 = calcGroup(signals);
+
+  const mkGroup = (label, g) => g.total.length === 0 ? '' :
+    '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:8px;padding:12px 14px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+    + '<div><div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">'+label+'</div>'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">'+g.hits.length+'/'+g.total.length+'</div></div>'
+    + '<div style="font-size:22px;font-weight:700;font-family:var(--mono);color:'+g.rateColor+'">'+g.rate+'%</div>'
+    + '</div>'
+    + (g.topHits.length?'<div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-bottom:3px">✅ '+g.topHits.map(p=>p.name.split(' ').pop()+' '+p.hrp+'%').join(' · ')+'</div>':'')
+    + (g.topMisses.length?'<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">❌ '+g.topMisses.map(p=>p.name.split(' ').pop()+' '+p.hrp+'%').join(' · ')+'</div>':'')
     + '</div>';
+
+  return '<div style="background:linear-gradient(135deg,rgba(52,211,153,.06) 0%,rgba(52,211,153,.02) 100%);border:1px solid rgba(52,211,153,.2);border-radius:10px;padding:14px 16px;margin-top:12px">'
+    + '<div style="font-size:11px;font-weight:700;color:var(--t1);margin-bottom:10px">📊 Yesterday · '+rec.date+'</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+    + mkGroup('Top 40 Probability', g1)
+    + mkGroup('Signal Plays (3+ signals)', g2)
+    + '</div></div>';
 }
 
 function renderToday() {
