@@ -4052,6 +4052,8 @@ function renderToday() {
 
 
   // ── FIRST INNING LEANS — mirrors Forecast pill exactly ─────────
+  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
+
   const _nrfi = window._nrfiGames || [];
   const _yrfi = window._yrfiGames || [];
 
