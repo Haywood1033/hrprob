@@ -1586,11 +1586,10 @@ async function loadHistory() {
     historyRecords = d.records || [];
     historyLoaded = true;
     console.log('History loaded:', historyRecords.length, 'days');
-    // Update yesterday banner if Today tab is visible
-    if (curView === 'today') {
-      const el = document.getElementById('yesterday-banner');
-      if (el) el.innerHTML = buildYesterdayBanner();
-    }
+    // Update yesterday banner whenever it exists in DOM
+    const bannerEl = document.getElementById('yesterday-banner');
+    if (bannerEl) bannerEl.innerHTML = buildYesterdayBanner();
+    else if (curView === 'today') renderToday(); // re-render if banner not yet in DOM
   } catch(e) {
     console.warn('History load failed:', e.message);
     historyLoaded = true; // mark as attempted
