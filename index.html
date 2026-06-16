@@ -4092,18 +4092,45 @@ function renderToday() {
     + (_nrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🔒 NRFI Leans ('+_nrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px">'+_nrfi.map(mkF1PillCard).join('')+'</div>' : '')
     + (_yrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--red);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">💥 YRFI Leans ('+_yrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'+_yrfi.map(mkF1PillCard).join('')+'</div>' : '')
     + (!_nrfi.length&&!_yrfi.length ? '<div class="empty" style="padding:40px"><h3>Open Forecast pill first</h3><p style="color:var(--t3)">1st inning data loads when Forecast is calculated</p></div>' : '')
-    + '</div>'  + f1HTML
+    + '</div>';
 
-
-
-    // ── ENVIRONMENTS PANE ─────────────────────────────────────
+  grid.innerHTML = '<div class="today-wrap">'
+    + stripHTML
+    + '<div class="today-hero">'
+    + kpiHTML
+    + '</div>'
+    + '<div class="today-pills" id="today-pills">'
+    + ['overview','signals','props','f5','f1','forecast','envs'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',forecast:'Forecast',envs:'Environments'};
+        return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
+      }).join('')
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
+    + bestHTML
+    + '<div class="today-two-col">'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
+    + '</div>'
+    + topGameHTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
+    + fringeHTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
+    + multiPropHTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
+    + f5HTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id="pane-f1">'
+    + f1HTML
+    + '</div>'
     + '<div class="today-pane'+(todayPill==='envs'?' on':'')+'" id="pane-envs">'
     + envHTML
     + '</div>'
     + '<div class="today-pane'+(todayPill==='forecast'?' on':'')+'" id="pane-forecast">'
     + '<div id="fcast-grid" style="padding:0"></div>'
     + '</div>'
-
     + '</div>';
 }
 
