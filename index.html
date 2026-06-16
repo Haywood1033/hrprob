@@ -4422,17 +4422,22 @@ function renderF5Section(g) {
     ? `<span style="font-size:8px;font-family:var(--mono);color:var(--red);margin-left:4px">⚠ avg ${f5.avgIP}IP</span>` : '';
 
   const recentHtml = (f5, pitName) => {
-    if (!f5.recentOutings.length) return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">Loading recent outings…</div>';
-    return f5.recentOutings.slice(0,3).map(o => {
-      const eraColor = o.era<=3.00?'var(--green)':o.era>=6.00?'var(--red)':'var(--amber)';
-      return `<div class="f5-outing">
-        <span style="color:var(--t3);width:55px">${o.date?.slice(5)||'—'}</span>
-        <span style="color:var(--t2)">${o.ip}IP</span>
-        <span style="color:${eraColor}">${o.era!=null?o.era.toFixed(2)+' ERA':'—'}</span>
-        <span>${o.so}K</span>
-        <span style="color:var(--t3)">${o.h}H ${o.bb}BB</span>
-      </div>`;
-    }).join('');
+    if (!f5.recentOutings.length) return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">Loading…</div>';
+    return '<table style="width:100%;border-collapse:collapse;font-size:10px;font-family:var(--mono)">'
+      + '<tr style="color:var(--t3);font-size:8px;text-transform:uppercase;letter-spacing:.06em">'
+      + '<td>Date</td><td>IP</td><td>ERA</td><td>K</td><td>H</td><td>BB</td></tr>'
+      + f5.recentOutings.slice(0,3).map(o => {
+          const eraColor = o.era!=null?(o.era<=3.00?'var(--green)':o.era>=6.00?'var(--red)':'var(--amber)'):'var(--t3)';
+          return `<tr style="border-top:1px solid rgba(255,255,255,.04)">
+            <td style="color:var(--t3);padding:3px 0">${o.date?.slice(5)||'—'}</td>
+            <td style="color:var(--t2)">${o.ip}</td>
+            <td style="color:${eraColor}">${o.era!=null?o.era.toFixed(2):'—'}</td>
+            <td>${o.so}</td>
+            <td style="color:var(--t3)">${o.h}</td>
+            <td style="color:var(--t3)">${o.bb}</td>
+          </tr>`;
+        }).join('')
+      + '</table>';
   };
 
   return `<div class="f5-section">
