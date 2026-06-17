@@ -112,17 +112,22 @@ module.exports = async function handler(req, res) {
     ...teams.map(team => safe(fetchActiveRoster(team), 6000)),
   ]);
 
-  // Step 4: fetch weather using live venue coordinates
+  // Step 4: fetch weather using live venue coordinates and actual game times
   const homeTeams = pitchers.map(g => g.homeTeam).filter(Boolean);
-  // Build venue coord map from live schedule data
   const venueCoords = {};
+  const gameTimes = {};
   for (const g of pitchers) {
     if (g.homeTeam && g.venue?.lat && g.venue?.lon) {
       venueCoords[g.homeTeam] = g.venue;
     }
+    if (g.homeTeam && g.gameTime) {
+      const d = new Date(g.gameTime);
+      const etStr = d.toLocaleString('en-US', {timeZone:'America/New_York', hour:'numeric', minute:'2-digit', hour12:true});
+      gameTimes[g.homeTeam] = etStr;
+    }
   }
   console.log(`Venue coords from MLB API: ${Object.keys(venueCoords).length} teams`);
-  const weather = await safe(fetchAllWeather(targetDate, homeTeams, venueCoords), 9000);
+  const weather = await safe(fetchAllWeather(targetDate, homeTeams, venueCoords, gameTimes), 9000);
 
   // Build rosters map
   const rosters = {};
