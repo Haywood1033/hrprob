@@ -5269,7 +5269,7 @@ async function init(){
   // confirmed lineups from RotoWire, and weather in one call (~3 sec)
   let apiSlateLoaded = false;
   try {
-    const r = await safeFetch('/api/slate', 12000);
+    const r = await safeFetch('/api/slate?t='+Math.floor(Date.now()/300000), 12000); // busts every 5min
     if (r.ok) {
       const slate = await r.json();
       if (slate.pitchers?.length) {
