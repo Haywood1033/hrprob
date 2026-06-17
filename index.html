@@ -5285,7 +5285,8 @@ async function init(){
           pk: g.gamePk,
           time: new Date(g.gameTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})+' ET',
           away: g.awayTeam, home: g.homeTeam,
-          // Merge API ERA with any Statcast we already have loaded
+          awayPitcherHand: g.awayPitcherHand || null,
+          homePitcherHand: g.homePitcherHand || null,
           ap: {name:g.awayPitcher||'TBD', hand:PITCHER_SPLITS[g.awayPitcher]?.pitHand||g.awayPitcherHand||'R',
                era:g.awayPitcherEra||4.50, ...(PITCHER[g.awayPitcher]||{})},
           hp: {name:g.homePitcher||'TBD', hand:PITCHER_SPLITS[g.homePitcher]?.pitHand||g.homePitcherHand||'R',
