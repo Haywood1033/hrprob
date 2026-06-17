@@ -829,7 +829,7 @@ function hrProb(b,park,wx,pit,order){
   // Only boost if batter isn't GB-dominant (Reynolds case: 41% pull, 51% GB = no air edge)
   const pull_pct = b.pull_pct || null;
   if (pull_pct !== null) {
-    const isAirPuller = !b.fb_pct || b.fb_pct >= 30;
+    const isAirPuller = b.fb_pct === null || b.fb_pct === undefined || b.fb_pct >= 30;
     if (pull_pct >= 40 && isAirPuller) p += (pull_pct - 40) * 0.0015;
     else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;
   }
@@ -2265,8 +2265,8 @@ function pullBadge(name, compact=false) {
   // Pull only matters for HRs if the ball gets in the air
   // Davis: 57% pull, 25% FB → pulled grounders, not air
   if (pull < 40) return '';
-  // Require confirmed air contact — if no FB data, don't show badge
-  if (!fb || fb < 30) return ''; // need FB% >= 30% to confirm air contact
+  // Only block if we have FB data confirming low air contact
+  if (fb !== null && fb !== undefined && fb < 30) return '';
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
@@ -2343,8 +2343,8 @@ function getSignals(r) {
   const pitGb  = pit.gb_pct || null;
   const bGb = batter.gb_pct || null;
   const bFb = batter.fb_pct || null;
-  // Pull edge requires air contact — fb% >= 30% to get the ball in the air
-  const pullAirValid = !bFb || bFb >= 30;
+  // Pull edge requires air contact — only block when FB data confirms low air contact
+  const pullAirValid = bFb === null || bFb === undefined || bFb >= 30;
   const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38 && pullAirValid;
 
   const signals = [
