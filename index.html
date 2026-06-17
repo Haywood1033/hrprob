@@ -5427,7 +5427,7 @@ async function init(){
               whiff:  +(s.whiff||22).toFixed(1),
               hr9:    +(s.hr9||1.2).toFixed(2),
               hh:     +(s.hh_pct||s.hh||38).toFixed(1),
-              hand:   PITCHER[name]?.hand || 'R',
+              hand:   PITCHER_SPLITS[name]?.pitHand || PITCHER[name]?.hand || 'R',
               k_pct:  s.k_pct||null,
               gb_pct: s.gb_pct||null,
               fb_pct: s.fb_pct||null,
@@ -5436,8 +5436,16 @@ async function init(){
           console.log('/api/statcast pitchers:', Object.keys(d.pitchers).length);
           // Re-enrich game pitcher objects with real Statcast
           for (const g of games) {
-            if (g.ap?.name && PITCHER[g.ap.name]) Object.assign(g.ap, PITCHER[g.ap.name]);
-            if (g.hp?.name && PITCHER[g.hp.name]) Object.assign(g.hp, PITCHER[g.hp.name]);
+            if (g.ap?.name && PITCHER[g.ap.name]) {
+              const correctHand = PITCHER_SPLITS[g.ap.name]?.pitHand || g.awayPitcherHand || g.ap.hand;
+              Object.assign(g.ap, PITCHER[g.ap.name]);
+              g.ap.hand = correctHand;
+            }
+            if (g.hp?.name && PITCHER[g.hp.name]) {
+              const correctHand = PITCHER_SPLITS[g.hp.name]?.pitHand || g.homePitcherHand || g.hp.hand;
+              Object.assign(g.hp, PITCHER[g.hp.name]);
+              g.hp.hand = correctHand;
+            }
           }
           return true;
         }
