@@ -1064,7 +1064,7 @@ async function loadStatcast(){
   }
 
   setStatus('live',`${games.length} games · Statcast live (${nb} batters)`);
-  _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady();
+  _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
   rebuild(); renderAll();
   // Load hot streak data for top 40 players
   setTimeout(loadStreakData, 1500); // load streaks after rows are built
@@ -3327,11 +3327,15 @@ function updateLoadingStep(step, status) {
 
 function checkAllReady() {
   if (_loadState.slate && _loadState.statcast) {
-    const overlay = document.getElementById('loading-overlay');
-    if (overlay) {
-      overlay.classList.add('hidden');
-      setTimeout(() => overlay.style.display = 'none', 450);
-    }
+    dismissOverlay();
+  }
+}
+
+function dismissOverlay() {
+  const overlay = document.getElementById('loading-overlay');
+  if (overlay && !overlay.classList.contains('hidden')) {
+    overlay.classList.add('hidden');
+    setTimeout(() => overlay.style.display = 'none', 450);
   }
 }
 
@@ -5068,7 +5072,7 @@ async function doRefresh(){
   rebuild();renderAll();
   const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
   setStatus(conf>0?'live':'loading',`${games.length} games · ${conf} lineups · ${statReady?'Statcast live':'Statcast loading'}`);
-  _loadState.slate = true; updateLoadingStep('slate','done'); updateLoadingStep('weather','done'); checkAllReady();
+  _loadState.slate = true; updateLoadingStep('slate','done'); updateLoadingStep('weather','done'); checkAllReady(); dismissOverlay();
 }
 
 // ── INIT ──
@@ -5138,6 +5142,8 @@ async function init(){
   setStatus('loading','Loading…');
   updateLoadingStep('slate','active');
   setLoadingStatus('Connecting to MLB…');
+  // Hard fallback — dismiss overlay after 12s regardless
+  setTimeout(() => dismissOverlay(), 12000);
   checkSlateDate();
 
   // Load history early so yesterday's banner is ready
@@ -5282,6 +5288,7 @@ async function init(){
       statReady=true;
       console.warn('Statcast timed out');
       setStatus('live',`${games.length} games · ${statReady?'Statcast live':'ERA model only'}`);
+      _loadState.statcast = true; dismissOverlay();
       rebuild();renderAll();
     }
   },35000);
