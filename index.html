@@ -829,7 +829,7 @@ function hrProb(b,park,wx,pit,order){
   // Only boost if batter isn't GB-dominant (Reynolds case: 41% pull, 51% GB = no air edge)
   const pull_pct = b.pull_pct || null;
   if (pull_pct !== null) {
-    const isAirPuller = !b.gb_pct || b.gb_pct < 48 || (b.fb_pct && b.fb_pct >= 32);
+    const isAirPuller = !b.fb_pct || b.fb_pct >= 30;
     if (pull_pct >= 40 && isAirPuller) p += (pull_pct - 40) * 0.0015;
     else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;
   }
@@ -2261,10 +2261,11 @@ function pullBadge(name, compact=false) {
   const pull = b.pull_pct;
   const fb   = b.fb_pct;
   const gb   = b.gb_pct;
-  // Require pull% >= 40% AND not GB-dominant (gb < 48% OR fb >= 32%)
-  // Reynolds case: 41% pull but 51% GB = pulled grounders, not air
+  // Require pull% >= 40% AND fly ball rate >= 30%
+  // Pull only matters for HRs if the ball gets in the air
+  // Davis: 57% pull, 25% FB → pulled grounders, not air
   if (pull < 40) return '';
-  if (gb && gb >= 48 && (!fb || fb < 32)) return ''; // GB-dominant puller — no air edge
+  if (fb && fb < 30) return ''; // not enough air contact regardless of pull%
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
@@ -2341,8 +2342,8 @@ function getSignals(r) {
   const pitGb  = pit.gb_pct || null;
   const bGb = batter.gb_pct || null;
   const bFb = batter.fb_pct || null;
-  // Pull edge requires air contact — exclude GB-dominant pullers
-  const pullAirValid = !bGb || bGb < 48 || (bFb && bFb >= 32);
+  // Pull edge requires air contact — fb% >= 30% to get the ball in the air
+  const pullAirValid = !bFb || bFb >= 30;
   const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38 && pullAirValid;
 
   const signals = [
