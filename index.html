@@ -749,6 +749,22 @@ Object.assign(BATTER, BATTER_REAL);
 
 
 let games=SLATE.games.map(g=>({...g,awayLineup:[],homeLineup:[]}));
+
+// Normalize player names — removes accents for consistent matching
+// Jasson Domínguez → Jasson Dominguez, Rodolfo Durán → Rodolfo Duran
+function normName(name) {
+  if (!name) return '';
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+// Normalized name lookup for BATTER, STREAK, SPLITS etc
+function getBatter(name) {
+  return BATTER[name] || BATTER[normName(name)] || null;
+}
+function getStreak(name) {
+  return STREAK[name] || STREAK[normName(name)] || null;
+}
+
 let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, teamFilt='', statReady=false;
 let curView='players';
 
@@ -1116,7 +1132,8 @@ function parseStatcastCSV(csv,type){
   }
 }
 
-function getBatter(name){
+// getBatter defined above with normalization
+function getBatter_old(name){
   if(BATTER[name])return BATTER[name];
   const aliases = {
     'Ronald Acuña':    'Ronald Acuña Jr.',
@@ -2744,7 +2761,7 @@ async function loadStreakData() {
     const d = await r.json();
     if (d.streaks) {
       for (const [name, stats] of Object.entries(d.streaks)) {
-        STREAK[name] = stats;
+        STREAK[normName(name)||name] = stats;
       }
       // Store player IDs for headshots
       if (d.playerIds) {
@@ -2884,7 +2901,7 @@ async function loadSplitsData() {
     const d = await r.json();
     if (d.splits) {
       for (const [name, splits] of Object.entries(d.splits)) {
-        SPLITS[name] = splits;
+        SPLITS[normName(name)||name] = splits;
       }
       const withBoth = Object.values(SPLITS).filter(s=>s.vsRHP&&s.vsLHP).length;
       console.log(`Batter splits loaded: ${Object.keys(SPLITS).length} players, ${withBoth} with both sides`);
@@ -2894,7 +2911,7 @@ async function loadSplitsData() {
     }
     if (d.pitcherSplits) {
       for (const [name, splits] of Object.entries(d.pitcherSplits)) {
-        PITCHER_SPLITS[name] = splits;
+        PITCHER_SPLITS[normName(name)||name] = splits;
       }
       const pitWithBoth = Object.values(PITCHER_SPLITS).filter(s=>s.vsLHB&&s.vsRHB).length;
       console.log(`Pitcher splits loaded: ${Object.keys(PITCHER_SPLITS).length} pitchers, ${pitWithBoth} with both sides`);
@@ -4409,7 +4426,7 @@ async function renderTomorrow() {
   // First merge tomorrow's rosters for teams not in today's slate
   if (td.rosters) {
     for (const [team, players] of Object.entries(td.rosters)) {
-      if (!ROSTERS[team]) ROSTERS[team] = players;
+      if (!ROSTERS[team]) ROSTERS[team] = players.map(p=>({...p, name: normName(p.name)||p.name}));
     }
   }
   // Create empty placeholders for any still-missing teams
@@ -5280,7 +5297,7 @@ async function init(){
         // Merge active rosters (used for projected lineups before batting orders post)
         if (slate.rosters) {
           for (const [team, players] of Object.entries(slate.rosters)) {
-            ROSTERS[team] = players;
+            ROSTERS[team] = players.map(p=>({...p, name: normName(p.name)||p.name}));
           }
           console.log('Active rosters:', Object.keys(slate.rosters).length, 'teams');
         }
@@ -5393,7 +5410,7 @@ async function init(){
         const d = await r.json();
         if (d.batters) {
           for (const [name,s] of Object.entries(d.batters)) {
-            if ((s.ev||0)>0) BATTER[name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
+            if ((s.ev||0)>0) BATTER[normName(name)||name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
