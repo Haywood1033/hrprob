@@ -2323,9 +2323,9 @@ function getSignals(r) {
   const bSplits = SPLITS[r.name];
   const relevantSplit = pitHand === 'R' ? bSplits?.vsRHP : bSplits?.vsLHP;
   // Batter qualifies if: no split data (give benefit of doubt) OR split xwOBA ≥ 0.290
-  const batterVsHand = !relevantSplit || !relevantSplit.xwoba || relevantSplit.xwoba >= 0.290;
+  const batterVsHand = !relevantSplit || !relevantSplit.xwoba || relevantSplit.xwoba >= 0.270;
   // Also check raw xwOBA — weak hitters don't get the signal even vs bad pitchers
-  const batterQuality = (batter.xw || 0.310) >= 0.290;
+  const batterQuality = (batter.xw || 0.310) >= 0.270;
   const pitchActive = pitchWeak && batterVsHand && batterQuality;
 
   // ── SIGNAL 4: Hot streak (🔥 or 🔥🔥) ────────────────────────
@@ -3590,6 +3590,10 @@ function openPlayerModal(name) {
         <div class="pm-cell-val">${windEdge}</div>
         <div class="pm-cell-sub">${w.t?Math.round(w.t)+'°F':'—'} · ${pk.roof==='dome'?'Dome':'Open air'}</div>
       </div>
+      <div class="pm-cell">
+        <div class="pm-cell-title">H2H vs ${r.pitName||'—'} (Career)</div>
+        <div id="pm-h2h-inline" style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:6px">Loading…</div>
+      </div>
     </div>
 
     <!-- HITTING PROPS -->
@@ -3677,7 +3681,19 @@ async function loadH2HForModal(batterName, pitcherName, batterId, pitcherId) {
     const s = hd.stats?.[0]?.splits?.[0]?.stat;
     if (!s || !s.atBats) { el.textContent = 'No career matchup data'; return; }
     const avg = s.atBats>0 ? (s.hits/s.atBats).toFixed(3) : '.000';
-    el.innerHTML = `AVG <strong>.${avg.split('.')[1]}</strong> &nbsp; H ${s.hits||0}/${s.atBats||0} &nbsp; HR <strong>${s.homeRuns||0}</strong> &nbsp; BB ${s.baseOnBalls||0} &nbsp; K ${s.strikeOuts||0} &nbsp; OBP ${s.obp||'.000'} &nbsp; <span style="color:var(--t3)">${s.atBats||0} AB · ${Math.ceil((s.atBats||0)/4)} games est.</span>`;
+    el.innerHTML = `AVG <strong>.${avg.split('.')[1]}</strong> &nbsp; H ${s.hits||0}/${s.atBats||0} &nbsp; HR <strong>${s.homeRuns||0}</strong> &nbsp; BB ${s.baseOnBalls||0} &nbsp; K ${s.strikeOuts||0} &nbsp; OBP ${s.obp||'.000'} &nbsp; <span style="color:var(--t3)">${s.atBats||0} AB · ${Math.ceil((s.atBats||0)/4)} games</span>`;
+    // Also populate inline H2H cell in the grid
+    const inlineEl = document.getElementById('pm-h2h-inline');
+    if (inlineEl) {
+      const hrColor = s.homeRuns>0?'var(--teal)':'var(--t2)';
+      inlineEl.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:2px">
+        <span>AVG <strong style="color:var(--t1)">.${avg.split('.')[1]}</strong></span>
+        <span>H ${s.hits||0}/${s.atBats||0}</span>
+        <span>HR <strong style="color:${hrColor}">${s.homeRuns||0}</strong></span>
+        <span style="color:var(--t3)">BB ${s.baseOnBalls||0} · K ${s.strikeOuts||0}</span>
+        <span style="color:var(--t3)">${s.atBats||0} AB · ${Math.ceil((s.atBats||0)/4)} games</span>
+      </div>`;
+    }
   } catch(e) {
     if (el) el.textContent = 'Career data unavailable';
   }
