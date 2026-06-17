@@ -826,10 +826,12 @@ function hrProb(b,park,wx,pit,order){
 
   // ── BATTED BALL PROFILE ──────────────────────────────────────
   // Pull air% — pulled fly balls have highest HR rate, lg avg ~38%
+  // Only boost if batter isn't GB-dominant (Reynolds case: 41% pull, 51% GB = no air edge)
   const pull_pct = b.pull_pct || null;
   if (pull_pct !== null) {
-    if (pull_pct >= 40) p += (pull_pct - 40) * 0.0015;       // strong pull → HR upside
-    else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;  // oppo field → fewer HR
+    const isAirPuller = !b.gb_pct || b.gb_pct < 48 || (b.fb_pct && b.fb_pct >= 32);
+    if (pull_pct >= 40 && isAirPuller) p += (pull_pct - 40) * 0.0015;
+    else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;
   }
   // Pitcher GB% — heavy GB pitchers suppress HRs, lg avg ~43%
   const pit_gb = pit.gb_pct || null;
@@ -2258,8 +2260,11 @@ function pullBadge(name, compact=false) {
   if (!b?.pull_pct) return '';
   const pull = b.pull_pct;
   const fb   = b.fb_pct;
-  // League avg pull% ~38%, strong pull = 40%+, elite = 44%+
+  const gb   = b.gb_pct;
+  // Require pull% >= 40% AND not GB-dominant (gb < 48% OR fb >= 32%)
+  // Reynolds case: 41% pull but 51% GB = pulled grounders, not air
   if (pull < 40) return '';
+  if (gb && gb >= 48 && (!fb || fb < 32)) return ''; // GB-dominant puller — no air edge
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
@@ -2325,7 +2330,11 @@ function getSignals(r) {
   // ── SIGNAL 6: Pull air% + Pitcher GB% edge ───────────────────
   const bPull  = batter.pull_pct || null;
   const pitGb  = pit.gb_pct || null;
-  const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38;
+  const bGb = batter.gb_pct || null;
+  const bFb = batter.fb_pct || null;
+  // Pull edge requires air contact — exclude GB-dominant pullers
+  const pullAirValid = !bGb || bGb < 48 || (bFb && bFb >= 32);
+  const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38 && pullAirValid;
 
   const signals = [
     { key:'park',    active:parkActive,      icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
