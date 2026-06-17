@@ -4405,8 +4405,8 @@ async function renderTomorrow() {
   const tGames = td.pitchers.map(g => ({
     pk: g.gamePk, time: new Date(g.gameTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})+' ET',
     away: g.awayTeam, home: g.homeTeam,
-    ap: {name:g.awayPitcher||'TBD', hand:PITCHER_SPLITS[g.awayPitcher]?.pitHand||g.awayPitcherHand||'R', era:g.awayPitcherEra||4.50, ...(getPitcher(g.awayPitcher)||{})},
-    hp: {name:g.homePitcher||'TBD', hand:PITCHER_SPLITS[g.homePitcher]?.pitHand||g.homePitcherHand||'R', era:g.homePitcherEra||4.50, ...(getPitcher(g.homePitcher)||{})},
+    ap: {name:g.awayPitcher||'TBD', ...(getPitcher(g.awayPitcher)||{}), hand:PITCHER_SPLITS[g.awayPitcher]?.pitHand||g.awayPitcherHand||'R', era:g.awayPitcherEra||4.50},
+    hp: {name:g.homePitcher||'TBD', ...(getPitcher(g.homePitcher)||{}), hand:PITCHER_SPLITS[g.homePitcher]?.pitHand||g.homePitcherHand||'R', era:g.homePitcherEra||4.50},
     awayLineup:[], homeLineup:[],
   }));
 
@@ -5287,10 +5287,8 @@ async function init(){
           away: g.awayTeam, home: g.homeTeam,
           awayPitcherHand: g.awayPitcherHand || null,
           homePitcherHand: g.homePitcherHand || null,
-          ap: {name:g.awayPitcher||'TBD', hand:PITCHER_SPLITS[g.awayPitcher]?.pitHand||g.awayPitcherHand||'R',
-               era:g.awayPitcherEra||4.50, ...(PITCHER[g.awayPitcher]||{})},
-          hp: {name:g.homePitcher||'TBD', hand:PITCHER_SPLITS[g.homePitcher]?.pitHand||g.homePitcherHand||'R',
-               era:g.homePitcherEra||4.50, ...(PITCHER[g.homePitcher]||{})},
+          ap: {name:g.awayPitcher||'TBD', ...(PITCHER[g.awayPitcher]||{}), hand:PITCHER_SPLITS[g.awayPitcher]?.pitHand||g.awayPitcherHand||'R', era:g.awayPitcherEra||4.50},
+          hp: {name:g.homePitcher||'TBD', ...(PITCHER[g.homePitcher]||{}), hand:PITCHER_SPLITS[g.homePitcher]?.pitHand||g.homePitcherHand||'R', era:g.homePitcherEra||4.50},
           awayLineup: [], homeLineup: [],
         })).filter(g => getPark(g.home)||getPark(g.away));
         console.log('Games built:', games.length, '| Sample GAME_ODDS key:', games[0]?.pk, '| Match:', !!GAME_ODDS[games[0]?.pk]);
