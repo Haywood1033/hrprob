@@ -2265,14 +2265,15 @@ function pullBadge(name, compact=false) {
   // Pull only matters for HRs if the ball gets in the air
   // Davis: 57% pull, 25% FB → pulled grounders, not air
   if (pull < 40) return '';
-  if (fb && fb < 30) return ''; // not enough air contact regardless of pull%
+  // Require confirmed air contact — if no FB data, don't show badge
+  if (!fb || fb < 30) return ''; // need FB% >= 30% to confirm air contact
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
-  const label = pull >= 44 ? `🏏 ${pull.toFixed(0)}% pull` : `🏏 ${pull.toFixed(0)}%`;
+  const label = `🏏 ${pull.toFixed(0)}% pull air`;
   return compact
     ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}" title="Pull air%: ${pull.toFixed(1)}%">${label}</span>`
-    : `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}">${label} pull air</span>`;
+    : `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}">${label}</span>`;
 }
 
 function parkBadge(name, compact=false) {
@@ -3621,10 +3622,7 @@ function openPlayerModal(name) {
     </div>
 
     <!-- H2H -->
-    <div class="pm-h2h">
-      <div class="pm-h2h-title">H2H vs ${r.pitName||'—'} (Career)</div>
-      <div id="pm-h2h-data" style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</div>
-    </div>
+    <!-- H2H shown in grid cell above -->
   `;
 
   document.getElementById('player-modal').style.display = 'block';
@@ -3658,7 +3656,7 @@ function openPlayerModal(name) {
 }
 
 async function loadH2HForModal(batterName, pitcherName, batterId, pitcherId) {
-  const el = document.getElementById('pm-h2h-data');
+  const el = document.getElementById('pm-h2h-data') || document.getElementById('pm-h2h-inline');
   if (!el) return;
   try {
     // Get pitcher ID if not cached
