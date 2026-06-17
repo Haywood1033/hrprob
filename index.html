@@ -757,11 +757,13 @@ function normName(name) {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-// Normalized name lookup for BATTER, STREAK, SPLITS etc
+// Normalized name lookup — tries exact, normalized, and reverse
 function getBatter(name) {
+  if (!name) return null;
   return BATTER[name] || BATTER[normName(name)] || null;
 }
 function getStreak(name) {
+  if (!name) return null;
   return STREAK[name] || STREAK[normName(name)] || null;
 }
 
@@ -1187,7 +1189,7 @@ function generateProjected(team){
       const s = getBatter(p.name) || {};
       return { p, s, score: (s.ba||0)*2.5 + (s.ev||88)*0.18 + (s.xw||0.310)*40 };
     })
-    .filter(({s}) => (s.pa || 0) >= 20) // require real Statcast data — no default-profile players
+    .filter(({s}) => (s.pa || 0) >= 10) // require some Statcast data — 10 PA minimum
     .sort((a, b) => b.score - a.score)
     .slice(0, 9)
     .map(({ p }, i) => ({
@@ -5410,7 +5412,12 @@ async function init(){
         const d = await r.json();
         if (d.batters) {
           for (const [name,s] of Object.entries(d.batters)) {
-            if ((s.ev||0)>0) BATTER[normName(name)||name]={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
+            if ((s.ev||0)>0) {
+              const _bd={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
+              BATTER[name] = _bd;
+              const _nn = normName(name);
+              if (_nn !== name) BATTER[_nn] = _bd; // also store normalized
+            }
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
