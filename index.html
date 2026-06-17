@@ -2388,16 +2388,20 @@ function lockSignals() {
 }
 
 function getSignalsLocked(r) {
-  // Use locked signals if available, fall back to live
+  // Only lock streak signal (index 3) and composite badge
+  // Weather, pitcher matchup, pull edge stay live so lineup/weather changes reflect
   if (SIGNAL_LOCK[r.name]) {
     const locked = SIGNAL_LOCK[r.name];
-    const live = getSignals(r);
-    // Return live signals array but use locked badge/count
+    const live   = getSignals(r);
     return {
-      signals: live.signals.map((s, i) => ({...s, active: locked.signals[i] ?? s.active})),
-      count:   locked.count,
-      badge:   locked.badge,
-      ci:      locked.ci,
+      signals: live.signals.map((s, i) => {
+        // Lock only streak (index 3) — everything else stays live
+        if (i === 3) return {...s, active: locked.signals[3] ?? s.active};
+        return s;
+      }),
+      count:  live.count,   // live count so pitcher changes reflect
+      badge:  locked.badge, // badge locked — prevents mid-game tier jumps
+      ci:     locked.ci,
     };
   }
   return getSignals(r);
