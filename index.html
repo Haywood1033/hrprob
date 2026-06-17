@@ -422,9 +422,31 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .today-pill.on{background:var(--teal);color:#000;border-color:var(--teal);font-weight:700}
 .today-pill:hover:not(.on){border-color:var(--teal);color:var(--teal)}
 .today-pane{display:none}.today-pane.on{display:block}
+
+#loading-overlay{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity .4s}
+#loading-overlay.hidden{opacity:0;pointer-events:none}
+.loading-ball{font-size:48px;animation:spin 1.2s linear infinite}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+.loading-title{font-size:18px;font-weight:700;color:var(--t1);font-family:var(--sans)}
+.loading-status{font-size:11px;font-family:var(--mono);color:var(--t3)}
+.loading-steps{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.loading-step{font-size:10px;font-family:var(--mono);color:var(--t3);display:flex;align-items:center;gap:8px}
+.loading-step.done{color:var(--green)}
+.loading-step.active{color:var(--teal)}
+.loading-step-icon{width:14px;text-align:center}
 </style>
 </head>
 <body>
+<div id="loading-overlay">
+  <div class="loading-ball">⚾</div>
+  <div class="loading-title">HRProb</div>
+  <div class="loading-status" id="loading-status">Connecting to MLB…</div>
+  <div class="loading-steps">
+    <div class="loading-step" id="lstep-slate"><span class="loading-step-icon">⏳</span>Loading schedule &amp; lineups</div>
+    <div class="loading-step" id="lstep-statcast"><span class="loading-step-icon">⏳</span>Loading Statcast data</div>
+    <div class="loading-step" id="lstep-weather"><span class="loading-step-icon">⏳</span>Loading weather &amp; park data</div>
+  </div>
+</div>
 <header class="hdr">
   <div class="logo" onclick="setView('today',document.querySelector('.tab[onclick*=today]'))" style="cursor:pointer">⚾ HRProb</div>
   <div class="hdr-date" id="hdr-date">—</div>
@@ -936,6 +958,8 @@ function safeFetch(url, ms=12000){
 // ── WEATHER ──
 async function loadWeather(){
   setStatus('loading','Loading weather…');
+  updateLoadingStep('statcast','active');
+  setLoadingStatus('Fetching Statcast data…');
   const outdoor=games.map(g=>g.home).filter(t=>{const p=getPark(t);return p&&p.lat&&p.roof!=='dome';});
   await Promise.allSettled(outdoor.map(async t=>{
     const p=getPark(t);
@@ -1040,6 +1064,7 @@ async function loadStatcast(){
   }
 
   setStatus('live',`${games.length} games · Statcast live (${nb} batters)`);
+  _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady();
   rebuild(); renderAll();
   // Load hot streak data for top 40 players
   setTimeout(loadStreakData, 1500); // load streaks after rows are built
@@ -3285,6 +3310,36 @@ function setTodayPill(pill, btn) {
   }
 }
 
+
+const _loadState = { slate: false, statcast: false };
+
+function updateLoadingStep(step, status) {
+  const el = document.getElementById('lstep-' + step);
+  if (!el) return;
+  if (status === 'done') {
+    el.className = 'loading-step done';
+    el.querySelector('.loading-step-icon').textContent = '✓';
+  } else if (status === 'active') {
+    el.className = 'loading-step active';
+    el.querySelector('.loading-step-icon').textContent = '⟳';
+  }
+}
+
+function checkAllReady() {
+  if (_loadState.slate && _loadState.statcast) {
+    const overlay = document.getElementById('loading-overlay');
+    if (overlay) {
+      overlay.classList.add('hidden');
+      setTimeout(() => overlay.style.display = 'none', 450);
+    }
+  }
+}
+
+function setLoadingStatus(msg) {
+  const el = document.getElementById('loading-status');
+  if (el) el.textContent = msg;
+}
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -5013,6 +5068,7 @@ async function doRefresh(){
   rebuild();renderAll();
   const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
   setStatus(conf>0?'live':'loading',`${games.length} games · ${conf} lineups · ${statReady?'Statcast live':'Statcast loading'}`);
+  _loadState.slate = true; updateLoadingStep('slate','done'); updateLoadingStep('weather','done'); checkAllReady();
 }
 
 // ── INIT ──
@@ -5080,6 +5136,8 @@ async function init(){
   document.getElementById('hdr-date').textContent=
     new Date(SLATE.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
   setStatus('loading','Loading…');
+  updateLoadingStep('slate','active');
+  setLoadingStatus('Connecting to MLB…');
   checkSlateDate();
 
   // Load history early so yesterday's banner is ready
