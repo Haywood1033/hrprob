@@ -1065,6 +1065,7 @@ async function loadStatcast(){
 
   setStatus('live',`${games.length} games · Statcast live (${nb} batters)`);
   _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
+  setTimeout(lockSignals, 500); // lock signals after first full render
   rebuild(); renderAll();
   // Load hot streak data for top 40 players
   setTimeout(loadStreakData, 1500); // load streaks after rows are built
@@ -2348,6 +2349,60 @@ function getSignals(r) {
 }
 
 // Render the 5-icon signal panel
+
+// ── SIGNAL LOCK SYSTEM ───────────────────────────────────────
+// Locks signal badges at first page load to prevent mid-game changes
+const SIGNAL_LOCK = {};
+let _signalLockDate = null;
+
+function lockSignals() {
+  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const today = new Date(etStr).toLocaleDateString('en-CA');
+
+  // Load from localStorage if same day
+  try {
+    const stored = localStorage.getItem('signal_lock');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed.date === today && Object.keys(parsed.signals).length > 0) {
+        Object.assign(SIGNAL_LOCK, parsed.signals);
+        _signalLockDate = today;
+        console.log('Signal lock restored:', Object.keys(SIGNAL_LOCK).length, 'players');
+        return;
+      }
+    }
+  } catch(e) {}
+
+  // Build fresh lock from current allRows
+  if (!allRows.length) return;
+  _signalLockDate = today;
+  for (const r of allRows) {
+    const {signals, count, badge, ci} = getSignals(r);
+    SIGNAL_LOCK[r.name] = { signals: signals.map(s=>s.active), count, badge, ci };
+  }
+  // Save to localStorage
+  try {
+    localStorage.setItem('signal_lock', JSON.stringify({ date: today, signals: SIGNAL_LOCK }));
+    console.log('Signal lock saved:', Object.keys(SIGNAL_LOCK).length, 'players');
+  } catch(e) {}
+}
+
+function getSignalsLocked(r) {
+  // Use locked signals if available, fall back to live
+  if (SIGNAL_LOCK[r.name]) {
+    const locked = SIGNAL_LOCK[r.name];
+    const live = getSignals(r);
+    // Return live signals array but use locked badge/count
+    return {
+      signals: live.signals.map((s, i) => ({...s, active: locked.signals[i] ?? s.active})),
+      count:   locked.count,
+      badge:   locked.badge,
+      ci:      locked.ci,
+    };
+  }
+  return getSignals(r);
+}
+
 function signalPanel(r, compact=false) {
   const { signals, badge } = getSignals(r);
   const size = compact ? '14px' : '16px';
