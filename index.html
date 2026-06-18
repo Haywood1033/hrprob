@@ -1161,12 +1161,16 @@ function getBatter_old(name){
   return null;
 }
 function getPitcher(name){
-  if(PITCHER[name])return PITCHER[name];
-  const n=name.toLowerCase().replace(/[^a-z ]/g,'');
-  for(const[k,v]of Object.entries(PITCHER))if(k.toLowerCase().replace(/[^a-z ]/g,'')===n)return v;
-  // Unknown pitcher — return slightly above-average profile
-  // Any MLB starter is better than league average by selection bias
-  // Using conservative estimates rather than defaulting to exactly league avg
+  if (!name) return null;
+  const base = PITCHER[name] || (() => {
+    const n=name.toLowerCase().replace(/[^a-z ]/g,'');
+    for(const[k,v]of Object.entries(PITCHER))if(k.toLowerCase().replace(/[^a-z ]/g,'')===n)return v;
+    return null;
+  })();
+  // Always use PITCHER_SPLITS hand as authoritative source
+  const correctHand = PITCHER_SPLITS[name]?.pitHand || PITCHER_SPLITS[normName(name)]?.pitHand;
+  if (base && correctHand) return {...base, hand: correctHand};
+  if (base) return base;
   return null;
 }
 
@@ -3269,7 +3273,7 @@ function openPitcherModal(pitName, team, oppTeam, side, gamePk) {
   const g = games.find(g => g.pk === +gamePk);
   if (!g) return;
   const pitRaw = side === 'home' ? g.hp : g.ap;
-  const pit    = {...pitRaw, ...(getPitcher(pitRaw.name)||{})};
+  const pit    = {...pitRaw, ...(getPitcher(pitRaw.name)||{}), hand: PITCHER_SPLITS[pitRaw.name]?.pitHand || PITCHER_SPLITS[normName(pitRaw.name)]?.pitHand || pitRaw.hand || 'R'};
   const ps     = PITCHER_SPLITS[pit.name] || {};
   const pitId  = PITCHER_IDS[pit.name];
   const park   = getPark(side==='home' ? g.home : g.away) || {};
