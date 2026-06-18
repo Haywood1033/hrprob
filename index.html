@@ -5476,6 +5476,8 @@ async function init(){
     .then(()=>{ clearTimeout(statTimer); statReady=true; rebuild(); renderAll();
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
+      _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
+      setTimeout(lockSignals, 1500); // lock signals after first full render
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
       Promise.allSettled([
