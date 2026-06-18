@@ -2927,12 +2927,15 @@ async function loadSplitsData() {
     rebuild(); renderAll();
     // Correct pitcher hands in all games now that PITCHER_SPLITS is loaded
     for (const g of games) {
-      if (g.ap?.name && PITCHER_SPLITS[g.ap.name]?.pitHand) g.ap.hand = PITCHER_SPLITS[g.ap.name].pitHand;
-      if (g.hp?.name && PITCHER_SPLITS[g.hp.name]?.pitHand) g.hp.hand = PITCHER_SPLITS[g.hp.name].pitHand;
+      const apSplits = PITCHER_SPLITS[g.ap?.name] || PITCHER_SPLITS[normName(g.ap?.name)];
+      const hpSplits = PITCHER_SPLITS[g.hp?.name] || PITCHER_SPLITS[normName(g.hp?.name)];
+      if (apSplits?.pitHand) g.ap.hand = apSplits.pitHand;
+      if (hpSplits?.pitHand) g.hp.hand = hpSplits.pitHand;
     }
     // Also fix PITCHER cache hands
     for (const [name, ps] of Object.entries(PITCHER_SPLITS)) {
       if (ps.pitHand && PITCHER[name]) PITCHER[name].hand = ps.pitHand;
+      if (ps.pitHand && PITCHER[normName(name)]) PITCHER[normName(name)].hand = ps.pitHand;
     }
     renderForecast(true);
     // Re-render Today tab so 1st Inning pill picks up the new data
