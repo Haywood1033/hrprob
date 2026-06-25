@@ -3582,10 +3582,10 @@ function renderBuilder() {
       }).join('')
     + '</div>'
 
-    // Results section
-    + (hasSelection
-      ? '<div id="builder-results">' + buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay) + '</div>'
-      : '')
+    // Results section — always present, populated when 2+ games selected
+    + '<div id="builder-results">'
+    + (hasSelection ? buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay) : '')
+    + '</div>'
     + '</div>';
 }
 
@@ -3606,17 +3606,14 @@ function toggleBuilderGame(pk, el) {
   }
   // Re-render results
   const results = document.getElementById('builder-results');
-  const genBtn  = document.querySelector('#builder-grid button[onclick="buildParlay()"]');
+  const builderScore = (r) => { const {count,ci}=getSignalsLocked(r); return r.hrp*1.0+count*8+(ci.tier==='high'?5:ci.tier==='mid'?2:0); };
+  const bestPerGame  = (pk) => allRows.filter(r=>r.gamePk===pk).sort((a,b)=>builderScore(b)-builderScore(a)).slice(0,3);
+  const calcParlay   = (picks) => (picks.reduce((acc,p)=>acc*(p.hrp/100),1)*100).toFixed(2);
   if (_builderSelected.size >= 2) {
     const selectedGames = games.filter(g => _builderSelected.has(g.pk));
-    const builderScore = (r) => { const {count,ci}=getSignalsLocked(r); return r.hrp*1.0+count*8+(ci.tier==='high'?5:ci.tier==='mid'?2:0); };
-    const bestPerGame  = (pk) => allRows.filter(r=>r.gamePk===pk).sort((a,b)=>builderScore(b)-builderScore(a)).slice(0,3);
-    const calcParlay   = (picks) => (picks.reduce((acc,p)=>acc*(p.hrp/100),1)*100).toFixed(2);
     if (results) results.innerHTML = buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay);
-    if (genBtn) genBtn.style.display = 'inline-block';
   } else {
     if (results) results.innerHTML = '';
-    if (genBtn) genBtn.style.display = 'none';
   }
 }
 
