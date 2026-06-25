@@ -958,23 +958,24 @@ function hrProb(b,park,wx,pit,order){
     if (h2h && h2h.ab >= 5) {
       const h2hHRRate = h2h.hr / h2h.ab; // career HR rate vs this pitcher
       const lgHRRate  = 0.033;            // MLB avg HR/AB ~3.3%
-      const diff      = h2hHRRate - lgHRRate;
+      const diff      = h2hHRRate - lgHRRate; // e.g. 2HR/6AB = 0.333 - 0.033 = +0.30
       // Weight by sample size
       const weight = h2h.ab >= 30 ? 0.28
                    : h2h.ab >= 15 ? 0.18
                    : h2h.ab >= 10 ? 0.12
                    : 0.08; // 5-9 AB — HR-only signal, small weight
-      // Only apply if meaningful: ≥1 HR in small sample, or strong rate in large sample
       if (h2h.ab < 10 && h2h.hr === 0) {
-        // No HR in tiny sample — ignore, not enough to penalize
+        // No HR in tiny sample — ignore
       } else {
-        p += diff * weight * 100 * 0.8; // scale to probability space
+        // p is in decimal (0.08 = 8%), diff is already decimal
+        // weight * diff gives fraction of adjustment e.g. 0.08 * 0.30 = +0.024 = +2.4pp
+        p += diff * weight;
       }
       if (h2h.ab >= 10) {
-        // At larger samples also factor in overall contact tendency
-        const h2hAvg  = h2h.avg || 0;
-        const lgAvg   = 0.248;
-        p += (h2hAvg - lgAvg) * weight * 15;
+        const h2hAvg = h2h.avg || 0;
+        const lgAvg  = 0.248;
+        // Small contact quality adjustment
+        p += (h2hAvg - lgAvg) * weight * 0.15;
       }
     }
   }
