@@ -3456,6 +3456,7 @@ function setTodayPill(pill, btn) {
 
 
 const _loadState = { slate: false, statcast: false };
+const _dataReady = { streaks: false, splits: false };
 
 function updateLoadingStep(step, status) {
   const el = document.getElementById('lstep-' + step);
@@ -5179,7 +5180,35 @@ function setView(v,el){
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
   ['today','players','targets','parlay','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
+  // Show tab loading spinner if splits/streaks still loading
+  if (!_dataReady.streaks || !_dataReady.splits) {
+    showTabLoading(v);
+  }
   renderAll();
+}
+
+function showTabLoading(v) {
+  const tabsNeedingData = ['players','targets','pitchers','today'];
+  if (!tabsNeedingData.includes(v)) return;
+  const el = document.getElementById('v'+v);
+  if (!el) return;
+  // Show subtle loading bar at top of tab
+  let bar = document.getElementById('tab-loading-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'tab-loading-bar';
+    bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--teal),var(--purple));z-index:9998;animation:tabload 1.5s ease-in-out infinite;';
+    document.head.insertAdjacentHTML('beforeend','<style>@keyframes tabload{0%{opacity:.4;transform:scaleX(.3) translateX(-100%)}50%{opacity:1;transform:scaleX(.7) translateX(20%)}100%{opacity:.4;transform:scaleX(.3) translateX(200%)}}</style>');
+    document.body.appendChild(bar);
+  }
+  bar.style.display = 'block';
+  // Hide bar when data is ready
+  const check = setInterval(() => {
+    if (_dataReady.streaks && _dataReady.splits) {
+      bar.style.display = 'none';
+      clearInterval(check);
+    }
+  }, 300);
 }
 function hand(h,el){handFilt=h;document.querySelectorAll('.chip').forEach(c=>c.classList.remove('on'));el?.classList.add('on');wxFilt=false;signalFilt=false;document.getElementById('wxfilt')?.classList.remove('on');document.getElementById('sigfilt')?.classList.remove('on');renderPlayers();}
 
