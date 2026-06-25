@@ -21,18 +21,22 @@ module.exports = async function handler(req, res) {
         id            SERIAL PRIMARY KEY,
         date          VARCHAR(10) UNIQUE NOT NULL,
         predictions   JSONB,
+        signal_lock   JSONB,
         results_added BOOLEAN DEFAULT FALSE,
         summary       TEXT,
         saved_at      TIMESTAMP DEFAULT NOW(),
         fetched_at    TIMESTAMP
       )
     `);
+    // Add signal_lock column if it doesn't exist (migration)
+    await query(`ALTER TABLE daily_predictions ADD COLUMN IF NOT EXISTS signal_lock JSONB`);
 
     if (req.method === 'GET') {
       const { rows } = await query(`SELECT * FROM daily_predictions ORDER BY date DESC LIMIT 30`);
       return res.status(200).json({
         records: rows.map(r => ({
           date: r.date, predictions: r.predictions,
+          signalLock: r.signal_lock,
           resultsAdded: r.results_added, summary: r.summary,
           savedAt: r.saved_at, fetchedAt: r.fetched_at,
         })),
@@ -42,7 +46,7 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const { action, date, predictions } = body;
+      const { action, date, predictions, signalLock } = body;
 
       if (action === 'save') {
         if (!date || !predictions?.length)
@@ -50,16 +54,16 @@ module.exports = async function handler(req, res) {
 
         const existing = await query(`SELECT results_added, saved_at FROM daily_predictions WHERE date=$1`, [date]);
         if (existing.rows[0]) {
-          // Already saved today — don't overwrite pre-game probabilities
           return res.status(200).json({ ok: true, date, skipped: true, reason: 'Already saved for ' + date });
         }
 
         const preds = JSON.stringify(predictions.map(p => ({ ...p, hit: null })));
+        const lockData = signalLock ? JSON.stringify(signalLock) : null;
         await query(`
-          INSERT INTO daily_predictions (date, predictions)
-          VALUES ($1, $2::jsonb)
+          INSERT INTO daily_predictions (date, predictions, signal_lock)
+          VALUES ($1, $2::jsonb, $3::jsonb)
           ON CONFLICT (date) DO NOTHING
-        `, [date, preds]);
+        `, [date, preds, lockData]);
 
         return res.status(200).json({ ok: true, date, count: predictions.length });
       }
