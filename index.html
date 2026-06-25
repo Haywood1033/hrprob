@@ -434,6 +434,16 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .loading-step.done{color:var(--green)}
 .loading-step.active{color:var(--teal)}
 .loading-step-icon{width:14px;text-align:center}
+
+.builder-game{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;cursor:pointer;transition:all .15s;user-select:none}
+.builder-game:hover{border-color:var(--teal)}
+.builder-game.selected{border-color:var(--teal);background:rgba(56,189,248,.06);box-shadow:0 0 0 1px var(--teal)}
+.builder-game.selected .bg-check{display:flex!important}
+.bg-check{display:none!important;width:20px;height:20px;border-radius:50%;background:var(--teal);color:#000;font-size:11px;font-weight:700;align-items:center;justify-content:center;flex-shrink:0}
+.builder-result{background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:14px 16px;position:relative}
+.builder-result.top{border-color:var(--teal)}
+.builder-alt{font-size:10px;font-family:var(--mono);color:var(--t3);padding:4px 0;border-top:1px solid var(--bg3)}
+@keyframes tabload{0%{opacity:.4;transform:scaleX(.3) translateX(-100%)}50%{opacity:1;transform:scaleX(.7) translateX(20%)}100%{opacity:.4;transform:scaleX(.3) translateX(200%)}}
 </style>
 </head>
 <body>
@@ -3452,6 +3462,7 @@ function setTodayPill(pill, btn) {
   const pane = document.getElementById('pane-'+pill);
   if (pane) pane.classList.add('on');
   if (pill === 'forecast') renderForecast();
+  if (pill === 'builder') renderBuilder();
   if (pill === 'f1') {
     if (!F1_CACHE.length) renderForecast(true);
     renderToday(); // always re-render so _nrfi/_yrfi are fresh
@@ -3491,6 +3502,175 @@ function dismissOverlay() {
 function setLoadingStatus(msg) {
   const el = document.getElementById('loading-status');
   if (el) el.textContent = msg;
+}
+
+
+// ── ENVIRONMENT PARLAY BUILDER ────────────────────────────────
+let _builderSelected = new Set(); // selected gamePks
+
+function renderBuilder() {
+  const grid = document.getElementById('builder-grid');
+  if (!grid) return;
+  if (!games.length) {
+    grid.innerHTML = '<div class="empty"><h3>Loading games…</h3></div>';
+    return;
+  }
+
+  // Score each player for builder (prob + signal edge)
+  const builderScore = (r) => {
+    const {count, ci} = getSignalsLocked(r);
+    return r.hrp * 1.0 + count * 8 + (ci.tier==='high'?5:ci.tier==='mid'?2:0);
+  };
+
+  // Best player per game
+  const bestPerGame = (pk) => {
+    const rows = allRows.filter(r => r.gamePk === pk).sort((a,b) => builderScore(b)-builderScore(a));
+    return rows.slice(0, 3); // top 3 options per game
+  };
+
+  const selectedGames = games.filter(g => _builderSelected.has(g.pk));
+  const hasSelection = selectedGames.length >= 2;
+
+  // Parlay odds calculation
+  const calcParlay = (picks) => {
+    const combined = picks.reduce((acc, p) => acc * (p.hrp/100), 1);
+    return (combined * 100).toFixed(2);
+  };
+
+  grid.innerHTML = '<div style="padding:14px 0">'
+
+    // Header
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+    + '<div>'
+    + '<div style="font-size:13px;font-weight:700;color:var(--t1)">Environment Parlay Builder</div>'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">Select 2–5 games · Model finds best HR target per game</div>'
+    + '</div>'
+    + (_builderSelected.size >= 2
+      ? '<button onclick="buildParlay()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 16px;border-radius:6px;background:var(--teal);color:#000;border:none;cursor:pointer">Generate Parlay →</button>'
+      : '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">Select at least 2 games</span>')
+    + '</div>'
+
+    // Game grid — select by pitcher/park/environment
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:20px">'
+    + games.map(g => {
+        const park = getPark(g.home) || {};
+        const wx   = WX[g.home] || {};
+        const sel  = _builderSelected.has(g.pk);
+        const pf   = park.f || 1.0;
+        const pfLabel = pf >= 1.10 ? `🏟 +${Math.round((pf-1)*100)}% hitter` : pf <= 0.95 ? `🏟 ${Math.round((pf-1)*100)}% pitcher` : '🏟 Neutral';
+        const pfColor = pf >= 1.10 ? 'var(--green)' : pf <= 0.95 ? 'var(--red)' : 'var(--t3)';
+        const windOut = wx.wd !== undefined && park.orient !== undefined
+          ? (() => { const d=((wx.wd-park.orient)%360+360)%360; return d<45||d>315; })() : false;
+        const wxBadge = park.roof==='dome' ? '🏠 Dome' : windOut && (wx.ws||0)>=10 ? `💨 ${wx.ws}mph out` : wx.ws ? `${wx.ws}mph wind` : '';
+        const rows = allRows.filter(r=>r.gamePk===g.pk);
+        const avgXwoba = rows.length ? (rows.reduce((s,r)=>s+(r.xwoba||0.310),0)/rows.length).toFixed(3) : '—';
+        return '<div class="builder-game'+(sel?' selected':'')+'" onclick="toggleBuilderGame('+g.pk+',this)">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+          + '<div>'
+          + '<div style="font-size:12px;font-weight:700;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">'+g.hp.name+' vs '+g.ap.name+' · '+g.time+'</div>'
+          + '</div>'
+          + '<div class="bg-check">✓</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+          + '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:'+pfColor+'">'+pfLabel+'</span>'
+          + (wxBadge ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--teal)">'+wxBadge+'</span>' : '')
+          + (park.elev > 2000 ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--amber)">⛰ '+park.elev.toLocaleString()+'ft</span>' : '')
+          + '</div>'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:6px">Opp avg xwOBA '+avgXwoba+' · '+rows.length+' batters</div>'
+          + '</div>';
+      }).join('')
+    + '</div>'
+
+    // Results section
+    + (hasSelection
+      ? '<div id="builder-results">' + buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay) + '</div>'
+      : '')
+    + '</div>';
+}
+
+function toggleBuilderGame(pk, el) {
+  if (_builderSelected.has(pk)) {
+    _builderSelected.delete(pk);
+    el.classList.remove('selected');
+    el.querySelector('.bg-check').style.display = 'none';
+  } else {
+    if (_builderSelected.size >= 5) {
+      // Max 5 games
+      el.style.animation = 'none'; setTimeout(()=>el.style.animation='',100);
+      return;
+    }
+    _builderSelected.add(pk);
+    el.classList.add('selected');
+    el.querySelector('.bg-check').style.display = 'flex';
+  }
+  // Re-render results
+  const results = document.getElementById('builder-results');
+  const genBtn  = document.querySelector('#builder-grid button[onclick="buildParlay()"]');
+  if (_builderSelected.size >= 2) {
+    const selectedGames = games.filter(g => _builderSelected.has(g.pk));
+    const builderScore = (r) => { const {count,ci}=getSignalsLocked(r); return r.hrp*1.0+count*8+(ci.tier==='high'?5:ci.tier==='mid'?2:0); };
+    const bestPerGame  = (pk) => allRows.filter(r=>r.gamePk===pk).sort((a,b)=>builderScore(b)-builderScore(a)).slice(0,3);
+    const calcParlay   = (picks) => (picks.reduce((acc,p)=>acc*(p.hrp/100),1)*100).toFixed(2);
+    if (results) results.innerHTML = buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay);
+    if (genBtn) genBtn.style.display = 'inline-block';
+  } else {
+    if (results) results.innerHTML = '';
+    if (genBtn) genBtn.style.display = 'none';
+  }
+}
+
+function buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay) {
+  const picks = selectedGames.map(g => {
+    const top3 = bestPerGame(g.pk);
+    return { g, pick: top3[0], alts: top3.slice(1) };
+  }).filter(d => d.pick);
+
+  if (!picks.length) return '<div class="empty"><p>No player data yet — lineups may not be posted</p></div>';
+
+  const parlayProb = calcParlay(picks.map(d=>d.pick));
+  const totalSignals = picks.reduce((s,d)=>s+getSignalsLocked(d.pick).count,0);
+
+  return '<div style="margin-top:4px">'
+    // Parlay summary
+    + '<div style="background:linear-gradient(135deg,rgba(56,189,248,.08),rgba(56,189,248,.02));border:1px solid rgba(56,189,248,.25);border-radius:10px;padding:14px 16px;margin-bottom:14px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    + '<div><div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em">'+picks.length+'-Leg HR Parlay</div>'
+    + '<div style="font-size:11px;font-family:var(--mono);color:var(--t2);margin-top:2px">'+picks.map(d=>d.pick.name.split(' ').pop()).join(' + ')+'</div></div>'
+    + '<div style="text-align:right"><div style="font-size:24px;font-weight:700;font-family:var(--mono);color:var(--teal)">'+parlayProb+'%</div>'
+    + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">combined prob · '+totalSignals+' total signals</div></div>'
+    + '</div>'
+    + '</div>'
+    // Per-game picks
+    + '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px">'
+    + picks.map(({g, pick, alts}) => {
+        const {count, badge, signals} = getSignalsLocked(pick);
+        const batter = getBatter(pick.name) || {};
+        const park   = getPark(g.home) || {};
+        const hc     = pick.hrp>=15?'var(--green)':pick.hrp>=10?'var(--teal)':'var(--amber)';
+        return '<div class="builder-result'+(count>=4?' top':'')+'">'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">'+g.away+' @ '+g.home+'</div>'
+          + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">'
+          + '<div>'
+          + '<div style="font-size:14px;font-weight:700;color:var(--t1)">'+pick.name+'</div>'
+          + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">'+pick.team+' · Batting '+pick.order+(pick.bats?' · '+pick.bats+'HB':'')+'</div>'
+          + '</div>'
+          + '<div style="text-align:right"><div style="font-size:20px;font-weight:700;font-family:var(--mono);color:'+hc+'">'+pick.hrp.toFixed(1)+'%</div>'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">'+count+' signals</div></div>'
+          + '</div>'
+          + (badge ? '<div style="margin-bottom:6px"><span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:4px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>' : '')
+          + signalPanel(pick, true)
+          + (alts.length ? '<div class="builder-alt" style="margin-top:8px;padding-top:8px">'
+            + 'Alt: '+alts.map(a=>'<span style="color:var(--t2)">'+a.name.split(' ').pop()+' '+a.hrp.toFixed(1)+'%</span>').join(' · ')+'</div>' : '')
+          + '</div>';
+      }).join('')
+    + '</div>'
+    + '</div>';
+}
+
+function buildParlay() {
+  // Scroll to results
+  document.getElementById('builder-results')?.scrollIntoView({behavior:'smooth', block:'start'});
 }
 
 function closePlayerModal() {
@@ -4395,8 +4575,8 @@ function renderToday() {
     + kpiHTML
     + '</div>'
     + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','props','f5','f1','forecast','envs'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',forecast:'Forecast',envs:'Environments'};
+    + ['overview','signals','props','f5','f1','forecast','envs','builder'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',forecast:'Forecast',envs:'Environments',builder:'⚡ Builder'};
         return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
       }).join('')
     + '</div>'
@@ -4426,6 +4606,9 @@ function renderToday() {
     + '</div>'
     + '<div class="today-pane'+(todayPill==='forecast'?' on':'')+'" id="pane-forecast">'
     + '<div id="fcast-grid" style="padding:0"></div>'
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='builder'?' on':'')+'" id="pane-builder">'
+    + '<div id="builder-grid"></div>'
     + '</div>'
     + '</div>';
 }
@@ -5202,7 +5385,16 @@ function showTabLoading(v) {
     bar = document.createElement('div');
     bar.id = 'tab-loading-bar';
     bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--teal),var(--purple));z-index:9998;animation:tabload 1.5s ease-in-out infinite;';
-    document.head.insertAdjacentHTML('beforeend','<style>@keyframes tabload{0%{opacity:.4;transform:scaleX(.3) translateX(-100%)}50%{opacity:1;transform:scaleX(.7) translateX(20%)}100%{opacity:.4;transform:scaleX(.3) translateX(200%)}}</style>');
+    // tabload keyframe in CSS
+
+
+
+
+
+
+
+
+
     document.body.appendChild(bar);
   }
   bar.style.display = 'block';
