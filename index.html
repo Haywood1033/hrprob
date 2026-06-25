@@ -5518,7 +5518,27 @@ async function init(){
       Promise.allSettled([
         loadStreakData(),
         loadSplitsData(),
-      ]).then(() => { rebuild(); renderAll(); });
+      ]).then(() => {
+        rebuild();
+        // Silent re-render — update current view without full flash
+        // Correct pitcher hands after splits load
+        for (const g of games) {
+          const apSplits = PITCHER_SPLITS[g.ap?.name] || PITCHER_SPLITS[normName(g.ap?.name)];
+          const hpSplits = PITCHER_SPLITS[g.hp?.name] || PITCHER_SPLITS[normName(g.hp?.name)];
+          if (apSplits?.pitHand) g.ap.hand = apSplits.pitHand;
+          if (hpSplits?.pitHand) g.hp.hand = hpSplits.pitHand;
+        }
+        for (const [name, ps] of Object.entries(PITCHER_SPLITS)) {
+          if (ps.pitHand && PITCHER[name]) PITCHER[name].hand = ps.pitHand;
+          if (ps.pitHand && PITCHER[normName(name)]) PITCHER[normName(name)].hand = ps.pitHand;
+        }
+        renderForecast(true); // repopulate F1_CACHE silently
+        // Only re-render the active view, not everything
+        if (curView === 'today') renderToday();
+        else if (curView === 'players') renderPlayers();
+        else if (curView === 'pitchers') renderPitchers();
+        else if (curView === 'targets') renderTargets();
+      });
     })
     .catch(e=>{ clearTimeout(statTimer); console.error('Statcast error:',e); if(!statReady){statReady=true;rebuild();renderAll();} });
 
