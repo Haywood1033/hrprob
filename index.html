@@ -2431,9 +2431,11 @@ let _signalLockDate = null;
 
 function lockSignals() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
-  const today = new Date(etStr).toLocaleDateString('en-CA');
+  const etDate = new Date(etStr);
+  const today = etDate.toLocaleDateString('en-CA');
+  const etHour = etDate.getHours();
 
-  // Load from localStorage if same day
+  // Load from localStorage if same day — always prefer stored lock
   try {
     const stored = localStorage.getItem('signal_lock');
     if (stored) {
@@ -2447,7 +2449,14 @@ function lockSignals() {
     }
   } catch(e) {}
 
-  // Build fresh lock from current allRows
+  // Only build fresh lock before 1pm ET — after that games are in progress
+  // and streak/hot data would reflect mid-game HRs
+  if (etHour >= 13) {
+    console.log('Signal lock: games in progress, not building fresh lock mid-day');
+    return;
+  }
+
+  // Build fresh lock from current allRows (pre-game state)
   if (!allRows.length) return;
   _signalLockDate = today;
   for (const r of allRows) {
