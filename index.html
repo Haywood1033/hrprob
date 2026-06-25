@@ -2479,7 +2479,9 @@ function lockSignals() {
     const stored = localStorage.getItem('signal_lock');
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (parsed.date === today && Object.keys(parsed.signals).length > 0) {
+      // Only restore if lock date matches current slate date
+      const slateDate = SLATE.date || today;
+      if (parsed.date === today && parsed.date === slateDate && Object.keys(parsed.signals).length > 0) {
         Object.assign(SIGNAL_LOCK, parsed.signals);
         _signalLockDate = today;
         console.log('Signal lock restored:', Object.keys(SIGNAL_LOCK).length, 'players');
@@ -5697,6 +5699,12 @@ async function init(){
       if (slate.pitchers?.length) {
         // Sync date
         if (slate.date) {
+          // If date changed, clear signal lock so it rebuilds for new slate
+          if (SLATE.date && SLATE.date !== slate.date) {
+            console.log('New slate date detected — clearing signal lock for fresh build');
+            Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
+            try { localStorage.removeItem('signal_lock'); } catch(e) {}
+          }
           SLATE.date = slate.date;
           document.getElementById('hdr-date').textContent =
             new Date(slate.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
