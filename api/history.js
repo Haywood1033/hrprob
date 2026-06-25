@@ -48,6 +48,14 @@ module.exports = async function handler(req, res) {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
       const { action, date, predictions, signalLock } = body;
 
+      if (action === 'save_lock') {
+        if (!date || !signalLock) return res.status(400).json({ error: 'Missing date or signalLock' });
+        await query(`
+          UPDATE daily_predictions SET signal_lock = $2::jsonb WHERE date = $1
+        `, [date, JSON.stringify(signalLock)]);
+        return res.status(200).json({ ok: true, date });
+      }
+
       if (action === 'save') {
         if (!date || !predictions?.length)
           return res.status(400).json({ error: 'Missing date or predictions' });
