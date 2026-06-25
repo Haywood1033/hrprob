@@ -2463,11 +2463,11 @@ function getSignalsLocked(r) {
       if (i === 3) return {...s, active: locked.signals[3] ?? s.active};
       return s;
     });
-    // Recalculate count and badge from the locked-streak signals
+    // Recalculate badge from locked-streak signals
     const lockedCount = lockedSignals.filter(s => s.active).length;
-    // Recalculate badge based on locked count + live hrp
+    const hrp = r.hrp || 0;
     const lockedBadge = lockedCount >= 4 ? '🏆 Elite Play'
-      : lockedCount >= 3 ? (r.hrp >= 15 ? '⭐ All-Star Play' : '💡 Value Play')
+      : lockedCount >= 3 ? (hrp >= 15 ? '⭐ All-Star Play' : '💡 Value Play')
       : null;
     return {
       signals: lockedSignals,
@@ -4095,9 +4095,12 @@ function renderToday() {
 
   // Best play composite score
   const scorePlayer = (r) => {
-    const {signals,count,ci}=getSignalsLocked(r);
-    const streak=STREAK[r.name];const ps=PARK_SPLITS[r.name];
-    return (count*20)+(streak?.flame==='\uD83D\uDD25\uD83D\uDD25'?12:streak?.flame==='\uD83D\uDD25'?6:0)+(ps?.flag==='boost'?8:0)+(ci.tier==='high'?6:ci.tier==='mid'?3:0)+r.hrp*0.8;
+    const {signals,count,ci,badge}=getSignalsLocked(r);
+    // Use locked streak signal (index 3) not live STREAK to prevent mid-game jumps
+    const streakLocked = SIGNAL_LOCK[r.name]?.signals?.[3] ?? (STREAK[r.name]?.flame==='🔥🔥'||STREAK[r.name]?.flame==='🔥');
+    const streakBonus = streakLocked ? (SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?12:6) : 0) : 0;
+    const ps=PARK_SPLITS[r.name];
+    return (count*20)+streakBonus+(ps?.flag==='boost'?8:0)+(ci.tier==='high'?6:ci.tier==='mid'?3:0)+r.hrp*0.8;
   };
   const best = [...players].sort((a,b)=>scorePlayer(b)-scorePlayer(a))[0];
 
