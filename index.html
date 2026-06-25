@@ -2452,20 +2452,28 @@ function lockSignals() {
 }
 
 function getSignalsLocked(r) {
-  // Lock streak signal (index 3), composite badge, and count
-  // Weather, pitcher matchup, pull edge stay live so lineup/weather changes reflect
+  // Lock streak signal (index 3) only — badge recalculates from live signals
+  // This allows weather/pitcher/wind changes to affect tier while preventing
+  // mid-game HR streak inflation from changing badges
   if (SIGNAL_LOCK[r.name]) {
     const locked = SIGNAL_LOCK[r.name];
     const live   = getSignals(r);
+    // Use live signals but with locked streak
+    const lockedSignals = live.signals.map((s, i) => {
+      if (i === 3) return {...s, active: locked.signals[3] ?? s.active};
+      return s;
+    });
+    // Recalculate count and badge from the locked-streak signals
+    const lockedCount = lockedSignals.filter(s => s.active).length;
+    // Recalculate badge based on locked count + live hrp
+    const lockedBadge = lockedCount >= 4 ? '🏆 Elite Play'
+      : lockedCount >= 3 ? (r.hrp >= 15 ? '⭐ All-Star Play' : '💡 Value Play')
+      : null;
     return {
-      signals: live.signals.map((s, i) => {
-        // Lock streak (index 3) — weather/pitcher/pull stay live
-        if (i === 3) return {...s, active: locked.signals[3] ?? s.active};
-        return s;
-      }),
-      count:  locked.count,  // locked — prevents mid-game signal count changes
-      badge:  locked.badge,  // locked — prevents mid-game tier jumps
-      ci:     locked.ci,
+      signals: lockedSignals,
+      count:   lockedCount,
+      badge:   lockedBadge,
+      ci:      live.ci,
     };
   }
   return getSignals(r);
