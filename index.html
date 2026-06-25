@@ -2466,8 +2466,10 @@ function getSignalsLocked(r) {
     // Recalculate badge from locked-streak signals
     const lockedCount = lockedSignals.filter(s => s.active).length;
     const hrp = r.hrp || 0;
-    const lockedBadge = lockedCount >= 4 ? '🏆 Elite Play'
-      : lockedCount >= 3 ? (hrp >= 15 ? '⭐ All-Star Play' : '💡 Value Play')
+    const lockedBadge = lockedCount >= 6 ? { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' }
+      : lockedCount >= 5               ? { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' }
+      : lockedCount >= 4               ? { label:'⭐ All-Star Play', color:'var(--teal)',   bg:'rgba(45,212,191,.10)',  bd:'rgba(45,212,191,.25)' }
+      : lockedCount >= 3               ? { label:'💡 Value Play',    color:'var(--purple)', bg:'rgba(167,139,250,.10)', bd:'rgba(167,139,250,.25)' }
       : null;
     return {
       signals: lockedSignals,
@@ -4095,12 +4097,13 @@ function renderToday() {
 
   // Best play composite score
   const scorePlayer = (r) => {
-    const {signals,count,ci,badge}=getSignalsLocked(r);
-    // Use locked streak signal (index 3) not live STREAK to prevent mid-game jumps
-    const streakLocked = SIGNAL_LOCK[r.name]?.signals?.[3] ?? (STREAK[r.name]?.flame==='🔥🔥'||STREAK[r.name]?.flame==='🔥');
-    const streakBonus = streakLocked ? (SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?12:6) : 0) : 0;
-    const ps=PARK_SPLITS[r.name];
-    return (count*20)+streakBonus+(ps?.flag==='boost'?8:0)+(ci.tier==='high'?6:ci.tier==='mid'?3:0)+r.hrp*0.8;
+    const {signals, count, ci} = getSignalsLocked(r);
+    // Use locked streak signal directly — prevents mid-game HR streak inflation
+    const streakSignalLocked = signals[3]?.active ?? false;
+    const streakFlame = STREAK[r.name]?.flame;
+    const streakBonus = streakSignalLocked ? (streakFlame === '🔥🔥' ? 12 : 6) : 0;
+    const ps = PARK_SPLITS[r.name];
+    return (count*20) + streakBonus + (ps?.flag==='boost'?8:0) + (ci.tier==='high'?6:ci.tier==='mid'?3:0) + r.hrp*0.8;
   };
   const best = [...players].sort((a,b)=>scorePlayer(b)-scorePlayer(a))[0];
 
