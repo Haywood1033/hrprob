@@ -455,6 +455,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div class="loading-step" id="lstep-slate"><span class="loading-step-icon">⏳</span>Loading schedule &amp; lineups</div>
     <div class="loading-step" id="lstep-statcast"><span class="loading-step-icon">⏳</span>Loading Statcast data</div>
     <div class="loading-step" id="lstep-weather"><span class="loading-step-icon">⏳</span>Loading weather &amp; park data</div>
+    <div class="loading-step" id="lstep-h2h"><span class="loading-step-icon">⏳</span>Loading career matchup data</div>
   </div>
 </div>
 <header class="hdr">
@@ -948,6 +949,34 @@ function hrProb(b,park,wx,pit,order){
   if (ss_pct !== null) {
     if (ss_pct >= 36) p += (ss_pct - 33) * 0.0012;
     else if (ss_pct <= 28) p -= (33 - ss_pct) * 0.0008;
+  }
+
+  // ── CAREER H2H VS THIS PITCHER ──────────────────────────────
+  // Pre-loaded at startup — sample-weighted HR rate adjustment
+  if (b._name && pit.name) {
+    const h2h = H2H_CACHE[`${b._name}|${pit.name}`];
+    if (h2h && h2h.ab >= 5) {
+      const h2hHRRate = h2h.hr / h2h.ab; // career HR rate vs this pitcher
+      const lgHRRate  = 0.033;            // MLB avg HR/AB ~3.3%
+      const diff      = h2hHRRate - lgHRRate;
+      // Weight by sample size
+      const weight = h2h.ab >= 30 ? 0.28
+                   : h2h.ab >= 15 ? 0.18
+                   : h2h.ab >= 10 ? 0.12
+                   : 0.08; // 5-9 AB — HR-only signal, small weight
+      // Only apply if meaningful: ≥1 HR in small sample, or strong rate in large sample
+      if (h2h.ab < 10 && h2h.hr === 0) {
+        // No HR in tiny sample — ignore, not enough to penalize
+      } else {
+        p += diff * weight * 100 * 0.8; // scale to probability space
+      }
+      if (h2h.ab >= 10) {
+        // At larger samples also factor in overall contact tendency
+        const h2hAvg  = h2h.avg || 0;
+        const lgAvg   = 0.248;
+        p += (h2hAvg - lgAvg) * weight * 15;
+      }
+    }
   }
 
   // ── BATTING ORDER POSITION ────────────────────────────────────
@@ -2710,6 +2739,49 @@ async function fetchH2H(batterName, pitcherName, pitcherId) {
     H2H_CACHE[key] = null;
     return null;
   }
+}
+
+
+// ── PRE-FETCH H2H FOR ALL TODAY'S MATCHUPS ───────────────────
+// Called after lineups and pitcher IDs are loaded
+// Populates H2H_CACHE so hrProb() can use it synchronously
+async function prefetchAllH2H() {
+  if (!allRows.length || !games.length) return;
+  
+  const pairs = [];
+  for (const g of games) {
+    const pitName = g.ap?.name; // away pitcher faces home batters
+    const pitName2 = g.hp?.name; // home pitcher faces away batters
+    const awayBatters = allRows.filter(r => r.gamePk===g.pk && r.team===g.away);
+    const homeBatters = allRows.filter(r => r.gamePk===g.pk && r.team===g.home);
+    for (const r of homeBatters) if (pitName) pairs.push([r.name, pitName]);
+    for (const r of awayBatters) if (pitName2) pairs.push([r.name, pitName2]);
+  }
+
+  // Deduplicate
+  const seen = new Set();
+  const uniquePairs = pairs.filter(([b,p]) => {
+    const k = b+'|'+p;
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  });
+
+  console.log(`Prefetching H2H for ${uniquePairs.length} matchups…`);
+  
+  // Batch in groups of 5 to avoid rate limiting
+  const BATCH = 5;
+  let fetched = 0;
+  for (let i = 0; i < uniquePairs.length; i += BATCH) {
+    const batch = uniquePairs.slice(i, i+BATCH);
+    await Promise.allSettled(batch.map(([bName, pName]) => fetchH2H(bName, pName)));
+    fetched += batch.length;
+  }
+  
+  console.log(`H2H prefetch complete: ${fetched} matchups cached`);
+  // Rebuild rows with H2H now available
+  rebuild();
+  if (curView === 'today') renderToday();
+  else if (curView === 'players') renderPlayers();
 }
 
 // Populate PITCHER_IDS from API slate response
@@ -5833,6 +5905,8 @@ async function init(){
           if (ps.pitHand && PITCHER[normName(name)]) PITCHER[normName(name)].hand = ps.pitHand;
         }
         renderForecast(true); // repopulate F1_CACHE silently
+        // Pre-fetch H2H for all matchups now that allRows is ready
+        setTimeout(prefetchAllH2H, 500);
         // Only re-render the active view, not everything
         if (curView === 'today') renderToday();
         else if (curView === 'players') renderPlayers();
