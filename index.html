@@ -1371,7 +1371,7 @@ function getSameGamePenalty(legs, games) {
 
   // Allow same-game if ALL same-game legs have 4+ signals (4/5 rule)
   const sameGameLegs = legs.filter((l,i) => legs.some((l2,j) => i!==j && l2.gamePk===l.gamePk));
-  const allHighSignal = sameGameLegs.every(l => getSignals(l).count >= 4);
+  const allHighSignal = sameGameLegs.every(l => getSignalsLocked(l).count >= 4);
   if (allHighSignal) return 1.05; // bonus for high-signal same-game stack
 
   return 0.85; // penalty for low-signal same-game
@@ -1383,7 +1383,7 @@ function scoreParlay(legs, games) {
   const adjusted  = jointProb * penalty;
 
   // Signal score: total signals across all legs
-  const signalScore = legs.reduce((acc, l) => acc + getSignals(l).count, 0);
+  const signalScore = legs.reduce((acc, l) => acc + getSignalsLocked(l).count, 0);
   const avgSignals = signalScore / legs.length;
 
   // Diversity bonus: reward legs from different games
@@ -1419,8 +1419,8 @@ function buildParlayLegs() {
   // Score by signal count first, then probability
   const legs = [...seen.values()]
     .sort((a,b) => {
-      const sa = getSignals(a).count * 20 + a.hrp;
-      const sb = getSignals(b).count * 20 + b.hrp;
+      const sa = getSignalsLocked(a).count * 20 + a.hrp;
+      const sb = getSignalsLocked(b).count * 20 + b.hrp;
       return sb - sa;
     })
     .slice(0,25);
@@ -1605,7 +1605,7 @@ async function saveToHistory() {
   // Signal plays (3+ signals) not already in top 40
   const top40Names = new Set(top40.map(r=>r.name));
   const signalPlays = allPlayers.filter(r => {
-    const {count} = getSignals(r);
+    const {count} = getSignalsLocked(r);
     return count >= 3 && !top40Names.has(r.name);
   });
   const toSave = [...top40, ...signalPlays];
@@ -1785,7 +1785,7 @@ function renderForecast(silent=false) {
 
     const calcF1 = (pit, batters) => {
       let p = BASE_RATE;
-      const ps = PITCHER_SPLITS[pit.name];
+      const ps = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)];
       const f1 = ps?.f1;
       if (f1 && f1.bf >= 5) {
         const runRate = f1.runRate ?? 0.47;
@@ -1793,14 +1793,35 @@ function renderForecast(silent=false) {
         if (f1.hr9_1 !== null) p += (f1.hr9_1 - 1.20) * 0.020;
         if (f1.whip1 !== null) p += (f1.whip1 - 1.30) * 0.025;
       } else {
-        // No 1st inning splits — use overall stats with smart defaults
-        // Unknown pitchers default to slightly above average (4.20 xERA)
-        // since any MLB starter is better than league average by selection
         const xe = pit.xera||pit.era||4.20;
         p += (xe-4.50)*0.022;
         p -= ((pit.whiff||23)-22)*0.003;
         p += ((pit.hr9||1.10)-1.20)*0.025;
       }
+
+      // ── RECENT FORM ADJUSTMENT ─────────────────────────────
+      // Recent outings trend matters for F1 — a pitcher getting
+      // shelled early recently is more likely to do so again
+      const outings = ps?.recentOutings || [];
+      if (outings.length >= 3) {
+        // Recent ERA trend vs season — if getting worse, push up
+        const recentERA = ps.recentERA || 0;
+        const seasonERA = pit.xera || pit.era || 4.50;
+        if (recentERA > seasonERA + 1.50) p += 0.04; // significantly worse recently
+        else if (recentERA > seasonERA + 0.75) p += 0.02; // somewhat worse recently
+        else if (recentERA < seasonERA - 1.50) p -= 0.03; // on a hot streak
+
+        // Short outings signal — getting knocked out early
+        const shortOutings = outings.filter(o => o.ip < 5 && o.er > 0).length;
+        if (shortOutings >= 3) p += 0.04; // 3+ short/rough starts recently
+        else if (shortOutings >= 2) p += 0.02;
+
+        // Run allowed rate in recent starts (proxy for early inning trouble)
+        const recentRunRate = outings.reduce((s,o)=>s+(o.er>0?1:0),0)/outings.length;
+        if (recentRunRate >= 0.80) p += 0.03; // ER in 4 of last 5 starts
+        else if (recentRunRate <= 0.20) p -= 0.02; // ER in 1 of last 5 starts
+      }
+
       if (batters.length>0) {
         const avgXwoba = batters.reduce((s,r)=>s+(r.xwoba||0.310),0)/batters.length;
         p += (avgXwoba-0.310)*0.35;
@@ -2431,19 +2452,19 @@ function lockSignals() {
 }
 
 function getSignalsLocked(r) {
-  // Only lock streak signal (index 3) and composite badge
+  // Lock streak signal (index 3), composite badge, and count
   // Weather, pitcher matchup, pull edge stay live so lineup/weather changes reflect
   if (SIGNAL_LOCK[r.name]) {
     const locked = SIGNAL_LOCK[r.name];
     const live   = getSignals(r);
     return {
       signals: live.signals.map((s, i) => {
-        // Lock only streak (index 3) — everything else stays live
+        // Lock streak (index 3) — weather/pitcher/pull stay live
         if (i === 3) return {...s, active: locked.signals[3] ?? s.active};
         return s;
       }),
-      count:  live.count,   // live count so pitcher changes reflect
-      badge:  locked.badge, // badge locked — prevents mid-game tier jumps
+      count:  locked.count,  // locked — prevents mid-game signal count changes
+      badge:  locked.badge,  // locked — prevents mid-game tier jumps
       ci:     locked.ci,
     };
   }
@@ -2451,7 +2472,7 @@ function getSignalsLocked(r) {
 }
 
 function signalPanel(r, compact=false) {
-  const { signals, badge } = getSignals(r);
+  const { signals, badge } = getSignalsLocked(r);
   const size = compact ? '14px' : '16px';
   const gap  = compact ? '4px' : '6px';
   const icons = signals.map(s =>
@@ -3133,7 +3154,7 @@ function filtered(){
     if(handFilt&&r.bats!==handFilt)return false;
     if(q&&!r.name.toLowerCase().includes(q)&&!r.team.toLowerCase().includes(q))return false;
     if(wxFilt&&!hasWxEdge(r))return false;
-    if(signalFilt&&getSignals(r).count<3)return false;
+    if(signalFilt&&getSignalsLocked(r).count<3)return false;
     if(gameFilt&&r.gamePk!==gameFilt)return false;
     if(teamFilt&&r.team!==teamFilt)return false;
     return true;
@@ -3476,7 +3497,7 @@ function openPlayerModal(name) {
   const pk    = getPark(r.game?.home||r.team) || {};
   const w     = r.wx || {};
   const streak = STREAK[r.name] || {};
-  const { signals, badge, ci } = getSignals(r);
+  const { signals, badge, ci } = getSignalsLocked(r);
 
   // Header
   // Get batter ID for headshot
@@ -4033,7 +4054,7 @@ function renderToday() {
   const expHR = players.reduce((s,r) => s+r.hrp/100, 0);
   const hotPlayers = players.filter(r => STREAK[r.name]?.flame === '\uD83D\uDD25\uD83D\uDD25' || STREAK[r.name]?.flame === '\uD83D\uDD25');
   const confirmed = games.reduce((n,g) => n + (g.awayLineup.length?1:0) + (g.homeLineup.length?1:0), 0);
-  const signalCount = players.filter(r=>{const {count}=getSignals(r);return count>=3;}).length;
+  const signalCount = players.filter(r=>{const {count}=getSignalsLocked(r);return count>=3;}).length;
 
   const top5 = players.slice(0,5);
 
@@ -4046,9 +4067,9 @@ function renderToday() {
 
   // Top signal plays
   const signalPlays = [...players]
-    .filter(r => { const {count}=getSignals(r); return count>=3; })
+    .filter(r => { const {count}=getSignalsLocked(r); return count>=3; })
     .sort((a,b) => {
-      const ra=getSignals(a),rb=getSignals(b);
+      const ra=getSignalsLocked(a),rb=getSignalsLocked(b);
       return rb.count!==ra.count ? rb.count-ra.count : b.hrp-a.hrp;
     })
     .slice(0,5);
@@ -4066,7 +4087,7 @@ function renderToday() {
 
   // Best play composite score
   const scorePlayer = (r) => {
-    const {signals,count,ci}=getSignals(r);
+    const {signals,count,ci}=getSignalsLocked(r);
     const streak=STREAK[r.name];const ps=PARK_SPLITS[r.name];
     return (count*20)+(streak?.flame==='\uD83D\uDD25\uD83D\uDD25'?12:streak?.flame==='\uD83D\uDD25'?6:0)+(ps?.flag==='boost'?8:0)+(ci.tier==='high'?6:ci.tier==='mid'?3:0)+r.hrp*0.8;
   };
@@ -4100,7 +4121,7 @@ function renderToday() {
   }).join('');
 
   const signalHTML = signalPlays.length ? signalPlays.map(r=>{
-    const {badge}=getSignals(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+    const {badge}=getSignalsLocked(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
     return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
       +'<div style="flex:1"><div class="today-target-name">'+r.name+'</div>'
       +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div>'
@@ -4116,7 +4137,7 @@ function renderToday() {
 
 
   const bestHTML = !best ? '' : (()=>{
-    const {signals,badge,ci}=getSignals(best);
+    const {signals,badge,ci}=getSignalsLocked(best);
     const streak=STREAK[best.name];const ps=PARK_SPLITS[best.name];const pit=best.pit||{};
     const park=getPark(best.game?.home||best.team)||{};
     const hc=best.hrp>=15?'var(--green)':best.hrp>=10?'var(--teal)':'var(--amber)';
@@ -4150,7 +4171,7 @@ function renderToday() {
       +'<div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">'
       +multiProps.map(({r,p})=>{
         const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-        const {badge}=getSignals(r);
+        const {badge}=getSignalsLocked(r);
         return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" '
           +'onclick="openPlayerModal(this.dataset.name)" data-name="'+r.name+'" '
           +'onmouseover="this.style.borderColor=\'var(--teal)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">'
@@ -4482,7 +4503,7 @@ async function renderTomorrow() {
   // Signal plays using tomorrow WX
   const origWX={...WX};
   Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,tWX);
-  const tSignalPlays=[...tPlayers].filter(r=>getSignals(r).count>=3).sort((a,b)=>{const ra=getSignals(a),rb=getSignals(b);return rb.count!==ra.count?rb.count-ra.count:b.hrp-a.hrp;}).slice(0,5);
+  const tSignalPlays=[...tPlayers].filter(r=>getSignalsLocked(r).count>=3).sort((a,b)=>{const ra=getSignalsLocked(a),rb=getSignalsLocked(b);return rb.count!==ra.count?rb.count-ra.count:b.hrp-a.hrp;}).slice(0,5);
   Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,origWX);
 
   const tParkRanked=tGames.map(g=>{const park=getPark(g.home)||{};const wx=tWX[g.home]||{};const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;const windOut=diff<45||diff>315;return{g,park,wx,windOut,score:(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0)};}).sort((a,b)=>b.score-a.score);
@@ -4493,7 +4514,7 @@ async function renderTomorrow() {
   }).join('');
 
   const tSignalHTML=tSignalPlays.length?tSignalPlays.map(r=>{
-    const{badge}=getSignals(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
+    const{badge}=getSignalsLocked(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
     return '<div class="today-target" style="cursor:default"><div style="flex:1"><div class="today-target-name">'+r.name+'</div><div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div><div style="margin-top:4px">'+signalPanel(r,true)+'</div></div><div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div>'+(badge?'<div style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+';margin-top:3px">'+badge.label+'</div>':'')+'</div></div>';
   }).join(''):'<div style="font-size:12px;color:var(--t3);padding:8px 0">No signal plays yet — streaks update after tonight\u2019s games</div>';
 
