@@ -2809,10 +2809,12 @@ async function loadStreakData() {
       }
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
       console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
+      _dataReady.streaks = true;
       rebuild(); renderAll();
     }
   } catch(e) {
     console.warn('Streak error:', e.message);
+    _dataReady.streaks = true; // mark done even on error
   }
 }
 
@@ -2958,6 +2960,7 @@ async function loadSplitsData() {
         PARK_SPLITS[name] = ps;
       }
       console.log(`Park splits loaded: ${Object.keys(PARK_SPLITS).length} players`);
+      _dataReady.splits = true;
     }
     rebuild(); renderAll();
     // Correct pitcher hands in all games now that PITCHER_SPLITS is loaded
@@ -2978,6 +2981,7 @@ async function loadSplitsData() {
     else renderToday._stale = true; // flag for next time Today is opened
   } catch(e) {
     console.warn('Splits fetch failed:', e.message);
+    _dataReady.splits = true; // mark done even on error
   }
 }
 
