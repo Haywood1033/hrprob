@@ -2478,6 +2478,16 @@ function lockSignals() {
     localStorage.setItem('signal_lock', JSON.stringify({ date: today, signals: SIGNAL_LOCK }));
     console.log('Signal lock saved:', Object.keys(SIGNAL_LOCK).length, 'players');
   } catch(e) {}
+  // Also push to DB so all devices get the same lock
+  try {
+    fetch('/api/history', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ action: 'save_lock', date: today, signalLock: SIGNAL_LOCK })
+    }).then(r=>r.json()).then(d=>console.log('Signal lock saved to DB:', d.ok));
+  } catch(e) {}
+  try { // dummy try to match original structure
+  } catch(e) {}
 }
 
 function getSignalsLocked(r) {
@@ -3598,6 +3608,7 @@ function renderBuilder() {
         const wxBadge = park.roof==='dome' ? '🏠 Dome'
           : (wx.ws||0) >= 6 ? `💨 ${wx.ws}mph ${windDir}` : (wx.ws||0) > 0 ? `💨 ${wx.ws}mph ${windDir}` : '';
         const rows = allRows.filter(r=>r.gamePk===g.pk);
+        const dhLabel = games.filter(x=>x.away===g.away&&x.home===g.home).length > 1 ? ' · Game '+(games.filter(x=>x.away===g.away&&x.home===g.home).indexOf(g)+1) : '';
         // Useful lineup stats
         const topHR = rows.filter(r=>r.hrp>=12).length;
         const signalPlays = rows.filter(r=>getSignalsLocked(r).count>=3).length;
