@@ -1634,7 +1634,8 @@ async function saveToHistory() {
           hrp:      +r.hrp.toFixed(1),
           tier:     r.hrp>=20?'20%+':r.hrp>=15?'15-19%':r.hrp>=10?'10-14%':'5-9%',
           bookOdds: r.bookOdds||null,
-        }))
+        })),
+        signalLock: SIGNAL_LOCK  // save pre-game signal state for all devices
       })
     });
     const d = await r.json();
@@ -1653,6 +1654,15 @@ async function loadHistory() {
     historyRecords = d.records || [];
     historyLoaded = true;
     console.log('History loaded:', historyRecords.length, 'days');
+
+    // Restore signal lock from DB for today — works across all devices
+    const etStr0 = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+    const todayET = new Date(etStr0).toLocaleDateString('en-CA');
+    const todayRecord = historyRecords.find(r => r.date === todayET);
+    if (todayRecord?.signalLock && Object.keys(SIGNAL_LOCK).length === 0) {
+      Object.assign(SIGNAL_LOCK, todayRecord.signalLock);
+      console.log('Signal lock restored from DB:', Object.keys(SIGNAL_LOCK).length, 'players');
+    }
     // Update yesterday banner whenever it exists in DOM
     const bannerEl = document.getElementById('yesterday-banner');
     if (bannerEl) bannerEl.innerHTML = buildYesterdayBanner();
