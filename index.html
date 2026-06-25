@@ -3561,9 +3561,17 @@ function renderBuilder() {
         const pfColor = pf >= 1.10 ? 'var(--green)' : pf <= 0.95 ? 'var(--red)' : 'var(--t3)';
         const windOut = wx.wd !== undefined && park.orient !== undefined
           ? (() => { const d=((wx.wd-park.orient)%360+360)%360; return d<45||d>315; })() : false;
-        const wxBadge = park.roof==='dome' ? '🏠 Dome' : windOut && (wx.ws||0)>=10 ? `💨 ${wx.ws}mph out` : wx.ws ? `${wx.ws}mph wind` : '';
+        const windIn = wx.wd !== undefined && park.orient !== undefined
+          ? (() => { const d=((wx.wd-park.orient)%360+360)%360; return d>135&&d<225; })() : false;
+        const windDir = windOut ? 'out' : windIn ? 'in' : 'cross';
+        const windColor = windOut ? 'var(--green)' : windIn ? 'var(--red)' : 'var(--t2)';
+        const wxBadge = park.roof==='dome' ? '🏠 Dome'
+          : (wx.ws||0) >= 6 ? `💨 ${wx.ws}mph ${windDir}` : (wx.ws||0) > 0 ? `${wx.ws}mph ${windDir}` : '';
         const rows = allRows.filter(r=>r.gamePk===g.pk);
-        const avgXwoba = rows.length ? (rows.reduce((s,r)=>s+(r.xwoba||0.310),0)/rows.length).toFixed(3) : '—';
+        // Useful lineup stats
+        const topHR = rows.filter(r=>r.hrp>=12).length;
+        const signalPlays = rows.filter(r=>getSignalsLocked(r).count>=3).length;
+        const avgHRP = rows.length ? (rows.reduce((s,r)=>s+r.hrp,0)/rows.length).toFixed(1) : '—';
         return '<div class="builder-game'+(sel?' selected':'')+'" onclick="toggleBuilderGame('+g.pk+',this)">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
           + '<div>'
@@ -3574,10 +3582,14 @@ function renderBuilder() {
           + '</div>'
           + '<div style="display:flex;gap:8px;flex-wrap:wrap">'
           + '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:'+pfColor+'">'+pfLabel+'</span>'
-          + (wxBadge ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--teal)">'+wxBadge+'</span>' : '')
+          + (wxBadge ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:'+windColor+'">'+wxBadge+'</span>' : '')
           + (park.elev > 2000 ? '<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--amber)">⛰ '+park.elev.toLocaleString()+'ft</span>' : '')
           + '</div>'
-          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:6px">Opp avg xwOBA '+avgXwoba+' · '+rows.length+' batters</div>'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:6px">'
+          + (topHR > 0 ? `<span style="color:var(--teal)">${topHR} target${topHR>1?'s':''} 12%+</span>` : 'No 12%+ targets')
+          + (signalPlays > 0 ? ` · <span style="color:var(--purple)">${signalPlays} signal play${signalPlays>1?'s':''}</span>` : '')
+          + ` · avg ${avgHRP}% HR prob`
+          + '</div>'
           + '</div>';
       }).join('')
     + '</div>'
