@@ -1685,13 +1685,20 @@ async function loadHistory() {
     historyLoaded = true;
     console.log('History loaded:', historyRecords.length, 'days');
 
-    // Restore signal lock from DB for today — works across all devices
+    // Restore signal lock from DB — single source of truth for all devices
     const etStr0 = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
-    const todayET = new Date(etStr0).toLocaleDateString('en-CA');
+    const etDate0 = new Date(etStr0);
+    const todayET = etDate0.toLocaleDateString('en-CA');
     const todayRecord = historyRecords.find(r => r.date === todayET);
-    if (todayRecord?.signalLock && Object.keys(SIGNAL_LOCK).length === 0) {
+    if (todayRecord?.signalLock && Object.keys(todayRecord.signalLock).length > 0) {
+      // Always restore from DB — clears any stale in-memory state first
+      Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
       Object.assign(SIGNAL_LOCK, todayRecord.signalLock);
+      _signalLockDate = todayET;
       console.log('Signal lock restored from DB:', Object.keys(SIGNAL_LOCK).length, 'players');
+    } else {
+      // No DB lock yet — will be built fresh after statcast loads
+      console.log('No DB signal lock for today — will build fresh');
     }
     // Update yesterday banner whenever it exists in DOM
     const bannerEl = document.getElementById('yesterday-banner');
@@ -2475,21 +2482,12 @@ function lockSignals() {
   const today = etDate.toLocaleDateString('en-CA');
   const etHour = etDate.getHours();
 
-  // Load from localStorage if same day — always prefer stored lock
-  try {
-    const stored = localStorage.getItem('signal_lock');
-    if (stored) {
-      const parsed = JSON.parse(stored);
-      // Only restore if lock date matches current slate date
-      const slateDate = SLATE.date || today;
-      if (parsed.date === today && parsed.date === slateDate && Object.keys(parsed.signals).length > 0) {
-        Object.assign(SIGNAL_LOCK, parsed.signals);
-        _signalLockDate = today;
-        console.log('Signal lock restored:', Object.keys(SIGNAL_LOCK).length, 'players');
-        return;
-      }
-    }
-  } catch(e) {}
+  // Lock is DB-only — localStorage removed to ensure all devices share same state
+  // DB restore happens in loadHistory() — if already restored, skip rebuild
+  if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
+    console.log('Signal lock already active:', Object.keys(SIGNAL_LOCK).length, 'players');
+    return;
+  }
 
   // Only build fresh lock before 1pm ET — after that games are in progress
   // and streak/hot data would reflect mid-game HRs
@@ -2505,18 +2503,17 @@ function lockSignals() {
     const {signals, count, badge, ci} = getSignals(r);
     SIGNAL_LOCK[r.name] = { signals: signals.map(s=>s.active), count, badge, ci };
   }
-  // Save to localStorage
-  try {
-    localStorage.setItem('signal_lock', JSON.stringify({ date: today, signals: SIGNAL_LOCK }));
-    console.log('Signal lock saved:', Object.keys(SIGNAL_LOCK).length, 'players');
-  } catch(e) {}
-  // Also push to DB so all devices get the same lock
+  // Save to DB — single source of truth for all devices
   try {
     fetch('/api/history', {
       method: 'POST',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ action: 'save_lock', date: today, signalLock: SIGNAL_LOCK })
-    }).then(r=>r.json()).then(d=>console.log('Signal lock saved to DB:', d.ok));
+    }).then(r=>r.json()).then(d=>{
+      console.log('Signal lock saved to DB:', d.ok);
+      // Reload history so DB state is fresh for this device too
+      loadHistory();
+    });
   } catch(e) {}
   try { // dummy try to match original structure
   } catch(e) {}
@@ -5704,7 +5701,6 @@ async function init(){
           if (SLATE.date && SLATE.date !== slate.date) {
             console.log('New slate date detected — clearing signal lock for fresh build');
             Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
-            try { localStorage.removeItem('signal_lock'); } catch(e) {}
           }
           SLATE.date = slate.date;
           document.getElementById('hdr-date').textContent =
