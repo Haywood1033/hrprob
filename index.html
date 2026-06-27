@@ -1689,7 +1689,42 @@ async function saveToHistory() {
           tier:     r.hrp>=20?'20%+':r.hrp>=15?'15-19%':r.hrp>=10?'10-14%':'5-9%',
           bookOdds: r.bookOdds||null,
         })),
-        signalLock: SIGNAL_LOCK  // save pre-game signal state for all devices
+        signalLock: SIGNAL_LOCK,
+        // Save today's game leans for accuracy tracking
+        gameLeans: games.map(g => {
+          const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
+          const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
+          // F5
+          const awayF5 = calcF5Projection(hp,'home',g,g.away);
+          const homeF5 = calcF5Projection(ap,'away',g,g.home);
+          const f5Total = +(awayF5.runsAllowed + homeF5.runsAllowed).toFixed(1);
+          const f5Edge  = +(awayF5.runsAllowed - homeF5.runsAllowed).toFixed(1);
+          const f5ML    = f5Edge > 0.3 ? g.away : f5Edge < -0.3 ? g.home : null;
+          const ou      = GAME_ODDS[g.away+'@'+g.home]?.ou || null;
+          const f5Ou    = ou ? +(ou*0.55).toFixed(1) : null;
+          const f5Total_lean = f5Ou ? (f5Total > f5Ou+0.3 ? 'over' : f5Total < f5Ou-0.3 ? 'under' : null) : null;
+          // Full game
+          const awayFG = calcFullGameProjection(hp,'home',g,g.away);
+          const homeFG = calcFullGameProjection(ap,'away',g,g.home);
+          const fgTotal = +(awayFG.runsAllowed + homeFG.runsAllowed).toFixed(1);
+          const fgEdge  = +(awayFG.runsAllowed - homeFG.runsAllowed).toFixed(1);
+          const fgML    = fgEdge > 0.4 ? g.away : fgEdge < -0.4 ? g.home : null;
+          const fg_total_lean = ou ? (fgTotal > ou+0.4 ? 'over' : fgTotal < ou-0.4 ? 'under' : null) : null;
+          // NRFI/YRFI
+          const f1Data  = F1_CACHE.find(d=>d.g.pk===g.pk);
+          const nrfiLean = f1Data ? Math.round(f1Data.eitherF1*100) <= 38 : null;
+          const yrfiLean = f1Data ? Math.round(f1Data.eitherF1*100) >= 55 : null;
+          return {
+            gamePk: g.pk, away: g.away, home: g.home, time: g.time,
+            f5ML, f5Total, f5Ou, f5TotalLean: f5Total_lean,
+            fgML, fgTotal, ou, fgTotalLean: fg_total_lean,
+            nrfiLean, yrfiLean,
+            // Results filled in later
+            f5MLResult: null, f5TotalResult: null,
+            fgMLResult: null, fgTotalResult: null,
+            nrfiResult: null,
+          };
+        })
       })
     });
     const d = await r.json();
@@ -1797,6 +1832,35 @@ function computeAccuracy(records, window='all') {
   return tiers;
 }
 
+
+
+function computeLeanAccuracy(records, window='all') {
+  const now = new Date().toLocaleDateString('en-CA');
+  let cutoff = '2000-01-01';
+  if (window==='7d')  cutoff = new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
+  if (window==='30d') cutoff = new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
+
+  const filtered = records.filter(r=>r.date>=cutoff && r.date<now && r.resultsAdded && r.gameLeans?.length);
+
+  const cats = {
+    fgML:      { label:'Full Game ML',    color:'var(--teal)',   hits:0, total:0 },
+    fgTotal:   { label:'Full Game Total', color:'var(--amber)',  hits:0, total:0 },
+    f5ML:      { label:'F5 ML',           color:'var(--purple)', hits:0, total:0 },
+    f5Total:   { label:'F5 Total',        color:'var(--t2)',     hits:0, total:0 },
+    nrfi:      { label:'NRFI/YRFI',       color:'var(--green)',  hits:0, total:0 },
+  };
+
+  for (const day of filtered) {
+    for (const lean of (day.gameLeans||[])) {
+      if (lean.fgMLResult !== null && lean.fgML)      { cats.fgML.total++;    if (lean.fgMLResult===1)    cats.fgML.hits++; }
+      if (lean.fgTotalResult !== null && lean.fgTotalLean) { cats.fgTotal.total++; if (lean.fgTotalResult===1) cats.fgTotal.hits++; }
+      if (lean.f5MLResult !== null && lean.f5ML)      { cats.f5ML.total++;    if (lean.f5MLResult===1)    cats.f5ML.hits++; }
+      if (lean.f5TotalResult !== null && lean.f5TotalLean) { cats.f5Total.total++; if (lean.f5TotalResult===1) cats.f5Total.hits++; }
+      if (lean.nrfiResult !== null && (lean.nrfiLean||lean.yrfiLean)) { cats.nrfi.total++; if (lean.nrfiResult===1) cats.nrfi.hits++; }
+    }
+  }
+  return cats;
+}
 
 function computeSignalAccuracy(records, window='all') {
   const now = new Date().toLocaleDateString('en-CA');
@@ -2368,6 +2432,25 @@ function renderHistory() {
         </div>`:'<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:8px">Tracking begins when signal lock is saved pre-game</div>'}
       </div>`;
     }
+  // Game lean accuracy section
+  const leanAcc = computeLeanAccuracy(historyRecords, histWindow);
+  html += `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 10px">Game Lean Accuracy</div>`;
+  html += `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">ML, totals, and first inning leans tracked against final results</div>`;
+  html += '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px">';
+  for (const [key, b] of Object.entries(leanAcc)) {
+    const rate = b.total > 0 ? +(b.hits/b.total*100).toFixed(1) : 0;
+    const rateColor = b.total===0?'var(--t3)':rate>=60?'var(--green)':rate>=50?'var(--teal)':'var(--amber)';
+    html += `<div class="htier" style="margin-bottom:0">
+      <div style="font-size:10px;font-weight:700;color:${b.color};margin-bottom:8px">${b.label}</div>
+      <div class="htier-stats">
+        <div class="htier-stat"><div class="htier-stat-val" style="color:${rateColor}">${b.total>0?rate+'%':'—'}</div><div class="htier-stat-lbl">Hit Rate</div></div>
+        <div class="htier-stat"><div class="htier-stat-val" style="color:${b.total>0?'var(--t1)':'var(--t3)'}">${b.total>0?b.hits+'/'+b.total:'—'}</div><div class="htier-stat-lbl">W / Tracked</div></div>
+      </div>
+      ${b.total===0?'<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:6px">Tracking from today</div>':''}
+    </div>`;
+  }
+  html += '</div>';
+
   // Daily log
   html += `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 10px">Daily Log</div>`;
   const etNow = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
