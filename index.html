@@ -5885,7 +5885,7 @@ async function init(){
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
-      setTimeout(lockSignals, 1500); // lock after first render
+      // lockSignals fires after splits+streaks load (not here) — ensures all signals accurate
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
       Promise.allSettled([
@@ -5908,6 +5908,9 @@ async function init(){
         renderForecast(true); // repopulate F1_CACHE silently
         // Pre-fetch H2H for all matchups now that allRows is ready
         setTimeout(prefetchAllH2H, 500);
+        // Lock signals NOW — all data loaded (streaks, splits, park splits)
+        // This ensures park boost, pitcher target, and streak signals are all accurate
+        lockSignals();
         // Only re-render the active view, not everything
         if (curView === 'today') renderToday();
         else if (curView === 'players') renderPlayers();
