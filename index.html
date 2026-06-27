@@ -2530,29 +2530,15 @@ function lockSignals() {
 }
 
 function getSignalsLocked(r) {
-  // Lock streak signal (index 3) only — badge recalculates from live signals
-  // This allows weather/pitcher/wind changes to affect tier while preventing
-  // mid-game HR streak inflation from changing badges
+  // Only lock badge and count — prevents mid-game tier/ranking changes
+  // All individual signals stay fully live (streak, weather, pitcher, pull)
   if (SIGNAL_LOCK[r.name]) {
     const locked = SIGNAL_LOCK[r.name];
     const live   = getSignals(r);
-    // Use live signals but with locked streak
-    const lockedSignals = live.signals.map((s, i) => {
-      if (i === 3) return {...s, active: locked.signals[3] ?? s.active};
-      return s;
-    });
-    // Recalculate badge from locked-streak signals
-    const lockedCount = lockedSignals.filter(s => s.active).length;
-    const hrp = r.hrp || 0;
-    const lockedBadge = lockedCount >= 6 ? { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' }
-      : lockedCount >= 5               ? { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' }
-      : lockedCount >= 4               ? { label:'⭐ All-Star Play', color:'var(--teal)',   bg:'rgba(45,212,191,.10)',  bd:'rgba(45,212,191,.25)' }
-      : lockedCount >= 3               ? { label:'💡 Value Play',    color:'var(--purple)', bg:'rgba(167,139,250,.10)', bd:'rgba(167,139,250,.25)' }
-      : null;
     return {
-      signals: lockedSignals,
-      count:   lockedCount,
-      badge:   lockedBadge,
+      signals: live.signals, // fully live
+      count:   locked.count, // locked — prevents mid-game ranking changes
+      badge:   locked.badge, // locked — prevents mid-game tier jumps
       ci:      live.ci,
     };
   }
@@ -2931,8 +2917,6 @@ async function loadStreakData() {
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
       console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       _dataReady.streaks = true;
-      // Lock signals NOW — streaks are loaded so streak signal will be correct
-      lockSignals();
       rebuild(); renderAll();
     }
   } catch(e) {
@@ -5901,7 +5885,7 @@ async function init(){
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
-      // lockSignals fires after streaks load to ensure streak signal is correct
+      setTimeout(lockSignals, 1500); // lock after first render
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
       Promise.allSettled([
