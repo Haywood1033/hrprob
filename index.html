@@ -2686,7 +2686,7 @@ function rebuild(){
   if(sel){
     const prev=sel.value;
     sel.innerHTML='<option value="">All Games</option>'
-      + games.map(g=>`<option value="${g.pk}">${g.away} @ ${g.home} · ${g.time}</option>`).join('');
+      + [...games].sort(gameTimeSort).map(g=>`<option value="${g.pk}">${g.away} @ ${g.home} · ${g.time}</option>`).join('');
     if(prev&&games.some(g=>g.pk===+prev))sel.value=prev;
     else if(gameFilt)sel.value=gameFilt;
   }
@@ -3614,6 +3614,22 @@ let _todayPill = 'overview';
 function goToTargets(){setView('targets',document.querySelector('.tab[onclick*=targets]'));}
 function goToSignals(){signalFilt=true;document.getElementById('sigfilt')?.classList.add('on');setView('players',document.querySelector('.tab[onclick*=players]'));}
 
+
+function gameTimeSort(a, b) {
+  // Sort games by start time ascending
+  const parseTime = (t) => {
+    if (!t) return 9999;
+    const m = t.match(/(\d+):(\d+)\s*(AM|PM)/i);
+    if (!m) return 9999;
+    let h = parseInt(m[1]);
+    const isPM = m[3].toUpperCase() === 'PM';
+    if (isPM && h !== 12) h += 12;
+    if (!isPM && h === 12) h = 0;
+    return h * 60 + parseInt(m[2]);
+  };
+  return parseTime(a.time) - parseTime(b.time);
+}
+
 function setTodayPill(pill, btn) {
   _todayPill = pill;
   // Update pill buttons
@@ -3727,7 +3743,7 @@ function renderBuilder() {
           const avgHRP = rows.length ? rows.reduce((s,r)=>s+r.hrp,0)/rows.length : 0;
           return (pf-1)*100 + topHR*3 + sigs*2 + avgHRP;
         };
-        return score(b)-score(a);
+        return score(b)-score(a) || gameTimeSort(a,b); // time as tiebreaker
       }).map(g => {
         const park = getPark(g.home) || {};
         const wx   = WX[g.home] || {};
@@ -4591,7 +4607,7 @@ function renderToday() {
   })();
 
   // Highest scoring projected game
-  const runProjections = games.map(g => ({g, rp: calcGameRunProjection(g)}))
+  const runProjections = [...games].sort(gameTimeSort).map(g => ({g, rp: calcGameRunProjection(g)}))
     .sort((a,b) => b.rp.total - a.rp.total);
   const topGame = runProjections[0];
   const topGameHTML = topGame ? (()=>{
@@ -4617,7 +4633,7 @@ function renderToday() {
   })() : '';
 
   // ── F5 LEANS ─────────────────────────────────────────────────
-  const f5Leans = games.map(g => {
+  const f5Leans = [...games].sort(gameTimeSort).map(g => {
     const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
     const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
     const awayF5 = calcF5Projection(hp,'home',g,g.away);
