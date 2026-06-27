@@ -4691,18 +4691,7 @@ function renderToday() {
 
   // ── GAME STRIP ──────────────────────────────────────────────
   const stripHTML = '<div class="game-strip">'
-    + [...games].sort((a,b) => {
-        const score = (g) => {
-          const park = getPark(g.home)||{};
-          const rows = allRows.filter(r=>r.gamePk===g.pk);
-          const pf = park.f||1.0;
-          const topHR = rows.filter(r=>r.hrp>=12).length;
-          const sigs = rows.filter(r=>getSignalsLocked(r).count>=3).length;
-          const avgHRP = rows.length ? rows.reduce((s,r)=>s+r.hrp,0)/rows.length : 0;
-          return (pf-1)*100 + topHR*3 + sigs*2 + avgHRP;
-        };
-        return score(b)-score(a);
-      }).map(g => {
+    + [...games].sort(gameTimeSort).map(g => {
       const rp   = calcGameRunProjection(g);
       const park = getPark(g.home) || {};
       const wx   = WX[g.home] || {};
