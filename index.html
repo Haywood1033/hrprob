@@ -456,6 +456,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
     <div class="loading-step" id="lstep-statcast"><span class="loading-step-icon">⏳</span>Loading Statcast data</div>
     <div class="loading-step" id="lstep-weather"><span class="loading-step-icon">⏳</span>Loading weather &amp; park data</div>
     <div class="loading-step" id="lstep-h2h"><span class="loading-step-icon">⏳</span>Loading career matchup data</div>
+    <div class="loading-step" id="lstep-bullpen"><span class="loading-step-icon">⏳</span>Loading bullpen data</div>
   </div>
 </div>
 <header class="hdr">
@@ -778,6 +779,7 @@ function getStreak(name) {
   return STREAK[name] || STREAK[normName(name)] || null;
 }
 
+const BULLPEN = {}; // team bullpen stats: era, hr9, whip, k9
 let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, teamFilt='', statReady=false;
 let curView='players';
 
@@ -978,6 +980,28 @@ function hrProb(b,park,wx,pit,order){
         p += (h2hAvg - lgAvg) * weight * 0.15;
       }
     }
+  }
+
+  // ── BULLPEN EXPOSURE ADJUSTMENT ──────────────────────────────
+  // Later order batters and short-starter games get bullpen exposure
+  // Bullpen HR/9 can differ significantly from starter quality
+  const oppBullpen = BULLPEN[b._team] ? null : null; // batter's team bullpen doesn't matter
+  const pitTeam = pit._team || '';
+  const pitBullpen = BULLPEN[pitTeam] || null;
+  if (pitBullpen) {
+    const lgBullpenHR9 = 1.25; // league avg bullpen HR/9
+    const bpDiff = pitBullpen.hr9 - lgBullpenHR9;
+    const ps = PITCHER_SPLITS[pit.name] || {};
+    const avgIP = ps.avgIP || 6.0;
+    // Short starter = more bullpen exposure for whole lineup
+    const starterShort = avgIP < 5.5;
+    // Later order batters see more bullpen
+    const ord0 = order || 5;
+    const bpExposure = starterShort ? 0.35
+                     : ord0 >= 7 ? 0.25
+                     : ord0 >= 5 ? 0.12
+                     : 0.05;
+    p += bpDiff * bpExposure * 0.018;
   }
 
   // ── BATTING ORDER POSITION ────────────────────────────────────
@@ -2669,6 +2693,7 @@ function rebuild(){
           name:canonName,team,bats:getBatSide(canonName, p.batSide, bs),
           order:p.battingOrder||(i+1),
           source:p.source||(confirmed?'confirmed':'projected'),
+          _team:team,
           ev:bs.ev||88.5,barrel:bs.ba||8,hh:bs.hh||37,
           xwoba:bs.xw||0.310,iso:bs.iso||0.150,hrp,
           park,wx,pit,
@@ -2947,6 +2972,21 @@ async function fetchStreakForPlayer(name, playerId) {
 
     return { hr, avg, slg, obp, ab, games, flame };
   } catch(e) { return null; }
+}
+
+
+async function loadBullpenData() {
+  try {
+    const r = await safeFetch('/api/bullpen', 10000);
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.bullpen) {
+      Object.assign(BULLPEN, d.bullpen);
+      console.log('Bullpen data loaded:', Object.keys(BULLPEN).length, 'teams');
+    }
+  } catch(e) {
+    console.warn('Bullpen fetch failed:', e.message);
+  }
 }
 
 async function loadStreakData() {
@@ -3945,6 +3985,7 @@ function renderFullGame() {
           + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:4px">Proj Score</div>'
           + '<div style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--t1)">'+awayFG.runsAllowed+' – '+homeFG.runsAllowed+'</div>'
           + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">'+g.away+' – '+g.home+'</div>'
+          + (BULLPEN[g.away]||BULLPEN[g.home] ? '<div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:2px">'+(BULLPEN[g.away]?g.away+' BP ERA '+BULLPEN[g.away].era:'')+(BULLPEN[g.away]&&BULLPEN[g.home]?' · ':'')+(BULLPEN[g.home]?g.home+' BP ERA '+BULLPEN[g.home].era:'')+'</div>' : '')
           + '</div>'
           + '</div></div>';
       }).join('')
@@ -5103,6 +5144,8 @@ function calcF5Projection(pit, side, g, oppTeam) {
 
 
 function calcFullGameProjection(pit, side, g, oppTeam) {
+  // Attach team to pitcher for bullpen lookup
+  if (!pit._team) pit._team = side === 'home' ? g.home : g.away;
   // Full game projection — extends F5 with bullpen + later inning adjustments
   const f5 = calcF5Projection(pit, side, g, oppTeam);
   const ps  = PITCHER_SPLITS[pit.name] || {};
@@ -5111,7 +5154,11 @@ function calcFullGameProjection(pit, side, g, oppTeam) {
 
   // Innings 6-9 bullpen adjustment
   // League avg bullpen allows ~4.5 runs/9 innings (worse than starters)
-  const bullpenERA = 4.50;
+  // Use real team bullpen ERA if available
+  const pitTeam0 = side === 'home' ? g.home : g.away;
+  const teamBullpen = BULLPEN[pitTeam0];
+  const bullpenERA = teamBullpen ? teamBullpen.era : 4.50;
+  const bullpenHR9 = teamBullpen ? teamBullpen.hr9 : 1.25;
   const avgIP = ps.avgIP || 6.0;
   const starterInnings = Math.min(avgIP, 7.0); // starter typically goes 5-7
   const bullpenInnings = Math.max(0, 9 - starterInnings);
@@ -6132,6 +6179,7 @@ async function init(){
       Promise.allSettled([
         loadStreakData(),
         loadSplitsData(),
+        loadBullpenData(),
       ]).then(() => {
         rebuild();
         // Silent re-render — update current view without full flash
