@@ -1125,7 +1125,7 @@ async function loadStatcast(){
 
   setStatus('live',`${games.length} games · Statcast live (${nb} batters)`);
   _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
-  setTimeout(lockSignals, 500); // lock signals after first full render
+  // lockSignals fires after streaks load (not here) to ensure streak signal is correct
   rebuild(); renderAll();
   // Load hot streak data for top 40 players
   setTimeout(loadStreakData, 1500); // load streaks after rows are built
@@ -2931,6 +2931,8 @@ async function loadStreakData() {
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
       console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       _dataReady.streaks = true;
+      // Lock signals NOW — streaks are loaded so streak signal will be correct
+      lockSignals();
       rebuild(); renderAll();
     }
   } catch(e) {
@@ -5899,7 +5901,7 @@ async function init(){
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
-      setTimeout(lockSignals, 1500); // lock signals after first full render
+      // lockSignals fires after streaks load to ensure streak signal is correct
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
       Promise.allSettled([
