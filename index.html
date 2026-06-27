@@ -2671,8 +2671,8 @@ function rebuild(){
   for(const g of games){
     const park=getPark(g.home)||{f:1.0};
     const wx=WX[g.home]||{};
-    const awayPit={...g.hp,...(getPitcher(g.hp.name)||{})};
-    const homePit={...g.ap,...(getPitcher(g.ap.name)||{})};
+    const awayPit={...g.hp,...(getPitcher(g.hp.name)||{}), _team: g.home}; // home pitcher + home bullpen face away batters
+    const homePit={...g.ap,...(getPitcher(g.ap.name)||{}), _team: g.away}; // away pitcher + away bullpen face home batters
 
     [[g.awayLineup,g.away,awayPit],[g.homeLineup,g.home,homePit]].forEach(([lineup,team,pit])=>{
       const confirmed=lineup.length>0;
@@ -4997,8 +4997,8 @@ async function renderTomorrow() {
   const tRows = [];
   for (const g of tGames) {
     const park=getPark(g.home)||{f:1.0};const wx=tWX[g.home]||{};
-    [[g.away,{...g.hp,...(getPitcher(g.hp.name)||{})}],
-     [g.home,{...g.ap,...(getPitcher(g.ap.name)||{})}]].forEach(([team,pit]) => {
+    [[g.away,{...g.hp,...(getPitcher(g.hp.name)||{}), _team:g.home}],
+     [g.home,{...g.ap,...(getPitcher(g.ap.name)||{}), _team:g.away}]].forEach(([team,pit]) => {
       const roster = ROSTERS[team]||[];
       const batters = roster
         .map(p => ({p, bs:getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0}}))
