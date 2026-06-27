@@ -1689,13 +1689,20 @@ async function loadHistory() {
     const etStr0 = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
     const etDate0 = new Date(etStr0);
     const todayET = etDate0.toLocaleDateString('en-CA');
+    const etHour0 = etDate0.getHours();
     const todayRecord = historyRecords.find(r => r.date === todayET);
     if (todayRecord?.signalLock && Object.keys(todayRecord.signalLock).length > 0) {
-      // Always restore from DB — clears any stale in-memory state first
-      Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
-      Object.assign(SIGNAL_LOCK, todayRecord.signalLock);
-      _signalLockDate = todayET;
-      console.log('Signal lock restored from DB:', Object.keys(SIGNAL_LOCK).length, 'players');
+      // After 1pm: always restore from DB (games in progress, lock is authoritative)
+      // Before 1pm: only restore if we haven't built a fresh lock yet this session
+      const shouldRestore = etHour0 >= 13 || Object.keys(SIGNAL_LOCK).length === 0;
+      if (shouldRestore) {
+        Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
+        Object.assign(SIGNAL_LOCK, todayRecord.signalLock);
+        _signalLockDate = todayET;
+        console.log('Signal lock restored from DB:', Object.keys(SIGNAL_LOCK).length, 'players');
+      } else {
+        console.log('Signal lock already fresh — skipping DB restore');
+      }
     } else {
       // No DB lock yet — will be built fresh after statcast loads
       console.log('No DB signal lock for today — will build fresh');
@@ -2490,10 +2497,13 @@ function lockSignals() {
   }
 
   // Only build fresh lock before 1pm ET — after that games are in progress
-  // and streak/hot data would reflect mid-game HRs
   if (etHour >= 13) {
-    console.log('Signal lock: games in progress, not building fresh lock mid-day');
-    return;
+    // After 1pm: if DB has a lock, use it; otherwise build once and save
+    if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
+      console.log('Signal lock: already active post-1pm, not rebuilding');
+      return;
+    }
+    console.log('Signal lock: post-1pm but no lock exists, building once from current data');
   }
 
   // Build fresh lock from current allRows (pre-game state)
