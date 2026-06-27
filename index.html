@@ -3570,6 +3570,7 @@ function openPitcherModal(pitName, team, oppTeam, side, gamePk) {
       </div>
     </div>
     ${renderF5Section(g)}
+    ${renderFullGameSection(g)}
     <div style="border-top:1px solid var(--bd)">
       <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;padding:10px 16px 0">Platoon Splits</div>
       <div class="pit-modal-grid">${mkPlatoon('vs Left-Handed Batters',vsLHB,vsRHB)}${mkPlatoon('vs Right-Handed Batters',vsRHB,vsLHB)}</div>
@@ -3643,6 +3644,7 @@ function setTodayPill(pill, btn) {
   const pane = document.getElementById('pane-'+pill);
   if (pane) pane.classList.add('on');
   if (pill === 'forecast') renderForecast();
+  if (pill === 'fg') renderFullGame();
   if (pill === 'builder') renderBuilder();
   if (pill === 'f1') {
     if (!F1_CACHE.length) renderForecast(true);
@@ -3887,6 +3889,66 @@ function buildParlayResults(selectedGames, bestPerGame, builderScore, calcParlay
 function buildParlay() {
   // Scroll to results
   document.getElementById('builder-results')?.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+
+function renderFullGame() {
+  const el = document.getElementById('fg-content');
+  if (!el) return;
+  if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
+
+  const fgLeans = [...games].sort(gameTimeSort).map(g => {
+    const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
+    const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
+    const awayFG = calcFullGameProjection(hp, 'home', g, g.away);
+    const homeFG = calcFullGameProjection(ap, 'away', g, g.home);
+    const fgTotal = +(awayFG.runsAllowed + homeFG.runsAllowed).toFixed(1);
+    const ou      = GAME_ODDS[g.away+'@'+g.home]?.ou || null;
+    const edge    = +(awayFG.runsAllowed - homeFG.runsAllowed).toFixed(1);
+    const mlLean  = edge > 0.4 ? g.away : edge < -0.4 ? g.home : null;
+    const totalLean = ou ? (fgTotal > ou+0.4 ? 'over' : fgTotal < ou-0.4 ? 'under' : null) : null;
+    const confidence = Math.abs(edge) >= 1.0 ? 'high' : Math.abs(edge) >= 0.5 ? 'mid' : 'low';
+    return { g, ap, hp, awayFG, homeFG, fgTotal, edge, mlLean, ou, totalLean, confidence };
+  });
+
+  const tcTotal = (t) => t>=9?'var(--red)':t>=7.5?'var(--amber)':'var(--green)';
+  const leanC   = (lean) => lean==='over'?'var(--red)':lean==='under'?'var(--green)':'var(--t3)';
+
+  el.innerHTML = '<div style="padding:8px 0">'
+    + fgLeans.map(({g,ap,hp,awayFG,homeFG,fgTotal,edge,mlLean,ou,totalLean,confidence})=>{
+        const mlColor = mlLean ? 'var(--teal)' : 'var(--t3)';
+        const confBadge = confidence==='high'
+          ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(52,211,153,.1);color:var(--green);border:1px solid rgba(52,211,153,.2)">HIGH CONF</span>'
+          : confidence==='mid'
+          ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(251,191,36,.1);color:var(--amber);border:1px solid rgba(251,191,36,.2)">MID</span>'
+          : '';
+        return '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:8px;padding:12px 14px;margin-bottom:8px">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+          + '<div><div style="font-size:12px;font-weight:700;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
+          + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">'+hp.name+' vs '+ap.name+' · '+g.time+'</div></div>'
+          + confBadge + '</div>'
+          + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+          // ML lean
+          + '<div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">'
+          + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:4px">ML Lean</div>'
+          + '<div style="font-size:14px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+( mlLean||'Even')+'</div>'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">'+Math.abs(edge).toFixed(1)+' run edge</div>'
+          + '</div>'
+          // Total projection
+          + '<div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">'
+          + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:4px">Proj Total</div>'
+          + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:'+tcTotal(fgTotal)+'">'+fgTotal+'</div>'
+          + (ou?'<div style="font-size:9px;font-family:var(--mono);color:'+leanC(totalLean)+'">O/U '+ou+(totalLean?' → '+totalLean.toUpperCase():'')+'</div>':'<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">no line</div>')
+          + '</div>'
+          // Score split
+          + '<div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">'
+          + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:4px">Proj Score</div>'
+          + '<div style="font-size:12px;font-weight:700;font-family:var(--mono);color:var(--t1)">'+awayFG.runsAllowed+' – '+homeFG.runsAllowed+'</div>'
+          + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">'+g.away+' – '+g.home+'</div>'
+          + '</div>'
+          + '</div></div>';
+      }).join('')
+    + '</div>';
 }
 
 function closePlayerModal() {
@@ -4791,8 +4853,8 @@ function renderToday() {
     + kpiHTML
     + '</div>'
     + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','props','f5','f1','forecast','envs','builder'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',f1:'1st Inning',forecast:'Forecast',envs:'Environments',builder:'⚡ Builder'};
+    + ['overview','signals','props','f5','fg','f1','forecast','envs','builder'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',fg:'Full Game',f1:'1st Inning',forecast:'Forecast',envs:'Environments',builder:'⚡ Builder'};
         return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
       }).join('')
     + '</div>'
@@ -4813,6 +4875,9 @@ function renderToday() {
     + '</div>'
     + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
     + f5HTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='fg'?' on':'')+'" id="pane-fg">'
+    + '<div id="fg-content"></div>'
     + '</div>'
     + '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id="pane-f1">'
     + f1HTML
@@ -5034,6 +5099,109 @@ function calcF5Projection(pit, side, g, oppTeam) {
     oppXwoba:      +avgXwoba.toFixed(3),
     hotCount,
   };
+}
+
+
+function calcFullGameProjection(pit, side, g, oppTeam) {
+  // Full game projection — extends F5 with bullpen + later inning adjustments
+  const f5 = calcF5Projection(pit, side, g, oppTeam);
+  const ps  = PITCHER_SPLITS[pit.name] || {};
+  const park = getPark(side==='home' ? g.home : g.away) || {f:1.0};
+  const wx   = WX[g.home] || {};
+
+  // Innings 6-9 bullpen adjustment
+  // League avg bullpen allows ~4.5 runs/9 innings (worse than starters)
+  const bullpenERA = 4.50;
+  const avgIP = ps.avgIP || 6.0;
+  const starterInnings = Math.min(avgIP, 7.0); // starter typically goes 5-7
+  const bullpenInnings = Math.max(0, 9 - starterInnings);
+  const bullpenRuns = (bullpenERA / 9) * bullpenInnings * (park.f || 1.0);
+
+  // Opp lineup quality for later innings (batters 7-9 see bullpen more)
+  const oppRows = allRows.filter(r=>r.team===oppTeam).sort((a,b)=>a.order-b.order).slice(0,9);
+  const avgXwoba = oppRows.length ? oppRows.reduce((s,r)=>s+(r.xwoba||0.310),0)/oppRows.length : 0.310;
+
+  // Full game runs = starter F5 runs + bullpen innings
+  let totalRuns = f5.runsAllowed + bullpenRuns * (avgXwoba / 0.310);
+
+  // Wind effect carries through full game
+  const orient = park.orient || 180;
+  const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+  const windOut = diff<45||diff>315;
+  if (park.roof!=='dome' && wx.ws && windOut && wx.ws>=8) totalRuns += 0.20;
+
+  return {
+    runsAllowed:   +Math.max(1.0, Math.min(9.0, totalRuns)).toFixed(1),
+    f5Runs:        f5.runsAllowed,
+    bullpenRuns:   +bullpenRuns.toFixed(1),
+    starterInnings: +starterInnings.toFixed(1),
+    recentERA:     f5.recentERA,
+    oppXwoba:      f5.oppXwoba,
+  };
+}
+
+function renderFullGameSection(g) {
+  const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
+  const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
+
+  const awayFG = calcFullGameProjection(hp, 'home', g, g.away);
+  const homeFG = calcFullGameProjection(ap, 'away', g, g.home);
+
+  const fgTotal = +(awayFG.runsAllowed + homeFG.runsAllowed).toFixed(1);
+  const ou      = GAME_ODDS[g.away+'@'+g.home]?.ou || null;
+
+  // ML lean
+  const edge    = +(awayFG.runsAllowed - homeFG.runsAllowed).toFixed(1);
+  const mlLean  = edge > 0.4 ? g.away : edge < -0.4 ? g.home : null;
+  const mlEdge  = Math.abs(edge).toFixed(1);
+
+  // Total lean
+  const totalLean = ou ? (fgTotal > ou + 0.4 ? 'over' : fgTotal < ou - 0.4 ? 'under' : null) : null;
+  const tcTotal   = fgTotal>=9?'var(--red)':fgTotal>=7.5?'var(--amber)':'var(--green)';
+  const tcAway    = awayFG.runsAllowed>=5?'var(--red)':awayFG.runsAllowed>=3.5?'var(--amber)':'var(--green)';
+  const tcHome    = homeFG.runsAllowed>=5?'var(--red)':homeFG.runsAllowed>=3.5?'var(--amber)':'var(--green)';
+  const leanColor = totalLean==='over'?'var(--red)':totalLean==='under'?'var(--green)':'var(--t3)';
+
+  return `<div class="f5-section" style="border-top:2px solid var(--bd);margin-top:0">
+    <div class="f5-header">
+      <span class="f5-header-title">Full Game Projection</span>
+      <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">9 innings model · starter + bullpen</span>
+    </div>
+
+    <!-- Score projection -->
+    <div class="f5-score">
+      <div class="f5-team">
+        <div class="f5-team-score" style="color:${tcAway}">${awayFG.runsAllowed}</div>
+        <div class="f5-team-lbl">${g.away} proj runs</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">starter ${awayFG.f5Runs} + pen ${awayFG.bullpenRuns}</div>
+      </div>
+      <div class="f5-vs">—</div>
+      <div class="f5-team">
+        <div class="f5-team-score" style="color:${tcHome}">${homeFG.runsAllowed}</div>
+        <div class="f5-team-lbl">${g.home} proj runs</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">starter ${homeFG.f5Runs} + pen ${homeFG.bullpenRuns}</div>
+      </div>
+    </div>
+
+    <!-- Leans -->
+    <div class="f5-lean">
+      <div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">ML Lean</div>
+        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${mlLean?'var(--teal)':'var(--t3)'}">${mlLean||'Too close'}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${mlLean?mlEdge+' run edge':'<0.4 runs'}</div>
+      </div>
+      <div style="text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">Total</div>
+        <div style="font-size:24px;font-weight:700;font-family:var(--mono);color:${tcTotal}">${fgTotal}</div>
+        ${ou?`<div style="font-size:10px;font-family:var(--mono);color:${leanColor};font-weight:700">${totalLean?totalLean.toUpperCase()+' '+ou:'Push ~'+ou}</div>`:'<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">no line</div>'}
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em">Total Lean</div>
+        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${leanColor}">${totalLean?totalLean.toUpperCase():'—'}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${ou?'vs O/U '+ou:'no line'}</div>
+      </div>
+    </div>
+  </div>`;
 }
 
 function renderF5Section(g) {
