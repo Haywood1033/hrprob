@@ -4685,12 +4685,18 @@ function renderToday() {
   // Best play composite score
   const scorePlayer = (r) => {
     const {signals, count, ci} = getSignalsLocked(r);
-    // Use locked streak signal directly — prevents mid-game HR streak inflation
+    // Probability is the primary factor, signals are multipliers not additive dominators
+    // A 7% player with 4 signals should NOT beat a 20% player with 2 signals
     const streakSignalLocked = signals[3]?.active ?? false;
     const streakFlame = STREAK[r.name]?.flame;
-    const streakBonus = streakSignalLocked ? (streakFlame === '🔥🔥' ? 12 : 6) : 0;
+    const streakBonus = streakSignalLocked ? (streakFlame === '🔥🔥' ? 3 : 1.5) : 0;
     const ps = PARK_SPLITS[r.name];
-    return (count*20) + streakBonus + (ps?.flag==='boost'?8:0) + (ci.tier==='high'?6:ci.tier==='mid'?3:0) + r.hrp*0.8;
+    // Probability weighted heavily (×3), signals as modest boost
+    return r.hrp * 3
+      + count * 5          // was 20 — signals add edge not override probability
+      + streakBonus        // was 12/6
+      + (ps?.flag==='boost' ? 2 : 0)  // was 8
+      + (ci.tier==='high' ? 2 : ci.tier==='mid' ? 1 : 0); // was 6/3
   };
   const best = [...players].sort((a,b)=>scorePlayer(b)-scorePlayer(a))[0];
 
