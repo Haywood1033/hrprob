@@ -1001,7 +1001,7 @@ function hrProb(b,park,wx,pit,order){
                      : ord0 >= 7 ? 0.25
                      : ord0 >= 5 ? 0.12
                      : 0.05;
-    p += bpDiff * bpExposure * 0.018;
+    p += bpDiff * bpExposure * 0.18; // ~1-2pp adjustment for bad bullpen, late order
   }
 
   // ── BATTING ORDER POSITION ────────────────────────────────────
