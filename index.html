@@ -913,7 +913,7 @@ function hrProb(b,park,wx,pit,order){
 
   // ── PITCHER PLATOON SPLITS ────────────────────────────────────
   const pitName = pit.name || pit._name;
-  const pitSplits = pitName ? PITCHER_SPLITS[pitName] : null;
+  const pitSplits = pitName ? (PITCHER_SPLITS[pitName] || PITCHER_SPLITS[normName(pitName)]) : null;
   if (pitSplits) {
     const pitSplitKey = bats === 'L' ? 'vsLHB' : bats === 'R' ? 'vsRHB' : null;
     const pitThisSplit = pitSplitKey ? pitSplits[pitSplitKey] : null;
@@ -991,7 +991,7 @@ function hrProb(b,park,wx,pit,order){
   if (pitBullpen) {
     const lgBullpenHR9 = 1.25; // league avg bullpen HR/9
     const bpDiff = pitBullpen.hr9 - lgBullpenHR9;
-    const ps = PITCHER_SPLITS[pit.name] || {};
+    const ps = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)] || {};
     const avgIP = ps.avgIP || 6.0;
     // Short starter = more bullpen exposure for whole lineup
     const starterShort = avgIP < 5.5;
@@ -2041,7 +2041,7 @@ function renderForecast(silent=false) {
   F1_CACHE = f1Games; // share with Today tab
 
   const flagCard = ({g,eitherF1,awayF1,homeF1}) => {
-    const hasReal = PITCHER_SPLITS[g.hp.name]?.f1 || PITCHER_SPLITS[g.ap.name]?.f1;
+    const hasReal = (PITCHER_SPLITS[g.hp.name] || PITCHER_SPLITS[normName(g.hp.name)])?.f1 || (PITCHER_SPLITS[g.ap.name] || PITCHER_SPLITS[normName(g.ap.name)])?.f1;
     return '<div style="background:var(--bg3);border:1px solid var(--bd);border-radius:6px;padding:10px 12px">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
       +'<div style="font-size:12px;font-weight:600;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
@@ -3607,8 +3607,8 @@ function openPitcherModal(pitName, team, oppTeam, side, gamePk) {
   if (!g) return;
   const pitRaw = side === 'home' ? g.hp : g.ap;
   const pit    = {...pitRaw, ...(getPitcher(pitRaw.name)||{}), hand: PITCHER_SPLITS[pitRaw.name]?.pitHand || PITCHER_SPLITS[normName(pitRaw.name)]?.pitHand || pitRaw.hand || 'R'};
-  const ps     = PITCHER_SPLITS[pit.name] || {};
-  const pitId  = PITCHER_IDS[pit.name];
+  const ps     = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)] || {};
+  const pitId  = PITCHER_IDS[pit.name] || PITCHER_IDS[normName(pit.name)];
   const park   = getPark(side==='home' ? g.home : g.away) || {};
 
   const xera   = pit.xera || pit.era || 4.50;
@@ -4312,7 +4312,7 @@ async function loadH2HForModal(batterName, pitcherName, batterId, pitcherId) {
   if (!el) return;
   try {
     // Get pitcher ID if not cached
-    let pid = pitcherId || PITCHER_IDS[pitcherName];
+    let pid = pitcherId || PITCHER_IDS[pitcherName] || PITCHER_IDS[normName(pitcherName)];
     if (!pid) {
       const sr = await fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(pitcherName)}&sportId=1`);
       const sd = await sr.json();
@@ -5175,7 +5175,7 @@ async function renderTomorrow() {
 function calcF5Projection(pit, side, g, oppTeam) {
   // F5 runs ≈ 55% of full game projection (5 innings of 9)
   // But adjusted for starter quality specifically
-  const ps     = PITCHER_SPLITS[pit.name] || {};
+  const ps     = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)] || {};
   const park   = getPark(side==='home' ? g.home : g.away) || {f:1.0};
   const wx     = WX[g.home] || {};
 
@@ -5237,7 +5237,7 @@ function calcFullGameProjection(pit, side, g, oppTeam) {
   if (!pit._team) pit._team = side === 'home' ? g.home : g.away;
   // Full game projection — extends F5 with bullpen + later inning adjustments
   const f5 = calcF5Projection(pit, side, g, oppTeam);
-  const ps  = PITCHER_SPLITS[pit.name] || {};
+  const ps  = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)] || {};
   const park = getPark(side==='home' ? g.home : g.away) || {f:1.0};
   const wx   = WX[g.home] || {};
 
@@ -5455,12 +5455,12 @@ function renderF5Section(g) {
 }
 
 function buildPitcherCard(pit, team, oppTeam, side, g) {
-  const ps      = PITCHER_SPLITS[pit.name] || {};
+  const ps      = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)] || {};
   const xera    = pit.xera || pit.era || 4.50;
   const whiff   = pit.whiff || 22;
   const hr9     = pit.hr9 || 1.20;
   const gbPct   = pit.gb_pct;
-  const pitId   = PITCHER_IDS[pit.name];
+  const pitId   = PITCHER_IDS[pit.name] || PITCHER_IDS[normName(pit.name)];
   const k_pct   = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
   const expIP   = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
   const expBF   = +(expIP * 3.4).toFixed(0);
