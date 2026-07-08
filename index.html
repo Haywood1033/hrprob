@@ -993,17 +993,21 @@ function hrProb(b,park,wx,pit,order){
                    : h2h.ab >= 10 ? 0.12
                    : 0.08; // 5-9 AB — HR-only signal, small weight
       if (h2h.ab < 10 && h2h.hr === 0) {
-        // No HR in tiny sample — ignore
+        // No HR in tiny sample — but still penalize complete futility (0 hits, high K)
+        // 0/8 with 3Ks is real signal even without HR
+        if (h2h.h === 0 && h2h.ab >= 6) {
+          const kRate = h2h.k / h2h.ab;
+          p -= 0.008 + kRate * 0.010; // e.g. 3K/8AB → -0.008 - 0.00375 = -1.2pp
+        }
       } else {
-        // p is in decimal (0.08 = 8%), diff is already decimal
-        // weight * diff gives fraction of adjustment e.g. 0.08 * 0.30 = +0.024 = +2.4pp
         p += diff * weight;
       }
-      if (h2h.ab >= 10) {
+      // Contact quality adjustment — applies at all sample sizes with hits data
+      if (h2h.ab >= 5) {
         const h2hAvg = h2h.avg || 0;
         const lgAvg  = 0.248;
-        // Small contact quality adjustment
-        p += (h2hAvg - lgAvg) * weight * 0.15;
+        const contactWeight = h2h.ab >= 10 ? weight : weight * 0.5;
+        p += (h2hAvg - lgAvg) * contactWeight * 0.15;
       }
     }
   }
@@ -4275,7 +4279,16 @@ function openPlayerModal(name) {
           ${b.fb_pct?'FB '+b.fb_pct.toFixed(0)+'%':'—'} · ${b.gb_pct?'GB '+b.gb_pct.toFixed(0)+'%':'—'}
           ${b.sweet_spot_pct?'<br>Sweet Spot <span style="color:'+(b.sweet_spot_pct>=38?'var(--green)':b.sweet_spot_pct<=28?'var(--red)':'var(--t2)')+'">'+b.sweet_spot_pct.toFixed(0)+'%</span>':''}
           ${b.ev50?'· EV50 <span style="color:'+(b.ev50>=98?'var(--green)':b.ev50<=89?'var(--red)':'var(--t2)')+'">'+b.ev50.toFixed(1)+'</span>':''}
-          ${b.pull_pct>=44?'<br><span style="color:var(--amber)">Elite pull tendency</span>':b.pull_pct>=40?'<br><span style="color:var(--teal)">Above avg pull tendency</span>':''}
+          ${(() => {
+            const gb = b.gb_pct, fb = b.fb_pct, pull = b.pull_pct;
+            if (!pull || pull < 40) return '';
+            const isGB = gb !== null && gb >= 50;
+            const isMixed = gb !== null && fb !== null && gb > fb;
+            const label = pull >= 44 ? 'Elite' : 'Above avg';
+            const qualifier = isGB ? 'ground ball pull' : isMixed ? 'pull tendency' : 'pull air tendency';
+            const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
+            return '<br><span style="color:'+color+'">'+label+' '+qualifier+'</span>';
+          })()}
         </div>
       </div>
       <div class="pm-cell">
