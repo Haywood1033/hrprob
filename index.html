@@ -2576,10 +2576,16 @@ function pullBadge(name, compact=false) {
   if (isGroundBallPuller) return '';
   // Only block if FB data confirms low air contact
   if (fb !== null && fb < 30) return '';
+  // Only use "pull air" label when FB% confirms ball is actually in the air
+  const isConfirmedAir = fb !== null && fb >= 35;
+  // If GB > FB, it's a mixed profile — don't call it "air"
+  const isMixedProfile = gb !== null && fb !== null && gb > fb;
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
-  const label = `🏏 ${pull.toFixed(0)}% pull air`;
+  const label = isConfirmedAir && !isMixedProfile
+    ? `🏏 ${pull.toFixed(0)}% pull air`
+    : `🏏 ${pull.toFixed(0)}% pull`;
   return compact
     ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}" title="Pull air%: ${pull.toFixed(1)}%">${label}</span>`
     : `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}">${label}</span>`;
@@ -2652,11 +2658,16 @@ function getSignals(r) {
   const pitGb  = pit.gb_pct || null;
   const bGb    = batter.gb_pct || null;
   const bFb    = batter.fb_pct || null;
-  // Pull edge requires air contact — guard against ground ball pullers
-  // Ground ball puller = GB% >= 50 OR confirmed low FB% (< 28)
+  // Guard against ground ball pullers
   const isGroundBallPuller = (bGb !== null && bGb >= 50) || (bFb !== null && bFb < 28);
-  const pullAirValid = !isGroundBallPuller && (bFb === null || bFb >= 30);
-  const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38 && pullAirValid;
+  // Mixed profile — GB% > FB% means pull is not predominantly in the air
+  const isMixedPullProfile = bGb !== null && bFb !== null && bGb > bFb;
+  const pullThreshold  = isMixedPullProfile ? 44 : 40; // higher bar for mixed profiles
+  const pullAirValid   = !isGroundBallPuller && (bFb === null || bFb >= 30);
+  const pullEdgeActive = bPull >= pullThreshold && pitGb !== null && pitGb <= 38 && pullAirValid;
+  const pullLabel      = (bFb !== null && bFb >= 35 && !isMixedPullProfile)
+    ? 'Pull Air% vs Fly Ball Pitcher'
+    : 'Pull% vs Fly Ball Pitcher';
 
   const signals = [
     { key:'park',    active:parkActive,      icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
@@ -2664,7 +2675,7 @@ function getSignals(r) {
     { key:'pitcher', active:pitchActive,     icon:'🎯', label:'Pitcher Matchup',            dim:'opacity:0.2' },
     { key:'streak',  active:streakActive,    icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
     { key:'conf',    active:confActive,      icon:'🔒', label:ci.label+' Confidence',       dim:'opacity:0.2' },
-    { key:'pulledge',active:pullEdgeActive,  icon:'🏏', label:'Pull% vs Fly Ball Pitcher',  dim:'opacity:0.2' },
+    { key:'pulledge',active:pullEdgeActive,  icon:'🏏', label:pullLabel,                   dim:'opacity:0.2' },
   ];
 
   const count = signals.filter(s=>s.active).length;
