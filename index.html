@@ -2575,21 +2575,18 @@ function pullBadge(name, compact=false) {
   const fb   = b.fb_pct;
   const gb   = b.gb_pct;
   if (pull < 40) return '';
-  // Guard against ground ball pullers — consistent with signal logic
+  // Guard against ground ball pullers
   const isGroundBallPuller = (gb !== null && gb >= 50) || (fb !== null && fb < 28);
   if (isGroundBallPuller) return '';
-  // Only block if FB data confirms low air contact
-  if (fb !== null && fb < 30) return '';
-  // Only use "pull air" label when FB% confirms ball is actually in the air
-  const isConfirmedAir = fb !== null && fb >= 35;
-  // If GB > FB, it's a mixed profile — don't call it "air"
+  // Mixed profile — GB > FB means not predominantly a pull air hitter
   const isMixedProfile = gb !== null && fb !== null && gb > fb;
+  if (isMixedProfile) return ''; // remove badge for mixed profiles
+  // Must confirm air contact — FB% >= 35% required to show badge
+  if (fb === null || fb < 35) return '';
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
-  const label = isConfirmedAir && !isMixedProfile
-    ? `🏏 ${pull.toFixed(0)}% pull air`
-    : `🏏 ${pull.toFixed(0)}% pull`;
+  const label = `🏏 ${pull.toFixed(0)}% pull air`;
   return compact
     ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}" title="Pull air%: ${pull.toFixed(1)}%">${label}</span>`
     : `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}">${label}</span>`;
