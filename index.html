@@ -3578,7 +3578,7 @@ function renderPlayers(){
       : '—';
     return `<tr onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" id="pr${i}">
       <td class="rk">${i+1}</td>
-      <td><div class="pn">${r.name}${sb}${kFlag}${parkBadge(r.name,true)}${pullBadge(r.name,true)}</div><div class="pt">${r.team} · ${r.time}</div></td>
+      <td><div class="pn">${r.name}${sb}${kFlag}${parkBadge(r.name,true)}</div><div class="pt">${r.team} · ${r.time}</div></td>
       <td class="mono" style="color:var(--t2)">${r.team}</td>
       <td style="font-size:12px;color:var(--t2)">${r.pitName||'—'}</td>
       <td style="font-size:11px;color:var(--t3)">${r.park?.name||'—'}</td>
@@ -4246,7 +4246,6 @@ function openPlayerModal(name) {
       ${signalPanel(r, false)}
       ${kHTML}
       ${parkBadge(r.name, false)}
-      ${pullBadge(r.name, false)}
     </div>
 
     <!-- Detail grid -->
