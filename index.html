@@ -856,13 +856,31 @@ function hrProb(b,park,wx,pit,order){
   p -= (whiff - 22) * 0.0004;
 
   // ── BATTED BALL PROFILE ──────────────────────────────────────
-  // Pull air% — pulled fly balls have highest HR rate, lg avg ~38%
-  // Only boost if batter isn't GB-dominant (Reynolds case: 41% pull, 51% GB = no air edge)
   const pull_pct = b.pull_pct || null;
+  const fb_pct   = b.fb_pct   || null;
+  const gb_pct   = b.gb_pct   || null;
+
+  // GB% penalty — ground ball hitters hit fewer HRs
+  if (gb_pct !== null) {
+    if (gb_pct >= 55)      p -= (gb_pct - 50) * 0.0025; // 60% GB → -2.5pp
+    else if (gb_pct >= 50) p -= (gb_pct - 50) * 0.0015;
+    else if (gb_pct <= 35) p += (35 - gb_pct) * 0.0010; // low GB = slight boost
+  }
+
+  // FB% boost — fly ball hitters hit more HRs, strong independent signal
+  if (fb_pct !== null) {
+    if (fb_pct >= 40)      p += (fb_pct - 33) * 0.0030; // 45% FB → +3.6pp
+    else if (fb_pct >= 35) p += (fb_pct - 33) * 0.0020;
+    else if (fb_pct <= 25) p -= (33 - fb_pct) * 0.0015; // low FB = penalty
+  }
+
+  // Pull% boost — only meaningful when batter gets ball in the air
+  // Guard against ground ball pullers (Reynolds case: 41% pull, 51% GB = no edge)
   if (pull_pct !== null) {
-    const isAirPuller = b.fb_pct === null || b.fb_pct === undefined || b.fb_pct >= 30;
-    if (pull_pct >= 40 && isAirPuller) p += (pull_pct - 40) * 0.0015;
-    else if (pull_pct <= 33) p -= (33 - pull_pct) * 0.0010;
+    const isGroundBallPuller = (gb_pct !== null && gb_pct >= 50) || (fb_pct !== null && fb_pct < 28);
+    const isAirPuller = !isGroundBallPuller;
+    if (pull_pct >= 40 && isAirPuller) p += (pull_pct - 40) * 0.0080; // was 0.0015
+    else if (pull_pct <= 33)           p -= (33 - pull_pct) * 0.0020;
   }
   // Pitcher GB% — heavy GB pitchers suppress HRs, lg avg ~43%
   const pit_gb = pit.gb_pct || null;
@@ -2544,12 +2562,12 @@ function pullBadge(name, compact=false) {
   const pull = b.pull_pct;
   const fb   = b.fb_pct;
   const gb   = b.gb_pct;
-  // Require pull% >= 40% AND fly ball rate >= 30%
-  // Pull only matters for HRs if the ball gets in the air
-  // Davis: 57% pull, 25% FB → pulled grounders, not air
   if (pull < 40) return '';
-  // Only block if we have FB data confirming low air contact
-  if (fb !== null && fb !== undefined && fb < 30) return '';
+  // Guard against ground ball pullers — consistent with signal logic
+  const isGroundBallPuller = (gb !== null && gb >= 50) || (fb !== null && fb < 28);
+  if (isGroundBallPuller) return '';
+  // Only block if FB data confirms low air contact
+  if (fb !== null && fb < 30) return '';
   const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
   const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
   const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
@@ -2624,10 +2642,12 @@ function getSignals(r) {
   // ── SIGNAL 6: Pull air% + Pitcher GB% edge ───────────────────
   const bPull  = batter.pull_pct || null;
   const pitGb  = pit.gb_pct || null;
-  const bGb = batter.gb_pct || null;
-  const bFb = batter.fb_pct || null;
-  // Pull edge requires air contact — only block when FB data confirms low air contact
-  const pullAirValid = bFb === null || bFb === undefined || bFb >= 30;
+  const bGb    = batter.gb_pct || null;
+  const bFb    = batter.fb_pct || null;
+  // Pull edge requires air contact — guard against ground ball pullers
+  // Ground ball puller = GB% >= 50 OR confirmed low FB% (< 28)
+  const isGroundBallPuller = (bGb !== null && bGb >= 50) || (bFb !== null && bFb < 28);
+  const pullAirValid = !isGroundBallPuller && (bFb === null || bFb >= 30);
   const pullEdgeActive = bPull >= 40 && pitGb !== null && pitGb <= 38 && pullAirValid;
 
   const signals = [
