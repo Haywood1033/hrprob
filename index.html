@@ -4119,19 +4119,17 @@ function renderFullGame() {
 
 
 // ── PULSE TAB ─────────────────────────────────────────────────
-let _pulseGame = 'all'; // selected game filter
+let _pulseGame = 'all';
 
 function renderPulse() {
   const el = document.getElementById('vpulse');
   if (!el) return;
   if (!allRows.length || !games.length) {
-    el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>';
-    return;
+    el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return;
   }
 
-  // Form block helper
   const formBlock = (game) => {
-    if (!game) return '<div style="width:28px;height:28px;border-radius:4px;background:var(--bg3);flex-shrink:0"></div>';
+    if (!game) return '';
     const hasHR  = game.hr > 0;
     const multi  = game.h >= 2;
     const hasHit = game.h === 1;
@@ -4142,12 +4140,11 @@ function renderPulse() {
              : isCold ? 'rgba(239,68,68,.3)'
              : 'var(--bg3)';
     const label = hasHR ? 'HR' : game.h > 0 ? game.h+'H' : game.ab > 0 ? '0' : '—';
-    const tc    = hasHR ? '#000' : 'var(--t2)';
-    const tip   = `${game.date||''} vs ${game.opponent||'?'}: ${game.h}/${game.ab}${game.hr>0?' '+game.hr+'HR':''}`;
-    return `<div title="${tip}" style="width:28px;height:28px;border-radius:4px;background:${bg};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;font-family:var(--mono);color:${tc}">${label}</div>`;
+    const tc = hasHR ? '#000' : 'var(--t1)';
+    const tip = `${game.date||''} vs ${game.opponent||'?'}: ${game.h}/${game.ab}${game.hr>0?' HR':''}`;
+    return `<div title="${tip}" style="min-width:26px;height:26px;border-radius:4px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;font-family:var(--mono);color:${tc};flex-shrink:0">${label}</div>`;
   };
 
-  // Score players
   const scoreR = (r) => {
     const {count,ci} = getSignalsLocked(r);
     const sb = SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?3:1.5) : 0;
@@ -4156,48 +4153,53 @@ function renderPulse() {
   };
 
   // Game pills
-  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">'
-    + `<button onclick="_pulseGame='all';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_pulseGame==='all'?'var(--teal)':'var(--bd)'};background:${_pulseGame==='all'?'rgba(45,212,191,.1)':'var(--bg2)'};color:${_pulseGame==='all'?'var(--teal)':'var(--t2)'};cursor:pointer">All Games</button>`
-    + [...games].sort(gameTimeSort).map(g =>
-        `<button onclick="_pulseGame='${g.pk}';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_pulseGame==g.pk?'var(--teal)':'var(--bd)'};background:${_pulseGame==g.pk?'rgba(45,212,191,.1)':'var(--bg2)'};color:${_pulseGame==g.pk?'var(--teal)':'var(--t2)'};cursor:pointer">${g.away} @ ${g.home}</button>`
-      ).join('')
-    + '</div>';
+  const gamePills = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+    <button onclick="_pulseGame='all';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:5px 12px;border-radius:20px;border:1px solid ${_pulseGame==='all'?'var(--teal)':'var(--bd)'};background:${_pulseGame==='all'?'rgba(45,212,191,.1)':'transparent'};color:${_pulseGame==='all'?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">All Games</button>
+    ${[...games].sort(gameTimeSort).map(g=>`<button onclick="_pulseGame='${g.pk}';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:5px 12px;border-radius:20px;border:1px solid ${_pulseGame==g.pk?'var(--teal)':'var(--bd)'};background:${_pulseGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_pulseGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away} @ ${g.home}</button>`).join('')}
+  </div>`;
 
   // Legend
-  const legend = '<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
-    + [['var(--green)','HR'],['var(--teal)','2+ H'],['rgba(45,212,191,.3)','1H'],['rgba(239,68,68,.3)','0/3+'],['var(--bg3)','—']]
-      .map(([bg,lbl])=>`<div style="display:flex;align-items:center;gap:4px"><div style="width:12px;height:12px;border-radius:2px;background:${bg}"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${lbl}</span></div>`).join('')
-    + '</div>';
+  const legend = `<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    ${[['var(--green)','HR'],['var(--teal)','2+H'],['rgba(45,212,191,.3)','1H'],['rgba(239,68,68,.3)','0/3+'],['var(--bg3)','—']]
+      .map(([bg,lbl])=>`<div style="display:flex;align-items:center;gap:3px"><div style="width:10px;height:10px;border-radius:2px;background:${bg}"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${lbl}</span></div>`).join('')}
+  </div>`;
 
   // ── ALL GAMES VIEW ────────────────────────────────────────────
   if (_pulseGame === 'all') {
-    const ranked = [...allRows].sort((a,b)=>scoreR(b)-scoreR(a)).slice(0,30);
-    const rows = ranked.map(r => {
-      const {count,badge} = getSignalsLocked(r);
-      const streak = STREAK[r.name];
-      const gameLog = streak?.gameLog || [];
-      const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-      return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})" style="display:grid;grid-template-columns:200px 60px 80px 1fr;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
-        <div>
-          <div style="font-size:12px;font-weight:700;color:var(--t1)">${r.name} ${streak?.flame||''}</div>
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · ${r.pit?.name||r.pitName||'—'} · ${r.time}</div>
-        </div>
-        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${hrpColor};text-align:right">${r.hrp.toFixed(1)}%</div>
-        <div style="text-align:center">${badge?`<span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label.split(' ')[0]}</span>`:`<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count}sig</span>`}</div>
-        <div style="display:flex;gap:3px;overflow-x:auto">
-          ${gameLog.length ? gameLog.slice(0,10).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">No data</span>'}
-        </div>
-      </div>`;
-    }).join('');
-
-    el.innerHTML = '<div style="padding:12px 0">' + gamePills + legend
-      + '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">'
-      + '<div style="display:grid;grid-template-columns:200px 60px 80px 1fr;gap:8px;padding:6px 12px;border-bottom:1px solid var(--bd)">'
-      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase">Player</div>'
-      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;text-align:right">HR%</div>'
-      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;text-align:center">Badge</div>'
-      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase">Last 10 Games →</div>'
-      + '</div>' + rows + '</div></div>';
+    const ranked = [...allRows].sort((a,b)=>scoreR(b)-scoreR(a)).slice(0,25);
+    el.innerHTML = `<div style="padding:12px 0">
+      ${gamePills}${legend}
+      <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+        ${ranked.map(r => {
+          const {count,badge} = getSignalsLocked(r);
+          const streak  = STREAK[r.name];
+          const gameLog = streak?.gameLog || [];
+          const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
+          const badgeHtml = badge
+            ? `<span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};white-space:nowrap">${badge.label.replace(' Play','')}</span>`
+            : `<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count}sig</span>`;
+          return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})" 
+            style="padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer"
+            onmouseover="this.style.background='rgba(255,255,255,.02)'" 
+            onmouseout="this.style.background='transparent'">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div>
+                <span style="font-size:13px;font-weight:700;color:var(--t1)">${r.name}</span>
+                <span style="font-size:12px;margin-left:4px">${streak?.flame||''}</span>
+                <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:1px">${r.team} · ${r.pit?.name||r.pitName||'—'} · Bat ${r.order} · ${r.time}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;margin-left:10px">
+                <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
+                ${badgeHtml}
+              </div>
+            </div>
+            <div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
+              ${gameLog.length ? gameLog.slice(0,10).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">Streak data loading…</span>'}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
     return;
   }
 
@@ -4205,76 +4207,92 @@ function renderPulse() {
   const g = games.find(gm => gm.pk == _pulseGame);
   if (!g) { el.innerHTML = '<div class="empty"><p>Game not found</p></div>'; return; }
 
-  const park  = getPark(g.home) || {};
-  const wx    = WX[g.home] || {};
-  const pf    = park.f || 1.0;
-  const pfLabel = pf>=1.10?`+${Math.round((pf-1)*100)}% hitter`:pf<=0.95?`${Math.round((pf-1)*100)}% pitcher`:'Neutral';
+  const park = getPark(g.home)||{};
+  const wx   = WX[g.home]||{};
+  const pf   = park.f||1.0;
+  const pfLabel = pf>=1.10?`+${Math.round((pf-1)*100)}% hitter park`:pf<=0.95?`${Math.round((pf-1)*100)}% pitcher park`:'Neutral park';
   const pfColor = pf>=1.10?'var(--green)':pf<=0.95?'var(--red)':'var(--t3)';
-  const orient  = park.orient||180;
-  const wdiff   = wx.wd!==undefined?((wx.wd-orient)%360+360)%360:180;
+  const orient = park.orient||180;
+  const wdiff  = wx.wd!==undefined?((wx.wd-orient)%360+360)%360:180;
   const windDir = wdiff<45||wdiff>315?'out':wdiff>135&&wdiff<225?'in':'cross';
   const windColor = windDir==='out'?'var(--green)':windDir==='in'?'var(--red)':'var(--t2)';
 
-  // Game header
-  const gameHeader = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:12px">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <div style="font-size:16px;font-weight:700;color:var(--t1)">${g.away} @ ${g.home}</div>
-      <div style="font-size:12px;font-family:var(--mono);color:var(--t3)">${g.time}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.away} SP: <span style="color:var(--t1);font-weight:700">${g.ap.name}</span> · xERA ${g.ap.xera||g.ap.era||'—'} · HR/9 ${g.ap.hr9||'—'}</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.home} SP: <span style="color:var(--t1);font-weight:700">${g.hp.name}</span> · xERA ${g.hp.xera||g.hp.era||'—'} · HR/9 ${g.hp.hr9||'—'}</div>
-    </div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap">
-      <span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:${pfColor}">${pfLabel} · ${park.name||g.home}</span>
-      ${wx.ws?`<span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:${windColor}">💨 ${wx.ws}mph ${windDir}</span>`:''}
-      ${park.elev>2000?`<span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--amber)">⛰ ${park.elev.toLocaleString()}ft</span>`:''}
-    </div>
-  </div>`;
-
-  // Lineup table for one side
-  const lineupTable = (team, pitName, side) => {
-    const players = allRows.filter(r=>r.team===team).sort((a,b)=>a.order-b.order);
-    if (!players.length) return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);padding:8px">Lineup not yet posted</div>';
-    return players.map(r => {
-      const {count,badge,signals} = getSignalsLocked(r);
-      const streak  = STREAK[r.name];
-      const gameLog = streak?.gameLog || [];
-      const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-      const activeIcons = signals.filter(s=>s.active).map(s=>s.icon).join('');
-      return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})" style="display:grid;grid-template-columns:16px 1fr 45px 30px;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'">
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.order}</div>
-        <div>
-          <div style="font-size:11px;font-weight:700;color:var(--t1)">${r.name} ${streak?.flame||''}</div>
-          <div style="display:flex;gap:3px;margin-top:3px">${gameLog.slice(0,7).map(g=>formBlock(g)).join('')}</div>
-          ${activeIcons?`<div style="font-size:10px;margin-top:2px">${activeIcons}</div>`:''}
+  const playerRow = (r) => {
+    const {count,badge,signals} = getSignalsLocked(r);
+    const streak  = STREAK[r.name];
+    const gameLog = streak?.gameLog||[];
+    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
+    const icons = signals.filter(s=>s.active).map(s=>s.icon).join('');
+    const badgeInitial = badge ? (badge.label.includes('Elite')?'🏆':badge.label.includes('All')?'⭐':'💡') : '';
+    return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})"
+      style="padding:8px 12px;border-bottom:1px solid var(--bg3);cursor:pointer"
+      onmouseover="this.style.background='rgba(255,255,255,.02)'"
+      onmouseout="this.style.background='transparent'">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-size:9px;font-family:var(--mono);color:var(--t3);width:12px">${r.order}</span>
+          <div>
+            <span style="font-size:12px;font-weight:700;color:var(--t1)">${r.name}</span>
+            <span style="font-size:11px;margin-left:3px">${streak?.flame||''}</span>
+            ${icons?`<span style="font-size:10px;margin-left:4px">${icons}</span>`:''}
+          </div>
         </div>
-        <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:${hrpColor};text-align:right">${r.hrp.toFixed(1)}%</div>
-        <div>${badge?`<span style="font-size:7px;font-family:var(--mono);font-weight:700;padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
+        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+          ${badgeInitial?`<span style="font-size:10px">${badgeInitial}</span>`:''}
+          <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</span>
         </div>
-      </div>`;
-    }).join('');
+      </div>
+      <div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;padding-left:18px">
+        ${gameLog.length ? gameLog.slice(0,7).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">—</span>'}
+      </div>
+    </div>`;
   };
 
-  // Side by side lineup
-  const lineups = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
-      <div style="padding:8px 10px;border-bottom:1px solid var(--bd);background:var(--bg3)">
-        <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.away}</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.hp.name} (${g.hp.hand||'R'}HP)</div>
-      </div>
-      ${lineupTable(g.away, g.hp.name, 'away')}
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
-      <div style="padding:8px 10px;border-bottom:1px solid var(--bd);background:var(--bg3)">
-        <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.home}</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.ap.name} (${g.ap.hand||'R'}HP)</div>
-      </div>
-      ${lineupTable(g.home, g.ap.name, 'home')}
-    </div>
-  </div>`;
+  const awayPlayers = allRows.filter(r=>r.team===g.away).sort((a,b)=>a.order-b.order);
+  const homePlayers = allRows.filter(r=>r.team===g.home).sort((a,b)=>a.order-b.order);
+  const hasLineups  = awayPlayers.length > 0 || homePlayers.length > 0;
 
-  el.innerHTML = '<div style="padding:12px 0">' + gamePills + legend + gameHeader + lineups + '</div>';
+  el.innerHTML = `<div style="padding:12px 0">
+    ${gamePills}${legend}
+
+    <!-- Game header -->
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <div style="font-size:15px;font-weight:700;color:var(--t1)">${g.away} @ ${g.home}</div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${g.time}</div>
+      </div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:8px">
+        ${g.away}: <span style="color:var(--t2)">${g.ap.name}</span> · xERA ${g.ap.xera||g.ap.era||'—'} · HR/9 ${g.ap.hr9||'—'} &nbsp;|&nbsp;
+        ${g.home}: <span style="color:var(--t2)">${g.hp.name}</span> · xERA ${g.hp.xera||g.hp.era||'—'} · HR/9 ${g.hp.hr9||'—'}
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:${pfColor}">${pfLabel}</span>
+        ${wx.ws?`<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:${windColor}">💨 ${wx.ws}mph ${windDir}</span>`:''}
+        ${park.elev>2000?`<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--amber)">⛰ ${park.elev.toLocaleString()}ft</span>`:''}
+      </div>
+    </div>
+
+    ${!hasLineups
+      ? '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:20px;text-align:center;font-size:11px;font-family:var(--mono);color:var(--t3)">Lineups not yet posted</div>'
+      : `<!-- Lineups — stacked on mobile, side by side on desktop -->
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
+        <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+          <div style="padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--bd)">
+            <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.away}</div>
+            <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.hp.name} · ${g.hp.hand||'R'}HP</div>
+          </div>
+          ${awayPlayers.length ? awayPlayers.map(playerRow).join('') : '<div style="padding:12px;font-size:10px;font-family:var(--mono);color:var(--t3)">Lineup pending</div>'}
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+          <div style="padding:8px 12px;background:var(--bg3);border-bottom:1px solid var(--bd)">
+            <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.home}</div>
+            <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.ap.name} · ${g.ap.hand||'R'}HP</div>
+          </div>
+          ${homePlayers.length ? homePlayers.map(playerRow).join('') : '<div style="padding:12px;font-size:10px;font-family:var(--mono);color:var(--t3)">Lineup pending</div>'}
+        </div>
+      </div>`
+    }
+  </div>`;
 }
 
 function closePlayerModal() {
