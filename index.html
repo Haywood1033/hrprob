@@ -3169,6 +3169,7 @@ async function loadStreakData() {
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
       console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       _dataReady.streaks = true;
+      if (_dataReady.splits) { const _b=document.getElementById('tab-loading-bar'); if(_b) _b.style.display='none'; }
       rebuild(); renderAll();
     }
   } catch(e) {
@@ -3326,6 +3327,8 @@ async function loadSplitsData() {
       }
       console.log(`Park splits loaded: ${Object.keys(PARK_SPLITS).length} players`);
       _dataReady.splits = true;
+      if (_dataReady.streaks) { const _b=document.getElementById('tab-loading-bar'); if(_b) _b.style.display='none'; }
+      const _bar2=document.getElementById('tab-loading-bar');if(_bar2&&_dataReady.streaks)_bar2.style.display='none';
     }
     rebuild(); renderAll();
     // Correct pitcher hands in all games now that PITCHER_SPLITS is loaded
@@ -6149,34 +6152,23 @@ function setView(v,el){
 }
 
 function showTabLoading(v) {
-  const tabsNeedingData = ['players','targets','pitchers','today'];
+  const tabsNeedingData = ['players','targets','pitchers','today','pulse'];
   if (!tabsNeedingData.includes(v)) return;
-  const el = document.getElementById('v'+v);
-  if (!el) return;
-  // Show subtle loading bar at top of tab
+  if (_dataReady.streaks && _dataReady.splits) return;
   let bar = document.getElementById('tab-loading-bar');
   if (!bar) {
     bar = document.createElement('div');
     bar.id = 'tab-loading-bar';
     bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--teal),var(--purple));z-index:9998;animation:tabload 1.5s ease-in-out infinite;';
-    // tabload keyframe in CSS
-
-
-
-
-
-
-
-
-
     document.body.appendChild(bar);
   }
   bar.style.display = 'block';
-  // Hide bar when data is ready
-  const check = setInterval(() => {
+  if (window._loadBarInterval) clearInterval(window._loadBarInterval);
+  window._loadBarInterval = setInterval(() => {
     if (_dataReady.streaks && _dataReady.splits) {
       bar.style.display = 'none';
-      clearInterval(check);
+      clearInterval(window._loadBarInterval);
+      window._loadBarInterval = null;
     }
   }, 300);
 }
