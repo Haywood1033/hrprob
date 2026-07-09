@@ -3138,8 +3138,8 @@ async function loadStreakData() {
     if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
   }
   if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
-  // Fetch streaks for all players — needed for Pulse tab full roster coverage
-  const streakPlayers = allPlayers.slice(0, 300);
+  // Fetch streaks for all confirmed lineup players — 220 covers full slates
+  const streakPlayers = allPlayers.slice(0, 220);
   console.log(`Fetching streaks for ${streakPlayers.length} of ${allPlayers.length} players…`);
 
   try {
