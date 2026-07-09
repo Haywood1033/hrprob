@@ -66,8 +66,22 @@ async function getLast20PA(playerId) {
   else if (hr >= 2)               flame = '🔥';
   else if (pa >= 18 && slg < 0.250) flame = '❄️';
 
+  // Return last 10 games for form blocks
+  const gameLog = sorted.slice(0, 10).map(s => ({
+    date:     s.date,
+    opponent: s.opponent?.abbreviation || s.opponent?.name || '?',
+    ab:       s.stat?.atBats        || 0,
+    h:        s.stat?.hits          || 0,
+    hr:       s.stat?.homeRuns      || 0,
+    bb:       s.stat?.baseOnBalls   || 0,
+    k:        s.stat?.strikeOuts    || 0,
+    tb:       s.stat?.totalBases    || 0,
+    rbi:      s.stat?.rbi           || 0,
+    pa:       s.stat?.plateAppearances || 0,
+  }));
+
   console.log(`${playerId}: ${games} games, ${pa} PA, ${hr} HR, slg=${slg}, flame=${flame}`);
-  return { hr, avg, slg, obp, pa, games, flame };
+  return { hr, avg, slg, obp, pa, games, flame, gameLog };
 }
 
 module.exports = async function handler(req, res) {
