@@ -1,5 +1,5 @@
 // api/streaks.js — HR streak based on last 20 plate appearances
-const CACHE_TTL = 30 * 60 * 1000;
+const CACHE_TTL = 2 * 3600 * 1000; // 2 hours — game logs don't change frequently
 let cache = { data: null, timestamp: null };
 
 async function searchPlayer(name) {
@@ -104,9 +104,9 @@ module.exports = async function handler(req, res) {
   const playerIds = {}; // include IDs for headshots
   const start = Date.now();
 
-  // Process in larger batches (10 concurrent) to handle full 270-player slates
-  for (let i = 0; i < names.length; i += 10) {
-    const batch = names.slice(i, i+10);
+  // Process in batches of 15 concurrent requests
+  for (let i = 0; i < names.length; i += 15) {
+    const batch = names.slice(i, i+15);
     await Promise.allSettled(batch.map(async name => {
       try {
         const id = await searchPlayer(name);
@@ -120,6 +120,6 @@ module.exports = async function handler(req, res) {
 
   console.log(`Streaks: ${Object.keys(results).length}/${names.length} in ${Date.now()-start}ms`);
   cache = { data: { streaks: results, playerIds }, timestamp: Date.now() };
-  res.setHeader('Cache-Control', 's-maxage=1800');
+  res.setHeader('Cache-Control', 's-maxage=7200');
   return res.status(200).json({ streaks: results, playerIds, elapsed: Date.now()-start });
 };
