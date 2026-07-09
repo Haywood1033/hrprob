@@ -507,7 +507,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <th onclick="sortBy('barrel')">Brl%</th>
   <th onclick="sortBy('ev')">EV</th>
 </tr></thead><tbody id="ptbody"></tbody></table></div></div>
-<div id="vpitchers"><div id="pitchers-grid"></div></div>
+<div id="vpulse" class="view"></div>
+  <div id="vpitchers"><div id="pitchers-grid"></div></div>
 <div id="vgames"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets"><div class="tgrid" id="tgrid"></div></div>
 <div id="vparlay"><div class="pgrid" id="pgrid"></div></div>
@@ -4115,6 +4116,93 @@ function renderFullGame() {
     + '</div>';
 }
 
+
+// ── PULSE TAB ─────────────────────────────────────────────────
+// Top 10 signal plays + form blocks from last 10 games
+function renderPulse() {
+  const el = document.getElementById('vpulse');
+  if (!el) return;
+  if (!allRows.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
+
+  // Score players — same as scorePlayer but inline
+  const scored = allRows.map(r => {
+    const {count, ci, badge} = getSignalsLocked(r);
+    const streakSignal = getSignalsLocked(r).signals[3]?.active ?? false;
+    const streakFlame  = STREAK[r.name]?.flame;
+    const streakBonus  = streakSignal ? (streakFlame==='🔥🔥'?3:1.5) : 0;
+    const ps = PARK_SPLITS[r.name];
+    const score = r.hrp*3 + count*5 + streakBonus + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
+    return { r, score, count, badge, ci };
+  }).sort((a,b) => b.score - a.score).slice(0, 10);
+
+  // Form block helper
+  const formBlock = (game) => {
+    if (!game) return '<div style="width:22px;height:22px;border-radius:4px;background:var(--bg3)"></div>';
+    const hasHR  = game.hr > 0;
+    const hasHit = game.h > 0;
+    const isCold = game.ab >= 3 && game.h === 0;
+    const bg = hasHR  ? 'var(--green)'
+             : hasHit ? (game.h >= 2 ? 'var(--teal)' : 'rgba(45,212,191,.35)')
+             : isCold ? 'rgba(239,68,68,.35)'
+             : 'var(--bg3)';
+    const tooltip = `${game.date} vs ${game.opponent}: ${game.h}/${game.ab}${game.hr>0?' '+game.hr+'HR':''}${game.bb>0?' BB':''}`;
+    return `<div title="${tooltip}" style="width:22px;height:22px;border-radius:4px;background:${bg};cursor:default;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${hasHR?'#000':'transparent'}">${hasHR?'HR':''}</div>`;
+  };
+
+  el.innerHTML = '<div style="padding:12px 0">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">Pulse · Top 10 Plays · Recent Form</div>'
+    + '<div style="display:flex;gap:6px;margin-bottom:8px;padding:0 4px">'
+    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:var(--green)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">HR</span></div>'
+    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:var(--teal)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">2+ hits</span></div>'
+    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:rgba(45,212,191,.35)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">1 hit</span></div>'
+    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,.35)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">0 for 3+</span></div>'
+    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:var(--bg3)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">no data</span></div>'
+    + '</div>'
+    + scored.map(({r, count, badge, ci}, idx) => {
+        const streak   = STREAK[r.name];
+        const gameLog  = streak?.gameLog || [];
+        const batter   = getBatter(r.name) || {};
+        const hrpColor = r.hrp >= 20 ? 'var(--green)' : r.hrp >= 15 ? 'var(--teal)' : r.hrp >= 10 ? 'var(--amber)' : 'var(--t2)';
+        const {signals} = getSignalsLocked(r);
+        const activeSignals = signals.filter(s=>s.active).map(s=>s.icon).join(' ');
+
+        return `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer" onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:24px;height:24px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--t3);flex-shrink:0">${idx+1}</div>
+              <div>
+                <div style="font-size:14px;font-weight:700;color:var(--t1)">${r.name} ${streak?.flame||''}</div>
+                <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${r.team} · ${r.pit?.name||r.pitName||'—'} · Batting ${r.order} · ${r.time}</div>
+              </div>
+            </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
+              <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">HR prob</div>
+            </div>
+          </div>
+
+          <!-- Form blocks -->
+          <div style="margin-bottom:10px">
+            <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Last ${Math.min(gameLog.length,10)} games</div>
+            <div style="display:flex;gap:3px;flex-wrap:wrap">
+              ${gameLog.length ? gameLog.slice(0,10).map(g=>formBlock(g)).join('') : '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">No recent game data</span>'}
+            </div>
+            ${streak ? `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:5px">Last 20 PA: .${Math.round(streak.avg*1000).toString().padStart(3,'0')} AVG · SLG .${Math.round(streak.slg*1000).toString().padStart(3,'0')} · ${streak.hr} HR</div>` : ''}
+          </div>
+
+          <!-- Signals + badge -->
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div style="display:flex;gap:6px;align-items:center">
+              <span style="font-size:14px">${activeSignals||'—'}</span>
+              <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count} signal${count!==1?'s':''}</span>
+            </div>
+            ${badge ? `<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:4px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label}</span>` : ''}
+          </div>
+        </div>`;
+      }).join('')
+    + '</div>';
+}
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -5926,6 +6014,7 @@ function renderAll(){
   else if(curView==='tomorrow') renderTomorrow();
   else if(curView==='pitchers') renderPitchers();
   else if(curView==='history') renderHistory();
+  else if(curView==='pulse')   renderPulse();
   else renderTargets();
 }
 
@@ -5933,7 +6022,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','parlay','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','pulse','parlay','tomorrow','pitchers','history'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
