@@ -508,14 +508,14 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <th onclick="sortBy('barrel')">Brl%</th>
   <th onclick="sortBy('ev')">EV</th>
 </tr></thead><tbody id="ptbody"></tbody></table></div></div>
-<div id="vpulse" class="view"></div>
-  <div id="vpitchers"><div id="pitchers-grid"></div></div>
-<div id="vgames"><div class="ggrid" id="ggrid"></div></div>
-<div id="vtargets"><div class="tgrid" id="tgrid"></div></div>
-<div id="vparlay"><div class="pgrid" id="pgrid"></div></div>
-<div id="vtomorrow"><div id="tomorrow-grid"></div></div>
-<div id="vforecast"><div class="fcast-grid" id="fcast-grid"></div></div>
-<div id="vhistory"><div class="hgrid" id="hgrid"></div></div>
+<div id="vpulse" class="view"><div id="pulse-grid"></div></div>
+<div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
+<div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
+<div id="vtargets" class="view"><div class="tgrid" id="tgrid"></div></div>
+<div id="vparlay" class="view"><div class="pgrid" id="pgrid"></div></div>
+<div id="vtomorrow" class="view"><div id="tomorrow-grid"></div></div>
+<div id="vforecast" class="view"><div class="fcast-grid" id="fcast-grid"></div></div>
+<div id="vhistory" class="view"><div class="hgrid" id="hgrid"></div></div>
 
 <script>
 // ── TODAY'S SLATE (May 23 2026, from mlb.com/probable-pitchers) ──
@@ -4139,7 +4139,7 @@ function renderFullGame() {
 let _pulseGame = 'all';
 
 function renderPulse() {
-  const el = document.getElementById('vpulse');
+  const el = document.getElementById('pulse-grid');
   if (!el) return;
   if (!allRows.length || !games.length) {
     el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return;
@@ -6510,6 +6510,9 @@ async function init(){
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
+      // Second rebuild after short delay — ensures all BATTER data is fully populated
+      // This catches accented name players whose data may have been missed on first rebuild
+      setTimeout(() => { rebuild(); renderAll(); }, 500);
       // lockSignals fires after splits+streaks load (not here) — ensures all signals accurate
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
