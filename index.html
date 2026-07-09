@@ -476,7 +476,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('players',this)">☰ Players</div>
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Top Targets</div>
-  <div class="tab" onclick="setView('pulse',this)">💓 Pulse</div>
+  <div class="tab" onclick="setView('pulse',this)">🔍 Pulse</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
@@ -4119,89 +4119,162 @@ function renderFullGame() {
 
 
 // ── PULSE TAB ─────────────────────────────────────────────────
-// Top 10 signal plays + form blocks from last 10 games
+let _pulseGame = 'all'; // selected game filter
+
 function renderPulse() {
   const el = document.getElementById('vpulse');
   if (!el) return;
-  if (!allRows.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
-
-  // Score players — same as scorePlayer but inline
-  const scored = allRows.map(r => {
-    const {count, ci, badge} = getSignalsLocked(r);
-    const streakSignal = getSignalsLocked(r).signals[3]?.active ?? false;
-    const streakFlame  = STREAK[r.name]?.flame;
-    const streakBonus  = streakSignal ? (streakFlame==='🔥🔥'?3:1.5) : 0;
-    const ps = PARK_SPLITS[r.name];
-    const score = r.hrp*3 + count*5 + streakBonus + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
-    return { r, score, count, badge, ci };
-  }).sort((a,b) => b.score - a.score).slice(0, 10);
+  if (!allRows.length || !games.length) {
+    el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>';
+    return;
+  }
 
   // Form block helper
   const formBlock = (game) => {
-    if (!game) return '<div style="width:22px;height:22px;border-radius:4px;background:var(--bg3)"></div>';
+    if (!game) return '<div style="width:28px;height:28px;border-radius:4px;background:var(--bg3);flex-shrink:0"></div>';
     const hasHR  = game.hr > 0;
-    const hasHit = game.h > 0;
+    const multi  = game.h >= 2;
+    const hasHit = game.h === 1;
     const isCold = game.ab >= 3 && game.h === 0;
     const bg = hasHR  ? 'var(--green)'
-             : hasHit ? (game.h >= 2 ? 'var(--teal)' : 'rgba(45,212,191,.35)')
-             : isCold ? 'rgba(239,68,68,.35)'
+             : multi  ? 'var(--teal)'
+             : hasHit ? 'rgba(45,212,191,.3)'
+             : isCold ? 'rgba(239,68,68,.3)'
              : 'var(--bg3)';
-    const tooltip = `${game.date} vs ${game.opponent}: ${game.h}/${game.ab}${game.hr>0?' '+game.hr+'HR':''}${game.bb>0?' BB':''}`;
-    return `<div title="${tooltip}" style="width:22px;height:22px;border-radius:4px;background:${bg};cursor:default;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:${hasHR?'#000':'transparent'}">${hasHR?'HR':''}</div>`;
+    const label = hasHR ? 'HR' : game.h > 0 ? game.h+'H' : game.ab > 0 ? '0' : '—';
+    const tc    = hasHR ? '#000' : 'var(--t2)';
+    const tip   = `${game.date||''} vs ${game.opponent||'?'}: ${game.h}/${game.ab}${game.hr>0?' '+game.hr+'HR':''}`;
+    return `<div title="${tip}" style="width:28px;height:28px;border-radius:4px;background:${bg};flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;font-family:var(--mono);color:${tc}">${label}</div>`;
   };
 
-  el.innerHTML = '<div style="padding:12px 0">'
-    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:14px">Pulse · Top 10 Plays · Recent Form</div>'
-    + '<div style="display:flex;gap:6px;margin-bottom:8px;padding:0 4px">'
-    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:var(--green)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">HR</span></div>'
-    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:var(--teal)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">2+ hits</span></div>'
-    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:rgba(45,212,191,.35)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">1 hit</span></div>'
-    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:rgba(239,68,68,.35)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">0 for 3+</span></div>'
-    + '<div style="display:flex;gap:3px;align-items:center"><div style="width:12px;height:12px;border-radius:2px;background:var(--bg3)"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">no data</span></div>'
-    + '</div>'
-    + scored.map(({r, count, badge, ci}, idx) => {
-        const streak   = STREAK[r.name];
-        const gameLog  = streak?.gameLog || [];
-        const batter   = getBatter(r.name) || {};
-        const hrpColor = r.hrp >= 20 ? 'var(--green)' : r.hrp >= 15 ? 'var(--teal)' : r.hrp >= 10 ? 'var(--amber)' : 'var(--t2)';
-        const {signals} = getSignalsLocked(r);
-        const activeSignals = signals.filter(s=>s.active).map(s=>s.icon).join(' ');
+  // Score players
+  const scoreR = (r) => {
+    const {count,ci} = getSignalsLocked(r);
+    const sb = SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?3:1.5) : 0;
+    const ps = PARK_SPLITS[r.name];
+    return r.hrp*3 + count*5 + sb + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
+  };
 
-        return `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer" onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:10px">
-              <div style="width:24px;height:24px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--t3);flex-shrink:0">${idx+1}</div>
-              <div>
-                <div style="font-size:14px;font-weight:700;color:var(--t1)">${r.name} ${streak?.flame||''}</div>
-                <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${r.team} · ${r.pit?.name||r.pitName||'—'} · Batting ${r.order} · ${r.time}</div>
-              </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
-              <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">HR prob</div>
-            </div>
-          </div>
-
-          <!-- Form blocks -->
-          <div style="margin-bottom:10px">
-            <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Last ${Math.min(gameLog.length,10)} games</div>
-            <div style="display:flex;gap:3px;flex-wrap:wrap">
-              ${gameLog.length ? gameLog.slice(0,10).map(g=>formBlock(g)).join('') : '<span style="font-size:10px;font-family:var(--mono);color:var(--t3)">No recent game data</span>'}
-            </div>
-            ${streak ? `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:5px">Last 20 PA: .${Math.round(streak.avg*1000).toString().padStart(3,'0')} AVG · SLG .${Math.round(streak.slg*1000).toString().padStart(3,'0')} · ${streak.hr} HR</div>` : ''}
-          </div>
-
-          <!-- Signals + badge -->
-          <div style="display:flex;justify-content:space-between;align-items:center">
-            <div style="display:flex;gap:6px;align-items:center">
-              <span style="font-size:14px">${activeSignals||'—'}</span>
-              <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count} signal${count!==1?'s':''}</span>
-            </div>
-            ${badge ? `<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:4px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label}</span>` : ''}
-          </div>
-        </div>`;
-      }).join('')
+  // Game pills
+  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">'
+    + `<button onclick="_pulseGame='all';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_pulseGame==='all'?'var(--teal)':'var(--bd)'};background:${_pulseGame==='all'?'rgba(45,212,191,.1)':'var(--bg2)'};color:${_pulseGame==='all'?'var(--teal)':'var(--t2)'};cursor:pointer">All Games</button>`
+    + [...games].sort(gameTimeSort).map(g =>
+        `<button onclick="_pulseGame='${g.pk}';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_pulseGame==g.pk?'var(--teal)':'var(--bd)'};background:${_pulseGame==g.pk?'rgba(45,212,191,.1)':'var(--bg2)'};color:${_pulseGame==g.pk?'var(--teal)':'var(--t2)'};cursor:pointer">${g.away} @ ${g.home}</button>`
+      ).join('')
     + '</div>';
+
+  // Legend
+  const legend = '<div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">'
+    + [['var(--green)','HR'],['var(--teal)','2+ H'],['rgba(45,212,191,.3)','1H'],['rgba(239,68,68,.3)','0/3+'],['var(--bg3)','—']]
+      .map(([bg,lbl])=>`<div style="display:flex;align-items:center;gap:4px"><div style="width:12px;height:12px;border-radius:2px;background:${bg}"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${lbl}</span></div>`).join('')
+    + '</div>';
+
+  // ── ALL GAMES VIEW ────────────────────────────────────────────
+  if (_pulseGame === 'all') {
+    const ranked = [...allRows].sort((a,b)=>scoreR(b)-scoreR(a)).slice(0,30);
+    const rows = ranked.map(r => {
+      const {count,badge} = getSignalsLocked(r);
+      const streak = STREAK[r.name];
+      const gameLog = streak?.gameLog || [];
+      const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
+      return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})" style="display:grid;grid-template-columns:200px 60px 80px 1fr;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--t1)">${r.name} ${streak?.flame||''}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · ${r.pit?.name||r.pitName||'—'} · ${r.time}</div>
+        </div>
+        <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${hrpColor};text-align:right">${r.hrp.toFixed(1)}%</div>
+        <div style="text-align:center">${badge?`<span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label.split(' ')[0]}</span>`:`<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count}sig</span>`}</div>
+        <div style="display:flex;gap:3px;overflow-x:auto">
+          ${gameLog.length ? gameLog.slice(0,10).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">No data</span>'}
+        </div>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = '<div style="padding:12px 0">' + gamePills + legend
+      + '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">'
+      + '<div style="display:grid;grid-template-columns:200px 60px 80px 1fr;gap:8px;padding:6px 12px;border-bottom:1px solid var(--bd)">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase">Player</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;text-align:right">HR%</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;text-align:center">Badge</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase">Last 10 Games →</div>'
+      + '</div>' + rows + '</div></div>';
+    return;
+  }
+
+  // ── SINGLE GAME VIEW ─────────────────────────────────────────
+  const g = games.find(gm => gm.pk == _pulseGame);
+  if (!g) { el.innerHTML = '<div class="empty"><p>Game not found</p></div>'; return; }
+
+  const park  = getPark(g.home) || {};
+  const wx    = WX[g.home] || {};
+  const pf    = park.f || 1.0;
+  const pfLabel = pf>=1.10?`+${Math.round((pf-1)*100)}% hitter`:pf<=0.95?`${Math.round((pf-1)*100)}% pitcher`:'Neutral';
+  const pfColor = pf>=1.10?'var(--green)':pf<=0.95?'var(--red)':'var(--t3)';
+  const orient  = park.orient||180;
+  const wdiff   = wx.wd!==undefined?((wx.wd-orient)%360+360)%360:180;
+  const windDir = wdiff<45||wdiff>315?'out':wdiff>135&&wdiff<225?'in':'cross';
+  const windColor = windDir==='out'?'var(--green)':windDir==='in'?'var(--red)':'var(--t2)';
+
+  // Game header
+  const gameHeader = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:12px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">${g.away} @ ${g.home}</div>
+      <div style="font-size:12px;font-family:var(--mono);color:var(--t3)">${g.time}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.away} SP: <span style="color:var(--t1);font-weight:700">${g.ap.name}</span> · xERA ${g.ap.xera||g.ap.era||'—'} · HR/9 ${g.ap.hr9||'—'}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.home} SP: <span style="color:var(--t1);font-weight:700">${g.hp.name}</span> · xERA ${g.hp.xera||g.hp.era||'—'} · HR/9 ${g.hp.hr9||'—'}</div>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:${pfColor}">${pfLabel} · ${park.name||g.home}</span>
+      ${wx.ws?`<span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:${windColor}">💨 ${wx.ws}mph ${windDir}</span>`:''}
+      ${park.elev>2000?`<span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:var(--bg3);color:var(--amber)">⛰ ${park.elev.toLocaleString()}ft</span>`:''}
+    </div>
+  </div>`;
+
+  // Lineup table for one side
+  const lineupTable = (team, pitName, side) => {
+    const players = allRows.filter(r=>r.team===team).sort((a,b)=>a.order-b.order);
+    if (!players.length) return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);padding:8px">Lineup not yet posted</div>';
+    return players.map(r => {
+      const {count,badge,signals} = getSignalsLocked(r);
+      const streak  = STREAK[r.name];
+      const gameLog = streak?.gameLog || [];
+      const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
+      const activeIcons = signals.filter(s=>s.active).map(s=>s.icon).join('');
+      return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})" style="display:grid;grid-template-columns:16px 1fr 45px 30px;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s" onmouseover="this.style.background='var(--bg3)'" onmouseout="this.style.background='transparent'">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.order}</div>
+        <div>
+          <div style="font-size:11px;font-weight:700;color:var(--t1)">${r.name} ${streak?.flame||''}</div>
+          <div style="display:flex;gap:3px;margin-top:3px">${gameLog.slice(0,7).map(g=>formBlock(g)).join('')}</div>
+          ${activeIcons?`<div style="font-size:10px;margin-top:2px">${activeIcons}</div>`:''}
+        </div>
+        <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:${hrpColor};text-align:right">${r.hrp.toFixed(1)}%</div>
+        <div>${badge?`<span style="font-size:7px;font-family:var(--mono);font-weight:700;padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  };
+
+  // Side by side lineup
+  const lineups = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+      <div style="padding:8px 10px;border-bottom:1px solid var(--bd);background:var(--bg3)">
+        <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.away}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.hp.name} (${g.hp.hand||'R'}HP)</div>
+      </div>
+      ${lineupTable(g.away, g.hp.name, 'away')}
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+      <div style="padding:8px 10px;border-bottom:1px solid var(--bd);background:var(--bg3)">
+        <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.home}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.ap.name} (${g.ap.hand||'R'}HP)</div>
+      </div>
+      ${lineupTable(g.home, g.ap.name, 'home')}
+    </div>
+  </div>`;
+
+  el.innerHTML = '<div style="padding:12px 0">' + gamePills + legend + gameHeader + lineups + '</div>';
 }
 
 function closePlayerModal() {
