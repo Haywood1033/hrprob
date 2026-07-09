@@ -771,14 +771,21 @@ function normName(name) {
   return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-// Normalized name lookup — tries exact, normalized, and reverse
+// Normalized name lookup — handles NFC/NFD encoding mismatches from different APIs
 function getBatter(name) {
   if (!name) return null;
-  return BATTER[name] || BATTER[normName(name)] || null;
+  // Try exact, then NFC normalized, then fully stripped (NFD + remove combining chars)
+  return BATTER[name]
+      || BATTER[name.normalize('NFC')]
+      || BATTER[name.normalize('NFD').replace(/[\u0300-\u036f]/g,'')]
+      || null;
 }
 function getStreak(name) {
   if (!name) return null;
-  return STREAK[name] || STREAK[normName(name)] || null;
+  return STREAK[name]
+      || STREAK[name.normalize('NFC')]
+      || STREAK[name.normalize('NFD').replace(/[\u0300-\u036f]/g,'')]
+      || null;
 }
 
 const BULLPEN = {}; // team bullpen stats: era, hr9, whip, k9
@@ -6453,8 +6460,10 @@ async function init(){
             if ((s.ev||0)>0) {
               const _bd={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
               BATTER[name] = _bd;
-              const _nn = normName(name);
-              if (_nn !== name) BATTER[_nn] = _bd; // also store normalized
+              const _nfc = name.normalize('NFC');
+              const _nn  = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+              if (_nfc !== name) BATTER[_nfc] = _bd; // NFC variant
+              if (_nn  !== name) BATTER[_nn]  = _bd; // fully stripped
             }
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
