@@ -2808,7 +2808,7 @@ function rebuild(){
       const batters=confirmed?lineup:generateProjected(team);
 
       batters.forEach((p,i)=>{
-        const bs=getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0};
+        const bs = {...(getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0})};
         const canonName = (!p.name.includes('Jr.') && BATTER[p.name+' Jr.']) ? p.name+' Jr.' : p.name;
         bs._name=canonName; const hrp=hrProbWithStreak(bs,park,wx,pit,p.battingOrder||(i+1));
         const bookOdds = HR_ODDS[p.name] || null;
@@ -2818,6 +2818,7 @@ function rebuild(){
           name:canonName,team,bats:getBatSide(canonName, p.batSide, bs),
           order:p.battingOrder||(i+1),
           source:p.source||(confirmed?'confirmed':'projected'),
+          _name:canonName,
           _team:team,
           ev:bs.ev||88.5,barrel:bs.ba||8,hh:bs.hh||37,
           xwoba:bs.xw||0.310,iso:bs.iso||0.150,hrp,
@@ -3121,8 +3122,8 @@ async function loadStreakData() {
     if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
   }
   if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
-  // Single fetch — top 150 by HR prob
-  const streakPlayers = allPlayers.slice(0, 150);
+  // Fetch streaks for all players — needed for Pulse tab full roster coverage
+  const streakPlayers = allPlayers.slice(0, 300);
   console.log(`Fetching streaks for ${streakPlayers.length} of ${allPlayers.length} players…`);
 
   try {
