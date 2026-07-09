@@ -1041,7 +1041,16 @@ function hrProb(b,park,wx,pit,order){
   if (ord >= 3 && ord <= 5) p *= 1.02;
   else if (ord >= 7)        p *= 0.97;
 
-  return Math.max(0.5, Math.min(32, p * 100));
+  // Smart floor — players with real contact quality can't be below reasonable minimum
+  const evFloor   = b.ev   || 88;
+  const brlFloor  = b.ba   || 0;
+  const minFloor  = brlFloor >= 12 && evFloor >= 92 ? 7.0
+                  : brlFloor >= 8  && evFloor >= 90 ? 5.0
+                  : brlFloor >= 4  && evFloor >= 88 ? 3.5  // 4% barrel + 88 EV = real hitter
+                  : evFloor >= 90  ? 3.0                    // high EV alone = floor
+                  : 0.5;
+
+  return Math.max(minFloor, Math.min(32, p * 100));
 }
 
 // Apply streak multiplier after base hrProb calculation
