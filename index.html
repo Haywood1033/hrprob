@@ -4206,7 +4206,7 @@ function renderPulse() {
           const badgeHtml = badge
             ? `<span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};white-space:nowrap">${badge.label.replace(' Play','')}</span>`
             : `<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count}sig</span>`;
-          return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})" 
+          return `<div onclick="openPlayerModal(this.dataset.name,this.dataset.team,+this.dataset.pk)" data-name="${r.name}" data-team="${r.team}" data-pk="${r.gamePk}"
             style="padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer"
             onmouseover="this.style.background='rgba(255,255,255,.02)'" 
             onmouseout="this.style.background='transparent'">
@@ -4252,7 +4252,7 @@ function renderPulse() {
     const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
     const icons = signals.filter(s=>s.active).map(s=>s.icon).join('');
     const badgeInitial = badge ? (badge.label.includes('Elite')?'🏆':badge.label.includes('All')?'⭐':'💡') : '';
-    return `<div onclick="openPlayerModal('${r.name}','${r.team}',${r.gamePk})"
+    return `<div onclick="openPlayerModal(this.dataset.name,this.dataset.team,+this.dataset.pk)" data-name="${r.name}" data-team="${r.team}" data-pk="${r.gamePk}"
       style="padding:8px 12px;border-bottom:1px solid var(--bg3);cursor:pointer"
       onmouseover="this.style.background='rgba(255,255,255,.02)'"
       onmouseout="this.style.background='transparent'">
