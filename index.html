@@ -3155,7 +3155,9 @@ async function loadStreakData() {
     const d = await r.json();
     if (d.streaks) {
       for (const [name, stats] of Object.entries(d.streaks)) {
-        STREAK[normName(name)||name] = stats;
+        const norm = normName(name) || name;
+        STREAK[norm] = stats;  // normalized (no accents)
+        if (norm !== name) STREAK[name] = stats; // original with accents
       }
       // Store player IDs for headshots
       if (d.playerIds) {
@@ -3297,7 +3299,9 @@ async function loadSplitsData() {
     const d = await r.json();
     if (d.splits) {
       for (const [name, splits] of Object.entries(d.splits)) {
-        SPLITS[normName(name)||name] = splits;
+        const normN = normName(name) || name;
+        SPLITS[normN] = splits;
+        if (normN !== name) SPLITS[name] = splits;
       }
       const withBoth = Object.values(SPLITS).filter(s=>s.vsRHP&&s.vsLHP).length;
       console.log(`Batter splits loaded: ${Object.keys(SPLITS).length} players, ${withBoth} with both sides`);
@@ -3307,14 +3311,18 @@ async function loadSplitsData() {
     }
     if (d.pitcherSplits) {
       for (const [name, splits] of Object.entries(d.pitcherSplits)) {
-        PITCHER_SPLITS[normName(name)||name] = splits;
+        const pitNorm = normName(name) || name;
+        PITCHER_SPLITS[pitNorm] = splits;
+        if (pitNorm !== name) PITCHER_SPLITS[name] = splits;
       }
       const pitWithBoth = Object.values(PITCHER_SPLITS).filter(s=>s.vsLHB&&s.vsRHB).length;
       console.log(`Pitcher splits loaded: ${Object.keys(PITCHER_SPLITS).length} pitchers, ${pitWithBoth} with both sides`);
     }
     if (d.parkSplits) {
       for (const [name, ps] of Object.entries(d.parkSplits)) {
-        PARK_SPLITS[name] = ps;
+        const psNorm = normName(name) || name;
+        PARK_SPLITS[psNorm] = ps;
+        if (psNorm !== name) PARK_SPLITS[name] = ps;
       }
       console.log(`Park splits loaded: ${Object.keys(PARK_SPLITS).length} players`);
       _dataReady.splits = true;
