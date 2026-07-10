@@ -475,7 +475,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab active" onclick="setView('today',this)">⚡ Today</div>
   <div class="tab" onclick="setView('players',this)">☰ Players</div>
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
-  <div class="tab" onclick="setView('targets',this)">🎯 Top Targets</div>
+  <div class="tab" onclick="setView('targets',this)">🎯 Best Plays</div>
   <div class="tab" onclick="setView('pulse',this)">🔍 Pulse</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
@@ -6068,49 +6068,72 @@ function expandTarget(i) {
 }
 
 function renderTargets(){
-  // Deduplicate by player name — keep only each player's highest HR% matchup
-  // This prevents the same player appearing multiple times from projected lineups
+  // Deduplicate by player name — keep highest HR% matchup
   const seen = new Map();
   for(const r of allRows){
     const existing = seen.get(r.name);
     if(!existing || r.hrp > existing.hrp) seen.set(r.name, r);
   }
-  const top = [...seen.values()].sort((a,b)=>b.hrp-a.hrp).slice(0,24);
-  document.getElementById('tgrid').innerHTML=top.length?top.map((r,i)=>{
-    const tags=[];
-    if(r.barrel>=15) tags.push({c:'hot',  t:'🔥 Elite Barrel'});
-    if(r.ev>=93)     tags.push({c:'hot',  t:`⚡ EV ${r.ev.toFixed(1)}`});
-    if((r.park?.f||1)>=1.05) tags.push({c:'park', t:'📈 Hitter Park'});
+
+  // Score: probability primary, signals amplifier
+  const scoreR = (r) => {
+    const {count, ci} = getSignalsLocked(r);
+    const sb = SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?3:1.5) : 0;
     const ps = PARK_SPLITS[r.name];
-    if(ps?.flag==='boost') tags.push({c:'park', t:'📈 Park History'});
-    else if(ps?.flag==='suppressed') tags.push({c:'pit', t:'📉 Park History'});
-    if((r.pit?.xera||r.pit?.era||4.5)>=5.0) tags.push({c:'pit', t:'🎯 Weak Pitcher'});
+    return r.hrp * 3 + count * 5 + sb + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
+  };
+
+  // One best play per game — prevents same team dominating
+  const byGame = new Map();
+  for(const r of seen.values()){
+    const pk = r.gamePk;
+    const existing = byGame.get(pk);
+    if(!existing || scoreR(r) > scoreR(existing)) byGame.set(pk, r);
+  }
+
+  // Sort by composite score, cap at 15
+  const top = [...byGame.values()].sort((a,b) => scoreR(b)-scoreR(a)).slice(0,15);
+
+  document.getElementById('tgrid').innerHTML = top.length ? top.map((r,i) => {
+    const {count, badge, signals} = getSignalsLocked(r);
+    const streak  = STREAK[r.name];
+    const batter  = getBatter(r.name) || {};
+    const ps      = PARK_SPLITS[r.name];
+    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
     const src = r.source==='live'||r.source==='confirmed'
       ? '<span class="sb slive" style="font-size:9px">✓ Live</span>'
       : '<span class="sb sproj" style="font-size:9px">~ Proj</span>';
-    // EV edge badge
     const evBadge = r.bookOdds
       ? (r.evEdge > 2
           ? `<span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:3px;background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)">+EV +${r.evEdge}%</span>`
           : r.evEdge < -2
           ? `<span style="font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">-EV ${r.evEdge}%</span>`
-          : `<span style="font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--t3);border:1px solid var(--bd)">FAIR</span>`)
+          : '')
       : '';
+
+    // Key reason this play was selected
+    const activeSignals = signals.filter(s=>s.active);
+    const topReason = activeSignals.length
+      ? activeSignals[0].label
+      : r.hrp >= 20 ? 'Elite probability'
+      : ps?.flag==='boost' ? 'Career park boost'
+      : 'Strong contact profile';
+
     return `<div class="tcard ${i<3?'t3':''}" id="tc-${i}" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" style="cursor:pointer">
       <div class="trk">${i+1}</div>
-      <div class="tn">${r.name} ${src} <span style="font-size:13px">${STREAK[r.name]?.flame||''}</span>${(()=>{const kp=getBatter(r.name)?.k_pct;return kp>=28?`<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2);margin-left:3px">K ${kp.toFixed(0)}%</span>`:'';})()}${parkBadge(r.name,true)}</div>
+      <div class="tn">${r.name} ${src} <span style="font-size:13px">${streak?.flame||''}</span></div>
       <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin:4px 0">
-        <div class="tprob">${r.hrp.toFixed(1)}<span>%</span></div>
-        ${evBadge}
+      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0">
+        <div class="tprob" style="color:${hrpColor}">${r.hrp.toFixed(1)}<span>%</span></div>
+        <div style="display:flex;gap:4px;align-items:center">
+          ${evBadge}
+          ${badge?`<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:2px 6px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label.replace(' Play','')}</span>`:''}
+        </div>
       </div>
-      <div style="margin-bottom:4px">${ciBadge(r.hrp, getBatter(r.name)?.pa||0, true)}</div>
-      ${r.bookOdds?`<div style="font-family:var(--mono);font-size:11px;color:var(--t3)">${r.bookOdds>0?'+':''}${r.bookOdds} · implies ${(oddsToImplied(r.bookOdds)*100).toFixed(1)}%</div>`:''}
-      ${r.ou?`<div style="font-family:var(--mono);font-size:10px;color:var(--amber)">O/U ${r.ou}</div>`:''}
-      <div style="margin-top:6px">${signalPanel(r, true)}</div>
-      <div id="texp-${i}" style="display:none"></div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">📌 ${topReason}</div>
+      <div style="margin-top:4px">${signalPanel(r, true)}</div>
     </div>`;
-  }).join(''):'<div class="empty"><h3>Loading…</h3></div>';
+  }).join('') : '<div class="empty"><h3>Loading…</h3></div>';
 }
 
 function updateSbar(rows){}
@@ -6740,7 +6763,7 @@ init();
       1. Open the app — schedule, lineups, weather and Statcast load automatically<br>
       2. If the yellow banner appears, click <strong>✦ Odds</strong> to refresh DraftKings HR props and O/U totals<br>
       3. Wait ~30 seconds for hot streak and platoon split data to load<br>
-      4. Check Top Targets for the day's best opportunities<br>
+      4. Check Best Plays for the day's top opportunities<br>
       5. Use Parlays tab for multi-leg combinations<br>
       6. Check Forecast tab for K props, NRFI/YRFI targets, and HR total projection<br>
       7. Confirmed lineups replace projections automatically as managers post them (2-3 hrs before first pitch)
