@@ -6091,9 +6091,9 @@ function renderTargets(){
   };
 
   // Bucket by badge label — matches exactly what user sees on cards
-  const elite    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Elite')).sort((a,b)=>scoreR(b)-scoreR(a)), 3);
-  const allStar  = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('All-Star')).sort((a,b)=>scoreR(b)-scoreR(a)), 3);
-  const value    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Value')).sort((a,b)=>scoreR(b)-scoreR(a)), 3);
+  const elite    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Elite')).sort((a,b)=>scoreR(b)-scoreR(a)), 3).slice(0,6);
+  const allStar  = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('All-Star')).sort((a,b)=>scoreR(b)-scoreR(a)), 3).slice(0,8);
+  const value    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Value')).sort((a,b)=>scoreR(b)-scoreR(a)), 2).slice(0,6);
 
   // Top probability — 15%+, no badge required, not already shown above
   const shownNames = new Set([...elite,...allStar,...value].map(r=>r.name));
