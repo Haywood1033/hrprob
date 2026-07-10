@@ -1073,6 +1073,13 @@ function hrProbWithStreak(batter, park, wx, pit, order) {
     // Additional SLG boost — recent power surge
     if (s.slg > 0.600 && s.ab >= 15) p *= 1.05;
   }
+
+  // ── CALIBRATION CORRECTION (based on 25-day accuracy data, 1950 predictions) ──
+  // Apply to raw p before tier check to avoid cascade effects
+  const pRaw = p;
+  if      (pRaw >= 20) p *= 0.82; // 20%+ overconfident: 23.2% avg → ~19%
+  else if (pRaw >= 15) p *= 1.10; // 15-19% underestimate: 17.1% avg → ~18.8%
+
   return Math.min(35, p);
 }
 
