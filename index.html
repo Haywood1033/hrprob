@@ -6068,7 +6068,6 @@ function expandTarget(i) {
 }
 
 function renderTargets(){
-  // Deduplicate by name — keep highest HR% matchup
   const seen = new Map();
   for(const r of allRows){
     const existing = seen.get(r.name);
@@ -6076,7 +6075,6 @@ function renderTargets(){
   }
   const players = [...seen.values()];
 
-  // Score for sorting
   const scoreR = (r) => {
     const {count,ci} = getSignalsLocked(r);
     const sb = SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?3:1.5) : 0;
@@ -6084,60 +6082,39 @@ function renderTargets(){
     return r.hrp*3 + count*5 + sb + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
   };
 
-  // Game cap helper — max N per game across a list
   const capPerGame = (list, max) => {
-    const gameCounts = {};
+    const counts = {};
     return list.filter(r => {
-      const pk = r.gamePk;
-      gameCounts[pk] = (gameCounts[pk]||0) + 1;
-      return gameCounts[pk] <= max;
+      counts[r.gamePk] = (counts[r.gamePk]||0) + 1;
+      return counts[r.gamePk] <= max;
     });
   };
 
-  // ── ELITE PLAYS: 4+ signals ──────────────────────────────────
-  const elitePlays = players
-    .filter(r => getSignalsLocked(r).count >= 4)
-    .sort((a,b) => scoreR(b)-scoreR(a));
+  // Bucket by badge label — matches exactly what user sees on cards
+  const elite    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Elite')).sort((a,b)=>scoreR(b)-scoreR(a)), 3);
+  const allStar  = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('All-Star')).sort((a,b)=>scoreR(b)-scoreR(a)), 3);
+  const value    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Value')).sort((a,b)=>scoreR(b)-scoreR(a)), 3);
 
-  // ── SIGNAL PLAYS: 3 signals, 12%+ prob, max 3/game ──────────
-  const eliteNames = new Set(elitePlays.map(r=>r.name));
-  const signalPlays = capPerGame(
-    players
-      .filter(r => !eliteNames.has(r.name) && getSignalsLocked(r).count >= 3 && r.hrp >= 12)
-      .sort((a,b) => scoreR(b)-scoreR(a)),
-    3
-  );
-
-  // ── TOP PROBABILITY: 15%+, max 3/game ────────────────────────
-  const sigNames = new Set([...eliteNames, ...signalPlays.map(r=>r.name)]);
+  // Top probability — 15%+, no badge required, not already shown above
+  const shownNames = new Set([...elite,...allStar,...value].map(r=>r.name));
   const topProb = capPerGame(
-    players
-      .filter(r => !sigNames.has(r.name) && r.hrp >= 15)
-      .sort((a,b) => b.hrp-a.hrp),
+    players.filter(r => !shownNames.has(r.name) && r.hrp >= 15).sort((a,b)=>b.hrp-a.hrp),
     3
-  ).slice(0, 15);
+  ).slice(0,12);
 
-  // Card builder
-  const buildCard = (r, i, showRank=false) => {
-    const {count, badge, signals} = getSignalsLocked(r);
+  const buildCard = (r) => {
+    const {badge, signals} = getSignalsLocked(r);
     const streak  = STREAK[r.name];
-    const batter  = getBatter(r.name) || {};
     const ps      = PARK_SPLITS[r.name];
     const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-    const src = r.source==='live'||r.source==='confirmed'
-      ? '<span class="sb slive" style="font-size:9px">✓</span>'
-      : '<span class="sb sproj" style="font-size:9px">~</span>';
+    const src = r.source==='live'||r.source==='confirmed' ? '<span class="sb slive" style="font-size:9px">✓</span>' : '<span class="sb sproj" style="font-size:9px">~</span>';
     const evBadge = r.bookOdds && r.evEdge > 2
-      ? `<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)">+EV</span>`
-      : '';
+      ? `<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)">+EV</span>` : '';
     const activeSignals = signals.filter(s=>s.active);
-    const topReason = activeSignals.length
-      ? activeSignals[0].label
+    const topReason = activeSignals.length ? activeSignals[0].label
       : ps?.flag==='boost' ? 'Career park boost'
-      : r.hrp >= 20 ? 'Elite probability'
-      : 'Strong contact profile';
+      : r.hrp >= 20 ? 'Elite probability' : 'Strong contact profile';
     return `<div class="tcard" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" style="cursor:pointer">
-      ${showRank?`<div class="trk">${i+1}</div>`:''}
       <div class="tn">${r.name} ${src} <span style="font-size:13px">${streak?.flame||''}</span></div>
       <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
       <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0">
@@ -6152,31 +6129,33 @@ function renderTargets(){
     </div>`;
   };
 
-  // Section header helper
-  const sectionHeader = (icon, title, subtitle) =>
-    `<div style="grid-column:1/-1;padding:6px 2px 10px">
-      <div style="font-size:13px;font-weight:700;color:var(--t1)">${icon} ${title}</div>
+  const emptyState = (msg) =>
+    `<div style="grid-column:1/-1;padding:10px 4px;font-size:10px;font-family:var(--mono);color:var(--t3);font-style:italic">${msg}</div>`;
+
+  const sectionHeader = (icon, title, subtitle, color) =>
+    `<div style="grid-column:1/-1;padding:8px 2px 10px;border-top:1px solid var(--bd);margin-top:4px">
+      <div style="font-size:13px;font-weight:700;color:${color}">${icon} ${title}</div>
       <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">${subtitle}</div>
     </div>`;
 
   let html = '';
 
-  if (elitePlays.length) {
-    html += sectionHeader('🏆', 'Elite Plays', `${elitePlays.length} play${elitePlays.length!==1?'s':''} · 4+ signals firing`);
-    html += elitePlays.map((r,i) => buildCard(r,i,true)).join('');
-  }
+  // Elite
+  html += sectionHeader('🏆', 'Elite Plays', elite.length ? `${elite.length} play${elite.length!==1?'s':''} today · 5-6 signals · best of the best` : 'No Elite plays today', 'var(--amber)');
+  html += elite.length ? elite.map(r=>buildCard(r)).join('') : emptyState('No players with 5+ signals today — check back as lineups and conditions confirm');
 
-  if (signalPlays.length) {
-    html += sectionHeader('⭐', 'Signal Plays', `${signalPlays.length} play${signalPlays.length!==1?'s':''} · 3 signals · 12%+ probability · max 3 per game`);
-    html += signalPlays.map((r,i) => buildCard(r,i,false)).join('');
-  }
+  // All-Star
+  html += sectionHeader('⭐', 'All-Star Plays', allStar.length ? `Top ${allStar.length} of today's All-Star plays · 4 signals · max 3 per game` : 'No All-Star plays today', 'var(--teal)');
+  html += allStar.length ? allStar.map(r=>buildCard(r)).join('') : emptyState('No players with 4 signals today');
 
-  if (topProb.length) {
-    html += sectionHeader('📊', 'Top Probability', `${topProb.length} play${topProb.length!==1?'s':''} · 15%+ model probability · max 3 per game`);
-    html += topProb.map((r,i) => buildCard(r,i,false)).join('');
-  }
+  // Value
+  html += sectionHeader('💡', 'Value Plays', value.length ? `Top ${value.length} of today's Value plays · 3 signals · max 3 per game` : 'No Value plays today', 'var(--purple)');
+  html += value.length ? value.map(r=>buildCard(r)).join('') : emptyState('No players with 3 signals today');
 
-  if (!html) html = '<div class="empty" style="grid-column:1/-1"><h3>Loading…</h3></div>';
+  // Top Probability
+  html += sectionHeader('📊', 'Top Probability', topProb.length ? `${topProb.length} plays · 15%+ model probability · no signal requirement · max 3 per game` : 'No additional probability plays today', 'var(--t2)');
+  html += topProb.length ? topProb.map(r=>buildCard(r)).join('') : emptyState('All 15%+ players already featured above');
+
   document.getElementById('tgrid').innerHTML = html;
 }
 
