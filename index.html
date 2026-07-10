@@ -4567,40 +4567,23 @@ async function loadH2HForModal(batterName, pitcherName, batterId, pitcherId) {
   const el = document.getElementById('pm-h2h-data') || document.getElementById('pm-h2h-inline');
   if (!el) return;
   try {
-    // Get pitcher ID if not cached
+    // Use fetchH2H which checks cache and aggregates career stats correctly
     let pid = pitcherId || PITCHER_IDS[pitcherName] || PITCHER_IDS[normName(pitcherName)];
-    if (!pid) {
-      const sr = await fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(pitcherName)}&sportId=1`);
-      const sd = await sr.json();
-      pid = sd.people?.[0]?.id;
-      if (pid && pitcherName) PITCHER_IDS[pitcherName] = pid;
-    }
-    // Get batter ID
-    let bid = batterId;
-    if (!bid) {
-      const br = await fetch(`https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(batterName)}&sportId=1`);
-      const bd = await br.json();
-      bid = bd.people?.[0]?.id;
-    }
-    if (!bid || !pid) { el.textContent = 'No career matchup data'; return; }
-    const h2h = await fetch(`https://statsapi.mlb.com/api/v1/people/${bid}/stats?stats=vsPlayer&opposingPlayerId=${pid}&group=hitting&sportId=1`);
-    const hd = await h2h.json();
-    const s = hd.stats?.[0]?.splits?.[0]?.stat;
-    if (!s || !s.atBats) { el.textContent = 'No career matchup data'; return; }
-    const avg = s.atBats>0 ? (s.hits/s.atBats).toFixed(3) : '.000';
-    el.innerHTML = `AVG <strong>.${avg.split('.')[1]}</strong> &nbsp; H ${s.hits||0}/${s.atBats||0} &nbsp; HR <strong>${s.homeRuns||0}</strong> &nbsp; BB ${s.baseOnBalls||0} &nbsp; K ${s.strikeOuts||0} &nbsp; OBP ${s.obp||'.000'} &nbsp; <span style="color:var(--t3)">${s.atBats||0} AB · ${Math.ceil((s.atBats||0)/4)} games</span>`;
-    // Also populate inline H2H cell in the grid
+    const h2h = await fetchH2H(batterName, pitcherName, pid);
+    if (!h2h || h2h.ab === 0) { el.textContent = 'No career matchup data'; return; }
+    const avg = h2h.avg.toFixed(3);
+    const hrColor = h2h.hr > 0 ? 'var(--teal)' : 'var(--t2)';
+    const acColor = h2h.avg >= 0.300 ? 'var(--green)' : h2h.avg >= 0.200 ? 'var(--t1)' : 'var(--red)';
+    const display = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:2px">
+      <span>AVG <strong style="color:${acColor}">.${avg.split('.')[1]}</strong></span>
+      <span>H ${h2h.h}/${h2h.ab}</span>
+      <span>HR <strong style="color:${hrColor}">${h2h.hr}</strong></span>
+      <span style="color:var(--t3)">BB ${h2h.bb} · K ${h2h.k}</span>
+      <span style="color:var(--t3)">${h2h.ab} AB · ${h2h.seasons} game${h2h.seasons!==1?'s':''}</span>
+    </div>`;
+    el.innerHTML = display;
     const inlineEl = document.getElementById('pm-h2h-inline');
-    if (inlineEl) {
-      const hrColor = s.homeRuns>0?'var(--teal)':'var(--t2)';
-      inlineEl.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:2px">
-        <span>AVG <strong style="color:var(--t1)">.${avg.split('.')[1]}</strong></span>
-        <span>H ${s.hits||0}/${s.atBats||0}</span>
-        <span>HR <strong style="color:${hrColor}">${s.homeRuns||0}</strong></span>
-        <span style="color:var(--t3)">BB ${s.baseOnBalls||0} · K ${s.strikeOuts||0}</span>
-        <span style="color:var(--t3)">${s.atBats||0} AB · ${Math.ceil((s.atBats||0)/4)} games</span>
-      </div>`;
-    }
+    if (inlineEl && inlineEl !== el) inlineEl.innerHTML = display;
   } catch(e) {
     if (el) el.textContent = 'Career data unavailable';
   }
