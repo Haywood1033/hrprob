@@ -2656,7 +2656,7 @@ function getSignals(r) {
 
   // ── SIGNAL 2: Weather (wind out ≥8mph, non-dome) ──────────────
   const wxActive = park.roof !== 'dome' && park.roof !== 'retractable'
-    && windOut && (wx.ws||0) >= 8;
+    && windOut && (wx.ws||0) >= 6;
 
   // ── SIGNAL 3: Pitcher matchup (xERA≥4.80 OR HR/9≥1.40) ───────
   // Also requires batter has decent splits vs this pitcher's hand
