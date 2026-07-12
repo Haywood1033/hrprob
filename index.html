@@ -4334,7 +4334,6 @@ function renderPulse() {
 
 
 // ── HOME RUN DERBY TAB ────────────────────────────────────────
-// July 13, 2026 · Citizens Bank Park · Philadelphia
 const DERBY_PLAYERS = [
   { name: 'Kyle Schwarber',    team: 'Phillies', seed: 1, homePark: true },
   { name: 'Bryce Harper',      team: 'Phillies', seed: 2, homePark: true },
@@ -4346,98 +4345,177 @@ const DERBY_PLAYERS = [
   { name: 'Jordan Walker',     team: 'Cardinals',seed: 8, homePark: false },
 ];
 
+// Known longest HR distances this season (from search data)
+const DERBY_MAX_DIST = {
+  'Kyle Schwarber':    460,
+  'Bryce Harper':      432,
+  'Junior Caminero':   445,
+  'Willson Contreras': 444,
+  'Munetaka Murakami': 451,
+  'Ben Rice':          433,
+  'Jac Caglianone':    433,
+  'Jordan Walker':     454,
+};
+
 function renderDerby() {
   const el = document.getElementById('derby-grid');
   if (!el) return;
 
-  // Score each player for Derby — power metrics only, no pitcher/park signal
-  // Derby scoring: EV (30%), barrel% (35%), max EV proxy (hard hit%, 20%), pull% air (15%)
   const derbyScore = (b) => {
-    if (!b) return 0;
+    if (!b || !b.ev) return 0;
     const ev     = b.ev    || 88;
     const barrel = b.ba    || 8;
     const hh     = b.hh    || 37;
     const pull   = b.pull_pct || 35;
     const fb     = b.fb_pct   || 33;
     const gb     = b.gb_pct   || 43;
-    // Only count pull as air if FB > GB
     const pullAir = (fb > gb) ? pull : pull * 0.6;
     return (ev - 88) * 1.5 + (barrel - 8) * 2.5 + (hh - 37) * 0.8 + (pullAir - 35) * 0.4;
   };
 
-  // Enrich derby players with Statcast data
+  // Project HRs per round based on barrel% and EV
+  // Historical Derby: ~barrel% * 0.85 * swings = projected HRs
+  // Elite contact gets a bonus, home crowd gets +5%
+  const projectHRs = (b, swings, isHome) => {
+    if (!b || !b.ba) return Math.round(swings * 0.35);
+    const barrelRate = (b.ba || 8) / 100;
+    const evBonus    = Math.max(0, (b.ev - 90) * 0.01);
+    const hhBonus    = Math.max(0, (b.hh - 40) * 0.005);
+    const homeBonus  = isHome ? 0.05 : 0;
+    const rate = Math.min(0.75, barrelRate * 4.2 + evBonus + hhBonus + homeBonus);
+    return Math.round(swings * rate);
+  };
+
+  // Project max distance from EV and known season longest
+  const projectMaxDist = (name, b) => {
+    const knownMax = DERBY_MAX_DIST[name] || 420;
+    const evBonus  = Math.max(0, ((b?.ev||88) - 88) * 2.5);
+    const brlBonus = Math.max(0, ((b?.ba||8) - 8) * 1.2);
+    // CBP plays about 5ft longer than average
+    return Math.round(knownMax + evBonus * 0.3 + brlBonus * 0.2 + 5);
+  };
+
   const enriched = DERBY_PLAYERS.map(p => {
     const b = getBatter(p.name) || getBatter(normName(p.name)) || {};
     const streak = STREAK[p.name] || STREAK[normName(p.name)] || {};
-    const score = derbyScore(b);
-    // Season HR count from BATTER data
-    return { ...p, b, streak, score };
+    const score  = derbyScore(b);
+    const r1HRs  = projectHRs(b, 20, p.homePark);
+    const r2HRs  = projectHRs(b, 15, p.homePark);
+    const maxDist = projectMaxDist(p.name, b);
+    return { ...p, b, streak, score, r1HRs, r2HRs, maxDist };
   }).sort((a,b) => b.score - a.score);
 
-  // Citizens Bank Park facts
+  // Winner prediction — top score + home bonus
+  const winnerScore = (p) => p.score + (p.homePark ? 3 : 0) + (p.r1HRs * 0.5);
+  const sorted = [...enriched].sort((a,b) => winnerScore(b) - winnerScore(a));
+  const winner   = sorted[0];
+  const finalist = sorted[1];
+
+  // Farthest HR projection
+  const farthest = [...enriched].sort((a,b) => b.maxDist - a.maxDist)[0];
+
+  // Most HRs in R1
+  const mostR1 = [...enriched].sort((a,b) => b.r1HRs - a.r1HRs)[0];
+
+  // Park header
   const parkFacts = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:16px">
-    <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:6px">⚡ 2026 T-Mobile Home Run Derby</div>
-    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--t3)">
+    <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:6px">⚡ 2026 T-Mobile Home Run Derby</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--t3)">
       <span>📅 Monday July 13 · 8PM ET · Netflix</span>
       <span>🏟 Citizens Bank Park · Philadelphia</span>
       <span>📐 5th-best HR park in MLB</span>
-      <span>🎯 20 swings R1 · 15 swings R2/Final</span>
+      <span>🎯 R1: 20 swings · R2/Final: 15 swings</span>
       <span>🏠 Harper & Schwarber on home turf</span>
     </div>
   </div>`;
 
-  // Format header
-  const header = `<div style="display:grid;grid-template-columns:32px 1fr 60px 60px 60px 60px 60px;gap:8px;padding:6px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--bd);margin-bottom:4px">
-    <div>Rank</div><div>Player</div><div style="text-align:center">EV</div><div style="text-align:center">Brl%</div><div style="text-align:center">HH%</div><div style="text-align:center">Pull%</div><div style="text-align:center">Score</div>
+  // Prediction cards
+  const predCards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:16px">
+    <!-- Winner prediction -->
+    <div style="background:var(--bg2);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:14px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">🏆 Predicted Winner</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">${winner.name.split(' ').pop()}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${winner.team}${winner.homePark?' · Home crowd':''}
+      </div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-top:4px">Score: ${winner.score.toFixed(1)} · Proj ${winner.r1HRs} R1 HRs</div>
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:4px">Runner up: ${finalist.name.split(' ').pop()}</div>
+    </div>
+
+    <!-- Farthest HR -->
+    <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:14px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">📏 Farthest Projected HR</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">${farthest.name.split(' ').pop()}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${farthest.team}</div>
+      <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--teal);margin-top:4px">${farthest.maxDist}<span style="font-size:11px">ft</span></div>
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Season longest: ${DERBY_MAX_DIST[farthest.name]}ft · EV ${farthest.b.ev||'—'}</div>
+    </div>
+
+    <!-- Most R1 HRs -->
+    <div style="background:var(--bg2);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:14px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">💥 Most R1 Home Runs</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">${mostR1.name.split(' ').pop()}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${mostR1.team}</div>
+      <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green);margin-top:4px">${mostR1.r1HRs}<span style="font-size:11px"> HRs</span></div>
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">On 20 swings · Brl ${mostR1.b.ba||'—'}% · EV ${mostR1.b.ev||'—'}</div>
+    </div>
+
+    <!-- Total HR projection all players R1 -->
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">📊 Total R1 HR Projection</div>
+      <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--t1)">${enriched.reduce((s,p)=>s+p.r1HRs,0)}<span style="font-size:11px"> HRs</span></div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">Across all 8 players · 160 total swings</div>
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:4px">Avg per player: ${(enriched.reduce((s,p)=>s+p.r1HRs,0)/8).toFixed(1)} HRs</div>
+    </div>
   </div>`;
 
-  const rows = enriched.map((p, i) => {
-    const b = p.b;
-    const ev     = b.ev    ? b.ev.toFixed(1)    : '—';
-    const barrel = b.ba    ? b.ba.toFixed(1)+'%' : '—';
-    const hh     = b.hh    ? b.hh.toFixed(1)+'%' : '—';
-    const pull   = b.pull_pct ? b.pull_pct.toFixed(0)+'%' : '—';
-    const scoreColor = i===0?'var(--green)':i<=2?'var(--teal)':i<=4?'var(--amber)':'var(--t3)';
-    const rankBg = i===0?'var(--green)':i<=2?'var(--teal)':i<=4?'var(--amber)':'var(--bg3)';
-    const rankColor = i<=4?'#000':'var(--t3)';
-    const homeBadge = p.homePark ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3)">HOME</span>' : '';
-    const flameBadge = p.streak?.flame ? `<span style="font-size:11px">${p.streak.flame}</span>` : '';
+  // Rankings table
+  const tableHeader = `<div style="display:grid;grid-template-columns:32px 1fr 55px 55px 55px 55px 65px 65px;gap:6px;padding:6px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--bd)">
+    <div>#</div><div>Player</div><div style="text-align:center">EV</div><div style="text-align:center">Brl%</div><div style="text-align:center">HH%</div><div style="text-align:center">Pull%</div><div style="text-align:center">Proj R1</div><div style="text-align:center">Max Dist</div>
+  </div>`;
 
-    // EV color coding
-    const evNum = parseFloat(ev);
-    const evColor = evNum >= 92 ? 'var(--green)' : evNum >= 90 ? 'var(--teal)' : evNum >= 88 ? 'var(--amber)' : 'var(--t2)';
+  const tableRows = enriched.map((p, i) => {
+    const b = p.b;
+    const ev     = b.ev    ? b.ev.toFixed(1)     : '—';
+    const barrel = b.ba    ? b.ba.toFixed(1)+'%'  : '—';
+    const hh     = b.hh    ? b.hh.toFixed(1)+'%'  : '—';
+    const pull   = b.pull_pct ? b.pull_pct.toFixed(0)+'%' : '—';
+    const evNum  = parseFloat(ev);
     const brlNum = parseFloat(barrel);
-    const brlColor = brlNum >= 15 ? 'var(--green)' : brlNum >= 10 ? 'var(--teal)' : brlNum >= 7 ? 'var(--amber)' : 'var(--t2)';
+    const evColor  = evNum  >= 93 ? 'var(--green)' : evNum  >= 91 ? 'var(--teal)' : 'var(--amber)';
+    const brlColor = brlNum >= 15 ? 'var(--green)' : brlNum >= 12 ? 'var(--teal)' : 'var(--amber)';
+    const rankBg   = i===0?'var(--green)':i<=2?'var(--teal)':i<=4?'var(--amber)':'var(--bg3)';
+    const rankColor = i<=4?'#000':'var(--t3)';
+    const homeBadge = p.homePark ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber)">HOME</span>' : '';
+    const flame = p.streak?.flame ? `<span style="font-size:10px">${p.streak.flame}</span>` : '';
 
     return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${p.name}"
-      style="display:grid;grid-template-columns:32px 1fr 60px 60px 60px 60px 60px;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s"
+      style="display:grid;grid-template-columns:32px 1fr 55px 55px 55px 55px 65px 65px;gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer"
       onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
       <div style="width:26px;height:26px;border-radius:50%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${rankColor}">${i+1}</div>
       <div>
-        <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:13px;font-weight:700;color:var(--t1)">${p.name}</span>
-          ${flameBadge}${homeBadge}
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="font-size:12px;font-weight:700;color:var(--t1)">${p.name}</span>${flame}${homeBadge}
         </div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · Seed #${p.seed}</div>
-        ${b.iso ? `<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">ISO ${b.iso?.toFixed(3)} · xwOBA ${b.xw?.toFixed(3)} · ${b.pa||0} PA</div>` : ''}
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · ISO ${b.iso?.toFixed(3)||'—'} · xwOBA ${b.xw?.toFixed(3)||'—'}</div>
       </div>
       <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${evColor}">${ev}</div>
       <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${brlColor}">${barrel}</div>
       <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${hh}</div>
       <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${pull}</div>
-      <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:${scoreColor}">${p.score > 0 ? '+'+p.score.toFixed(1) : p.score.toFixed(1)}</div>
+      <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:var(--teal)">${p.r1HRs}</div>
+      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${p.maxDist}ft</div>
     </div>`;
   }).join('');
 
-  // Format note
-  const note = `<div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:10px 14px;border-top:1px solid var(--bg3)">
-    Derby Score = weighted power index: EV (30%) · Barrel% (35%) · Hard Hit% (20%) · Pull Air% (15%) · Higher = better pure power profile for Derby format
+  const note = `<div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 14px;border-top:1px solid var(--bg3)">
+    Derby Score = EV(30%) · Barrel%(35%) · HH%(20%) · Pull Air%(15%) · Projections based on Statcast 2026 season data · Max distance includes CBP park adjustment (+5ft avg)
   </div>`;
 
   el.innerHTML = `<div style="padding:12px 0">
     ${parkFacts}
+    ${predCards}
     <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
-      ${header}${rows}${note}
+      ${tableHeader}${tableRows}${note}
     </div>
   </div>`;
 }
