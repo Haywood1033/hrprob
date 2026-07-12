@@ -4352,7 +4352,7 @@ function renderDerby() {
 
   // Score each player for Derby — power metrics only, no pitcher/park signal
   // Derby scoring: EV (30%), barrel% (35%), max EV proxy (hard hit%, 20%), pull% air (15%)
-  const derbyScore = (b, r) => {
+  const derbyScore = (b) => {
     if (!b) return 0;
     const ev     = b.ev    || 88;
     const barrel = b.ba    || 8;
@@ -4367,11 +4367,11 @@ function renderDerby() {
 
   // Enrich derby players with Statcast data
   const enriched = DERBY_PLAYERS.map(p => {
-    const b = getBatter(p.name) || {};
-    const r = allRows.find(row => row.name === p.name);
-    const streak = STREAK[p.name] || getStreak(p.name);
-    const score = derbyScore(b, r);
-    return { ...p, b, r, streak, score };
+    const b = getBatter(p.name) || getBatter(normName(p.name)) || {};
+    const streak = STREAK[p.name] || STREAK[normName(p.name)] || {};
+    const score = derbyScore(b);
+    // Season HR count from BATTER data
+    return { ...p, b, streak, score };
   }).sort((a,b) => b.score - a.score);
 
   // Citizens Bank Park facts
@@ -4419,7 +4419,7 @@ function renderDerby() {
           ${flameBadge}${homeBadge}
         </div>
         <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · Seed #${p.seed}</div>
-        ${p.r ? `<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Season: ${p.r.hrp?.toFixed(1)||'—'}% HR prob · ISO ${b.iso?.toFixed(3)||'—'} · xwOBA ${b.xw?.toFixed(3)||'—'}</div>` : ''}
+        ${b.iso ? `<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">ISO ${b.iso?.toFixed(3)} · xwOBA ${b.xw?.toFixed(3)} · ${b.pa||0} PA</div>` : ''}
       </div>
       <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${evColor}">${ev}</div>
       <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${brlColor}">${barrel}</div>
