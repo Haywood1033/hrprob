@@ -92,8 +92,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -480,6 +480,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
+  <div class="tab" onclick="setView('derby',this)">⚡ Derby</div>
 </nav>
 <div class="fbar" id="fbar">
   <input type="text" id="srch" placeholder="Search player…" oninput="renderPlayers()">
@@ -509,6 +510,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <th onclick="sortBy('ev')">EV</th>
 </tr></thead><tbody id="ptbody"></tbody></table></div></div>
 <div id="vpulse" class="view"><div id="pulse-grid"></div></div>
+<div id="vderby" class="view"><div id="derby-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets" class="view"><div class="tgrid" id="tgrid"></div></div>
@@ -4330,6 +4332,116 @@ function renderPulse() {
   </div>`;
 }
 
+
+// ── HOME RUN DERBY TAB ────────────────────────────────────────
+// July 13, 2026 · Citizens Bank Park · Philadelphia
+const DERBY_PLAYERS = [
+  { name: 'Kyle Schwarber',    team: 'Phillies', seed: 1, homePark: true },
+  { name: 'Bryce Harper',      team: 'Phillies', seed: 2, homePark: true },
+  { name: 'Junior Caminero',   team: 'Rays',     seed: 3, homePark: false },
+  { name: 'Willson Contreras', team: 'Red Sox',  seed: 4, homePark: false },
+  { name: 'Munetaka Murakami', team: 'White Sox',seed: 5, homePark: false },
+  { name: 'Ben Rice',          team: 'Yankees',  seed: 6, homePark: false },
+  { name: 'Jac Caglianone',    team: 'Royals',   seed: 7, homePark: false },
+  { name: 'Jordan Walker',     team: 'Cardinals',seed: 8, homePark: false },
+];
+
+function renderDerby() {
+  const el = document.getElementById('derby-grid');
+  if (!el) return;
+
+  // Score each player for Derby — power metrics only, no pitcher/park signal
+  // Derby scoring: EV (30%), barrel% (35%), max EV proxy (hard hit%, 20%), pull% air (15%)
+  const derbyScore = (b, r) => {
+    if (!b) return 0;
+    const ev     = b.ev    || 88;
+    const barrel = b.ba    || 8;
+    const hh     = b.hh    || 37;
+    const pull   = b.pull_pct || 35;
+    const fb     = b.fb_pct   || 33;
+    const gb     = b.gb_pct   || 43;
+    // Only count pull as air if FB > GB
+    const pullAir = (fb > gb) ? pull : pull * 0.6;
+    return (ev - 88) * 1.5 + (barrel - 8) * 2.5 + (hh - 37) * 0.8 + (pullAir - 35) * 0.4;
+  };
+
+  // Enrich derby players with Statcast data
+  const enriched = DERBY_PLAYERS.map(p => {
+    const b = getBatter(p.name) || {};
+    const r = allRows.find(row => row.name === p.name);
+    const streak = STREAK[p.name] || getStreak(p.name);
+    const score = derbyScore(b, r);
+    return { ...p, b, r, streak, score };
+  }).sort((a,b) => b.score - a.score);
+
+  // Citizens Bank Park facts
+  const parkFacts = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:6px">⚡ 2026 T-Mobile Home Run Derby</div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--t3)">
+      <span>📅 Monday July 13 · 8PM ET · Netflix</span>
+      <span>🏟 Citizens Bank Park · Philadelphia</span>
+      <span>📐 5th-best HR park in MLB</span>
+      <span>🎯 20 swings R1 · 15 swings R2/Final</span>
+      <span>🏠 Harper & Schwarber on home turf</span>
+    </div>
+  </div>`;
+
+  // Format header
+  const header = `<div style="display:grid;grid-template-columns:32px 1fr 60px 60px 60px 60px 60px;gap:8px;padding:6px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid var(--bd);margin-bottom:4px">
+    <div>Rank</div><div>Player</div><div style="text-align:center">EV</div><div style="text-align:center">Brl%</div><div style="text-align:center">HH%</div><div style="text-align:center">Pull%</div><div style="text-align:center">Score</div>
+  </div>`;
+
+  const rows = enriched.map((p, i) => {
+    const b = p.b;
+    const ev     = b.ev    ? b.ev.toFixed(1)    : '—';
+    const barrel = b.ba    ? b.ba.toFixed(1)+'%' : '—';
+    const hh     = b.hh    ? b.hh.toFixed(1)+'%' : '—';
+    const pull   = b.pull_pct ? b.pull_pct.toFixed(0)+'%' : '—';
+    const scoreColor = i===0?'var(--green)':i<=2?'var(--teal)':i<=4?'var(--amber)':'var(--t3)';
+    const rankBg = i===0?'var(--green)':i<=2?'var(--teal)':i<=4?'var(--amber)':'var(--bg3)';
+    const rankColor = i<=4?'#000':'var(--t3)';
+    const homeBadge = p.homePark ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3)">HOME</span>' : '';
+    const flameBadge = p.streak?.flame ? `<span style="font-size:11px">${p.streak.flame}</span>` : '';
+
+    // EV color coding
+    const evNum = parseFloat(ev);
+    const evColor = evNum >= 92 ? 'var(--green)' : evNum >= 90 ? 'var(--teal)' : evNum >= 88 ? 'var(--amber)' : 'var(--t2)';
+    const brlNum = parseFloat(barrel);
+    const brlColor = brlNum >= 15 ? 'var(--green)' : brlNum >= 10 ? 'var(--teal)' : brlNum >= 7 ? 'var(--amber)' : 'var(--t2)';
+
+    return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${p.name}"
+      style="display:grid;grid-template-columns:32px 1fr 60px 60px 60px 60px 60px;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .1s"
+      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
+      <div style="width:26px;height:26px;border-radius:50%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${rankColor}">${i+1}</div>
+      <div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:13px;font-weight:700;color:var(--t1)">${p.name}</span>
+          ${flameBadge}${homeBadge}
+        </div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · Seed #${p.seed}</div>
+        ${p.r ? `<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Season: ${p.r.hrp?.toFixed(1)||'—'}% HR prob · ISO ${b.iso?.toFixed(3)||'—'} · xwOBA ${b.xw?.toFixed(3)||'—'}</div>` : ''}
+      </div>
+      <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${evColor}">${ev}</div>
+      <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${brlColor}">${barrel}</div>
+      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${hh}</div>
+      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${pull}</div>
+      <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:${scoreColor}">${p.score > 0 ? '+'+p.score.toFixed(1) : p.score.toFixed(1)}</div>
+    </div>`;
+  }).join('');
+
+  // Format note
+  const note = `<div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:10px 14px;border-top:1px solid var(--bg3)">
+    Derby Score = weighted power index: EV (30%) · Barrel% (35%) · Hard Hit% (20%) · Pull Air% (15%) · Higher = better pure power profile for Derby format
+  </div>`;
+
+  el.innerHTML = `<div style="padding:12px 0">
+    ${parkFacts}
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+      ${header}${rows}${note}
+    </div>
+  </div>`;
+}
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -6171,6 +6283,7 @@ function renderAll(){
   else if(curView==='pitchers') renderPitchers();
   else if(curView==='history') renderHistory();
   else if(curView==='pulse')   renderPulse();
+  else if(curView==='derby')   renderDerby();
   else renderTargets();
 }
 
