@@ -4494,6 +4494,33 @@ function renderDerby() {
     </div>
   </div>`;
 
+  const gamePredCard = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:12px">
+    <div style="background:var(--bg2);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;margin-bottom:6px">🏆 ML Lean</div>
+      <div style="font-size:18px;font-weight:700;color:var(--t1)">NL</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Home field · Deeper roster</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--green);margin-top:3px">NL -110 · AL +110</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:6px">📊 Proj Total</div>
+      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--teal)">8.5</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">O/U 8.5 · Lean Under</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-top:3px">Short outings · Many arms</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:6px">⚾ Score Pred</div>
+      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--t1)">5–4</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">NL over AL</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">CBP plays as hitter's park</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:6px">📈 HR Proj</div>
+      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--amber)">4–6</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Total HRs hit tonight</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Elite power on both sides</div>
+    </div>
+  </div>`;
+
   function tableHeader(league, pitcher, pitHand) {
     return '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:14px">'
       + '<div style="padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--bd)">'
@@ -4508,6 +4535,7 @@ function renderDerby() {
 
   el.innerHTML = `<div style="padding:12px 0">
     ${gameHeader}
+    ${gamePredCard}
     ${mvpCard}
     ${topCard}
     ${tableHeader('🔵 American League', 'Cristopher Sánchez', 'L')}
