@@ -4424,7 +4424,36 @@ function renderDerby() {
     </div>`;
   };
 
-  const tableHeader = (league, pitcher, pitHand) =>
+  const mvpCard = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">
+    <!-- Our model pick -->
+    <div style="background:var(--bg2);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);text-transform:uppercase;margin-bottom:6px">🏆 Model MVP Pick</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">Kyle Schwarber</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">NL · Phillies · Home crowd</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-top:4px">Reigning MVP · MLB-best 32 HR · Leads off NL · Brl 19.6% · EV 93.5</div>
+    </div>
+    <!-- Value pick -->
+    <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:6px">💡 Value Pick</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">Ben Rice</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">AL · Yankees · +3000 odds</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--teal);margin-top:4px">.423 AVG last 6G · 68.4% HH% · 30%+ Brl rate · vs LHP Sánchez in R1</div>
+    </div>
+    <!-- AL dark horse -->
+    <div style="background:var(--bg2);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:12px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--purple);text-transform:uppercase;margin-bottom:6px">🎯 AL Dark Horse</div>
+      <div style="font-size:16px;font-weight:700;color:var(--t1)">Junior Caminero</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">AL · Rays · +2500 odds</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--purple);margin-top:4px">AL Player of Week · Power tear last 3 weeks · Brl 13.6% · EV 93.2</div>
+    </div>
+    <!-- Book odds summary -->
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:6px">📊 Book Favorites</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t2);line-height:1.8">
+        Schwarber +1300<br>Harper +1300<br>Caminero +2000<br>Witt Jr. +2500<br>Freeman +2500<br>Rice +3000
+      </div>
+    </div>
+  </div>`;
     `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:14px">
       <div style="padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--bd)">
         <div style="font-size:13px;font-weight:700;color:var(--t1)">${league}</div>
@@ -4475,6 +4504,7 @@ function renderDerby() {
 
   el.innerHTML = `<div style="padding:12px 0">
     ${gameHeader}
+    ${mvpCard}
     ${topCard}
     ${tableHeader('🔵 American League', 'Cristopher Sánchez', 'L')}
       ${AS_AL.map(p => buildPlayerRow(p, 'L')).join('')}
