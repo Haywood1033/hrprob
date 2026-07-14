@@ -480,7 +480,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
-  <div class="tab" onclick="setView('derby',this)">⚡ Derby</div>
+  <div class="tab" onclick="setView('derby',this)">⭐ All-Star</div>
 </nav>
 <div class="fbar" id="fbar">
   <input type="text" id="srch" placeholder="Search player…" oninput="renderPlayers()">
@@ -4333,223 +4333,157 @@ function renderPulse() {
 }
 
 
-// ── HOME RUN DERBY TAB ────────────────────────────────────────
-const DERBY_PLAYERS = [
-  { name: 'Kyle Schwarber',    team: 'Phillies', seed: 1, homePark: true },
-  { name: 'Bryce Harper',      team: 'Phillies', seed: 2, homePark: true },
-  { name: 'Junior Caminero',   team: 'Rays',     seed: 3, homePark: false },
-  { name: 'Willson Contreras', team: 'Red Sox',  seed: 4, homePark: false },
-  { name: 'Munetaka Murakami', team: 'White Sox',seed: 5, homePark: false },
-  { name: 'Ben Rice',          team: 'Yankees',  seed: 6, homePark: false },
-  { name: 'Jac Caglianone',    team: 'Royals',   seed: 7, homePark: false },
-  { name: 'Jordan Walker',     team: 'Cardinals',seed: 8, homePark: false },
+// ── ALL-STAR GAME TAB ─────────────────────────────────────────
+// July 14, 2026 · Citizens Bank Park · Philadelphia · 8PM ET · FOX
+const AS_AL = [
+  { name:'Mike Trout',      order:1, pos:'CF', team:'Angels'   },
+  { name:'Yordan Alvarez',  order:2, pos:'DH', team:'Astros'   },
+  { name:'Shea Langeliers', order:3, pos:'C',  team:'Athletics'},
+  { name:'Junior Caminero', order:4, pos:'3B', team:'Rays'     },
+  { name:'Bobby Witt Jr.',  order:5, pos:'SS', team:'Royals'   },
+  { name:'Cody Bellinger',  order:6, pos:'RF', team:'Yankees'  },
+  { name:'Ben Rice',        order:7, pos:'1B', team:'Yankees'  },
+  { name:'Riley Greene',    order:8, pos:'LF', team:'Tigers'   },
+  { name:'Ernie Clement',   order:9, pos:'2B', team:'Blue Jays'},
+];
+const AS_NL = [
+  { name:'Kyle Schwarber',  order:1, pos:'DH', team:'Phillies' },
+  { name:'Juan Soto',       order:2, pos:'LF', team:'Mets'     },
+  { name:'Freddie Freeman', order:3, pos:'1B', team:'Dodgers'  },
+  { name:'CJ Abrams',       order:4, pos:'SS', team:'Nationals'},
+  { name:'Max Muncy',       order:5, pos:'3B', team:'Dodgers'  },
+  { name:'Ozzie Albies',    order:6, pos:'2B', team:'Braves'   },
+  { name:'Brandon Marsh',   order:7, pos:'RF', team:'Phillies' },
+  { name:'Andy Pages',      order:8, pos:'CF', team:'Dodgers'  },
+  { name:'Drake Baldwin',   order:9, pos:'C',  team:'Braves'   },
 ];
 
-const DERBY_MAX_DIST = {
-  'Kyle Schwarber':    460, 'Bryce Harper':      432,
-  'Junior Caminero':   445, 'Willson Contreras': 444,
-  'Munetaka Murakami': 451, 'Ben Rice':          433,
-  'Jac Caglianone':    433, 'Jordan Walker':     454,
-};
+let _allStarPollInterval = null;
 
-let _derbyData = null;       // live data from API
-let _derbyPollInterval = null;
-
-async function fetchDerbyLive() {
-  try {
-    const r = await safeFetch('/api/derby', 8000);
-    if (!r.ok) return;
-    const d = await r.json();
-    if (d.ok) {
-      _derbyData = d;
-      if (curView === 'derby') renderDerby();
-    }
-  } catch(e) { console.warn('Derby fetch:', e.message); }
-}
-
-function startDerbyPolling() {
-  if (_derbyPollInterval) return;
-  fetchDerbyLive();
-  _derbyPollInterval = setInterval(fetchDerbyLive, 30000);
-}
-
-function stopDerbyPolling() {
-  if (_derbyPollInterval) { clearInterval(_derbyPollInterval); _derbyPollInterval = null; }
+function startAllStarPolling() {
+  if (_allStarPollInterval) return;
+  _allStarPollInterval = setInterval(() => {
+    if (curView === 'derby') renderDerby();
+  }, 60000); // refresh every 60s to update live odds/streak data
 }
 
 function renderDerby() {
   const el = document.getElementById('derby-grid');
   if (!el) return;
+  startAllStarPolling();
 
-  // Start polling when tab is viewed
-  startDerbyPolling();
-
-  const derbyScore = (b) => {
-    if (!b || !b.ev) return 0;
-    const ev=b.ev||88, barrel=b.ba||8, hh=b.hh||37, pull=b.pull_pct||35, fb=b.fb_pct||33, gb=b.gb_pct||43;
-    const pullAir = (fb > gb) ? pull : pull * 0.6;
-    return (ev-88)*1.5 + (barrel-8)*2.5 + (hh-37)*0.8 + (pullAir-35)*0.4;
-  };
-
-  const projectHRs = (b, swings, isHome) => {
-    if (!b || !b.ba) return Math.round(swings * 0.35);
-    const rate = Math.min(0.75, (b.ba/100)*4.2 + Math.max(0,(b.ev-90)*0.01) + Math.max(0,(b.hh-40)*0.005) + (isHome?0.05:0));
-    return Math.round(swings * rate);
-  };
-
-  const projectMaxDist = (name, b) => {
-    const known = DERBY_MAX_DIST[name] || 420;
-    return Math.round(known + Math.max(0,((b?.ev||88)-88)*0.75) + Math.max(0,((b?.ba||8)-8)*0.36) + 5);
-  };
-
-  const enriched = DERBY_PLAYERS.map(p => {
+  // Build player rows using our Statcast + model data
+  const buildPlayerRow = (p, pitcherHand) => {
     const b = getBatter(p.name) || getBatter(normName(p.name)) || {};
     const streak = STREAK[p.name] || STREAK[normName(p.name)] || {};
-    const score  = derbyScore(b);
-    const r1HRs  = projectHRs(b, 20, p.homePark);
-    const r2HRs  = projectHRs(b, 15, p.homePark);
-    const maxDist = projectMaxDist(p.name, b);
-    // Overlay live data if available
-    const livePlayer = _derbyData?.players?.find(lp => lp.name === p.name);
-    const liveR1 = livePlayer?.r1HRs ?? null;
-    const liveR2 = livePlayer?.r2HRs ?? null;
-    const liveFinal = livePlayer?.finalHRs ?? null;
-    const eliminated = livePlayer?.eliminated || false;
-    const winner = livePlayer?.winner || false;
-    return { ...p, b, streak, score, r1HRs, r2HRs, maxDist, liveR1, liveR2, liveFinal, eliminated, winner };
-  }).sort((a,b) => {
-    // If live data exists sort by live HRs, else by score
-    if (_derbyData?.status === 'live' || _derbyData?.status === 'final') {
-      const aHRs = (a.liveR1||0) + (a.liveR2||0) + (a.liveFinal||0);
-      const bHRs = (b.liveR1||0) + (b.liveR2||0) + (b.liveFinal||0);
-      return bHRs - aHRs;
-    }
-    return b.score - a.score;
-  });
+    const r = allRows.find(row => row.name === p.name);
 
-  const winnerP  = enriched.find(p=>p.winner) || [...enriched].sort((a,b)=>b.score+(b.homePark?3:0)-(a.score+(a.homePark?3:0)))[0];
-  const finalist = enriched.filter(p=>!p.winner).sort((a,b)=>b.score+(b.homePark?3:0)-(a.score+(a.homePark?3:0)))[0];
-  const farthest = [...enriched].sort((a,b)=>b.maxDist-a.maxDist)[0];
-  const mostR1   = [...enriched].sort((a,b)=>b.r1HRs-a.r1HRs)[0];
+    // HR probability vs this pitcher hand
+    const xw    = b.xw    || 0.310;
+    const barrel= b.ba    || 8;
+    const ev    = b.ev    || 88;
+    const iso   = b.iso   || 0.150;
 
-  // Live status banner
-  const isLive  = _derbyData?.status === 'live';
-  const isFinal = _derbyData?.status === 'final';
-  const liveBanner = isLive
-    ? `<div style="background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:8px 14px;margin-bottom:12px;display:flex;align-items:center;gap:8px">
-        <span style="width:8px;height:8px;border-radius:50%;background:var(--red);display:inline-block;animation:pulse 1s infinite"></span>
-        <span style="font-size:11px;font-family:var(--mono);color:var(--red);font-weight:700">LIVE · Round ${_derbyData?.currentRound||1} · ${_derbyData?.currentPlayer||'—'} batting</span>
-        <span style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-left:auto">Updates every 30s</span>
-      </div>`
-    : isFinal
-    ? `<div style="background:rgba(74,222,128,.08);border:1px solid rgba(74,222,128,.2);border-radius:8px;padding:8px 14px;margin-bottom:12px">
-        <span style="font-size:11px;font-family:var(--mono);color:var(--green);font-weight:700">FINAL · ${_derbyData?.players?.find(p=>p.winner)?.name||'—'} wins!</span>
-      </div>`
-    : `<div style="background:var(--bg3);border-radius:8px;padding:8px 14px;margin-bottom:12px">
-        <span style="font-size:10px;font-family:var(--mono);color:var(--t3)">⏳ Pre-Derby · Live scoring begins at 8PM ET · July 13 · Netflix</span>
-      </div>`;
+    // Simple HR probability based on our model data
+    const vsHandSplits = SPLITS[p.name] || SPLITS[normName(p.name)];
+    const splitKey = pitcherHand === 'L' ? 'vsLHP' : 'vsRHP';
+    const split = vsHandSplits?.[splitKey];
+    const slg  = split?.slg || (iso + 0.250);
+    const hrAB = split ? (split.hr||0) / Math.max(split.ab||1, 1) : null;
 
-  const parkFacts = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:14px 16px;margin-bottom:12px">
-    <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:6px">⚡ 2026 T-Mobile Home Run Derby</div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--t3)">
-      <span>📅 July 13 · 8PM ET · Netflix</span>
-      <span>🏟 Citizens Bank Park · Philadelphia</span>
-      <span>📐 5th-best HR park in MLB</span>
-      <span>🎯 R1: 20 swings · R2/Final: 15 swings</span>
-      <span>🏠 Harper & Schwarber home crowd</span>
-      <span>💰 Winner takes $1M of $2.5M pool</span>
-    </div>
-  </div>`;
+    // HR prob estimate
+    const hrProb = hrAB !== null
+      ? Math.min(25, Math.max(3, hrAB * 100 * 3.2)).toFixed(1)
+      : Math.min(25, Math.max(3, barrel * 0.8 + (ev-88)*0.3)).toFixed(1);
 
-  const predCards = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;margin-bottom:14px">
-    <div style="background:var(--bg2);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);text-transform:uppercase;margin-bottom:4px">🏆 ${isFinal?'Winner':'Predicted Winner'}</div>
-      <div style="font-size:15px;font-weight:700;color:var(--t1)">${winnerP.name.split(' ').pop()}</div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${winnerP.team}${winnerP.homePark?' · Home crowd':''}</div>
-      ${!isFinal?`<div style="font-size:9px;font-family:var(--mono);color:var(--amber);margin-top:3px">Score: ${winnerP.score.toFixed(1)} · Proj ${winnerP.r1HRs} R1</div>`:''}
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">Runner up: ${finalist?.name?.split(' ').pop()}</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:4px">📏 Farthest HR</div>
-      <div style="font-size:15px;font-weight:700;color:var(--t1)">${farthest.name.split(' ').pop()}</div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${farthest.team}</div>
-      <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--teal);margin-top:3px">${farthest.maxDist}<span style="font-size:10px">ft</span></div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Season longest: ${DERBY_MAX_DIST[farthest.name]}ft</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;margin-bottom:4px">💥 Most R1 HRs</div>
-      <div style="font-size:15px;font-weight:700;color:var(--t1)">${mostR1.name.split(' ').pop()}</div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${mostR1.team}</div>
-      <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--green);margin-top:3px">${isLive&&mostR1.liveR1!==null?mostR1.liveR1:mostR1.r1HRs}<span style="font-size:10px"> HRs</span></div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${isLive?'Live':'Projected'} · Brl ${mostR1.b.ba||'—'}%</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:4px">📊 Total R1 Proj</div>
-      <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--t1)">${enriched.reduce((s,p)=>s+(isLive&&p.liveR1!==null?p.liveR1:p.r1HRs),0)}<span style="font-size:10px"> HRs</span></div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:3px">8 players · 160 swings</div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Avg ${(enriched.reduce((s,p)=>s+(isLive&&p.liveR1!==null?p.liveR1:p.r1HRs),0)/8).toFixed(1)} per player</div>
-    </div>
-  </div>`;
+    // Hit prob (rough estimate from xwOBA)
+    const hitProb = Math.min(75, Math.max(20, (xw - 0.250) * 200 + 28)).toFixed(0);
 
-  const tableHeader = `<div style="display:grid;grid-template-columns:30px 1fr 50px 50px 50px 50px ${isLive||isFinal?'50px 50px 50px':'55px 65px'};gap:6px;padding:6px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bd)">
-    <div>#</div><div>Player</div><div style="text-align:center">EV</div><div style="text-align:center">Brl%</div><div style="text-align:center">HH%</div><div style="text-align:center">Pull</div>
-    ${isLive||isFinal
-      ? '<div style="text-align:center;color:var(--red)">R1</div><div style="text-align:center;color:var(--amber)">R2</div><div style="text-align:center;color:var(--green)">Final</div>'
-      : '<div style="text-align:center">Proj R1</div><div style="text-align:center">Max Dist</div>'}
-  </div>`;
+    // RBI opportunity (batting order based)
+    const rbiProb = Math.min(40, Math.max(8, (10 - p.order) * 2.5 + 10 + (slg - 0.400) * 15)).toFixed(0);
 
-  const tableRows = enriched.map((p, i) => {
-    const b = p.b;
-    const ev    = b.ev    ? b.ev.toFixed(1)    : '—';
-    const barrel= b.ba    ? b.ba.toFixed(1)+'%': '—';
-    const hh    = b.hh    ? b.hh.toFixed(1)+'%': '—';
-    const pull  = b.pull_pct ? b.pull_pct.toFixed(0)+'%':'—';
-    const evColor  = parseFloat(ev)>=93?'var(--green)':parseFloat(ev)>=91?'var(--teal)':'var(--amber)';
-    const brlColor = parseFloat(barrel)>=15?'var(--green)':parseFloat(barrel)>=12?'var(--teal)':'var(--amber)';
-    const rankBg   = i===0?'var(--green)':i<=2?'var(--teal)':i<=4?'var(--amber)':'var(--bg3)';
-    const rankColor= i<=4?'#000':'var(--t3)';
-    const homeBadge= p.homePark?'<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber)">HOME</span>':'';
-    const elimStyle= p.eliminated?'opacity:0.4':'';
-    const winStyle = p.winner?'background:rgba(74,222,128,.05)':'';
-    const winCrown = p.winner?'👑 ':'';
-    const flame    = p.streak?.flame?`<span style="font-size:10px">${p.streak.flame}</span>`:'';
-
-    const rightCols = isLive||isFinal
-      ? `<div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:var(--red)">${p.liveR1!==null?p.liveR1:'—'}</div>
-         <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:var(--amber)">${p.liveR2!==null?p.liveR2:'—'}</div>
-         <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:var(--green)">${p.liveFinal!==null?p.liveFinal:'—'}</div>`
-      : `<div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:var(--teal)">${p.r1HRs}</div>
-         <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${p.maxDist}ft</div>`;
+    const hrpColor = parseFloat(hrProb)>=15?'var(--green)':parseFloat(hrProb)>=10?'var(--teal)':parseFloat(hrProb)>=6?'var(--amber)':'var(--t2)';
+    const flame = streak?.flame ? `<span style="font-size:11px">${streak.flame}</span>` : '';
+    const {badge} = getSignalsLocked({name:p.name, hrp:parseFloat(hrProb), pit:{hand:pitcherHand}, ...b}) || {};
 
     return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${p.name}"
-      style="display:grid;grid-template-columns:30px 1fr 50px 50px 50px 50px ${isLive||isFinal?'50px 50px 50px':'55px 65px'};gap:6px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;${elimStyle};${winStyle}"
-      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='${p.winner?'rgba(74,222,128,.05)':'transparent'}'">
-      <div style="width:26px;height:26px;border-radius:50%;background:${rankBg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:${rankColor}">${i+1}</div>
+      style="display:grid;grid-template-columns:24px 28px 1fr 55px 45px 45px;gap:6px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--bg3);cursor:pointer"
+      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-align:center">${p.order}</div>
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-align:center;background:var(--bg3);padding:2px 3px;border-radius:3px">${p.pos}</div>
       <div>
         <div style="display:flex;align-items:center;gap:4px">
-          <span style="font-size:12px;font-weight:700;color:var(--t1)">${winCrown}${p.name}</span>${flame}${homeBadge}
-          ${p.eliminated?'<span style="font-size:9px;font-family:var(--mono);color:var(--red)">OUT</span>':''}
+          <span style="font-size:12px;font-weight:700;color:var(--t1)">${p.name}</span>${flame}
+          ${badge?`<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}
         </div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · ISO ${b.iso?.toFixed(3)||'—'} · xwOBA ${b.xw?.toFixed(3)||'—'}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · Brl ${barrel.toFixed?barrel.toFixed(1):barrel}% · EV ${ev.toFixed?ev.toFixed(1):ev} · xwOBA ${xw.toFixed?xw.toFixed(3):xw}</div>
       </div>
-      <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${evColor}">${ev}</div>
-      <div style="text-align:center;font-size:12px;font-weight:700;font-family:var(--mono);color:${brlColor}">${barrel}</div>
-      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${hh}</div>
-      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--t2)">${pull}</div>
-      ${rightCols}
+      <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${hrProb}%</div>
+      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--teal)">${hitProb}%</div>
+      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--amber)">${rbiProb}%</div>
     </div>`;
-  }).join('');
+  };
 
-  const note = `<div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 14px;border-top:1px solid var(--bg3)">
-    Derby Score = EV(30%) · Barrel%(35%) · HH%(20%) · Pull Air%(15%) · Max distance includes CBP +5ft adjustment · Live scores update every 30s
+  const tableHeader = (league, pitcher, pitHand) =>
+    `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:14px">
+      <div style="padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--bd)">
+        <div style="font-size:13px;font-weight:700;color:var(--t1)">${league}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs ${pitcher} · ${pitHand}HP starter</div>
+      </div>
+      <div style="display:grid;grid-template-columns:24px 28px 1fr 55px 45px 45px;gap:6px;padding:5px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bg3)">
+        <div>#</div><div>Pos</div><div>Player</div><div style="text-align:center">HR%</div><div style="text-align:center">Hit%</div><div style="text-align:center">RBI%</div>
+      </div>`;
+
+  // Top HR threats across both lineups
+  const allPlayers = [
+    ...AS_AL.map(p => ({ ...p, league:'AL', pitHand:'L' })),  // vs Sánchez LHP
+    ...AS_NL.map(p => ({ ...p, league:'NL', pitHand:'R' })),  // vs Cease RHP
+  ];
+  
+  const topThreats = allPlayers.map(p => {
+    const b = getBatter(p.name) || getBatter(normName(p.name)) || {};
+    const barrel = b.ba || 8;
+    const ev = b.ev || 88;
+    const hrEst = Math.min(25, Math.max(3, barrel * 0.8 + (ev-88)*0.3));
+    return { ...p, b, hrEst };
+  }).sort((a,b) => b.hrEst - a.hrEst).slice(0,5);
+
+  const topCard = `<div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px 14px;margin-bottom:14px">
+    <div style="font-size:10px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:8px">🎯 Top HR Threats Tonight</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${topThreats.map((p,i) => {
+        const hrEst = p.hrEst.toFixed(1);
+        const color = i===0?'var(--green)':i<=2?'var(--teal)':'var(--amber)';
+        return `<div style="background:var(--bg3);border-radius:8px;padding:8px 10px;min-width:100px;text-align:center">
+          <div style="font-size:11px;font-weight:700;color:var(--t1)">${p.name.split(' ').pop()}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.league} · ${p.team}</div>
+          <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${color};margin-top:2px">${hrEst}%</div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+
+  const gameHeader = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:12px">
+    <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:4px">⭐ 2026 MLB All-Star Game</div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--t3)">
+      <span>📅 Tonight · July 14 · 8PM ET · FOX</span>
+      <span>🏟 Citizens Bank Park · Philadelphia</span>
+      <span>⚾ AL: Dylan Cease (RHP) vs NL: Cristopher Sánchez (LHP)</span>
+      <span>📐 5th-best HR park in MLB</span>
+    </div>
   </div>`;
 
   el.innerHTML = `<div style="padding:12px 0">
-    ${liveBanner}
-    ${parkFacts}
-    ${predCards}
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
-      ${tableHeader}${tableRows}${note}
+    ${gameHeader}
+    ${topCard}
+    ${tableHeader('🔵 American League', 'Cristopher Sánchez', 'L')}
+      ${AS_AL.map(p => buildPlayerRow(p, 'L')).join('')}
+    </div>
+    ${tableHeader('🔴 National League', 'Dylan Cease', 'R')}
+      ${AS_NL.map(p => buildPlayerRow(p, 'R')).join('')}
+    </div>
+    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 0">
+      HR% based on career vs pitcher hand splits · Hit% based on xwOBA · RBI% based on lineup position + power · Click any player for full profile
     </div>
   </div>`;
 }
