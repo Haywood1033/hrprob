@@ -58,7 +58,18 @@ module.exports = async function handler(req, res) {
 
       if (action === 'save_lock') {
         if (!date || !signalLock) return res.status(400).json({ error: 'Missing date or signalLock' });
-        await query(`UPDATE daily_predictions SET signal_lock = $2::jsonb WHERE date = $1`, [date, JSON.stringify(signalLock)]);
+        // Try update first, then insert if no record exists
+        const updated = await query(
+          `UPDATE daily_predictions SET signal_lock = $2::jsonb WHERE date = $1`,
+          [date, JSON.stringify(signalLock)]
+        );
+        if (updated.rowCount === 0) {
+          // No record yet — insert with just the lock
+          await query(
+            `INSERT INTO daily_predictions (date, signal_lock) VALUES ($1, $2::jsonb) ON CONFLICT (date) DO UPDATE SET signal_lock = $2::jsonb`,
+            [date, JSON.stringify(signalLock)]
+          );
+        }
         return res.status(200).json({ ok: true, date });
       }
 
