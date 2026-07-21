@@ -3,13 +3,19 @@ const CACHE_TTL = 2 * 3600 * 1000; // 2 hours — game logs don't change frequen
 let cache = { data: null, timestamp: null };
 
 async function searchPlayer(name) {
-  const r = await fetch(
-    `https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(name)}&sportIds=1&active=true`,
-    { headers: { 'User-Agent': 'Mozilla/5.0' } }
-  );
-  if (!r.ok) return null;
-  const d = await r.json();
-  return d.people?.[0]?.id || null;
+  for (const n of [name, name.normalize('NFD').replace(/[\u0300-\u036f]/g,'')]) {
+    try {
+      const r = await fetch(
+        `https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(n)}&sportIds=1&active=true`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) }
+      );
+      if (!r.ok) continue;
+      const d = await r.json();
+      const id = d.people?.[0]?.id;
+      if (id) return id;
+    } catch(e) { continue; }
+  }
+  return null;
 }
 
 async function getLast20PA(playerId) {
