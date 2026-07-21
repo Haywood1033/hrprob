@@ -85,15 +85,20 @@ async function getCareerParkSplits(playerId, venueId, seasonSlg) {
 }
 
 async function searchPlayer(name) {
-  const r = await fetch(
-    `https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(name)}&sportIds=1&active=true`,
-    { headers: { 'User-Agent': 'Mozilla/5.0' } }
-  );
-  if (!r.ok) return null;
-  const d = await r.json();
-  const p = d.people?.[0];
-  if (!p) return null;
-  return { id: p.id, batSide: p.batSide?.code || 'R', pitHand: p.pitchHand?.code || 'R' };
+  // Try with original name first, then normalized (strips accents)
+  for (const n of [name, name.normalize('NFD').replace(/[\u0300-\u036f]/g,'')]) {
+    try {
+      const r = await fetch(
+        `https://statsapi.mlb.com/api/v1/people/search?names=${encodeURIComponent(n)}&sportIds=1&active=true`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(5000) }
+      );
+      if (!r.ok) continue;
+      const d = await r.json();
+      const p = d.people?.[0];
+      if (p) return { id: p.id, batSide: p.batSide?.code || 'R', pitHand: p.pitchHand?.code || 'R' };
+    } catch(e) { continue; }
+  }
+  return null;
 }
 
 async function getBatterSplits(playerId) {
