@@ -92,8 +92,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -477,6 +477,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Best Plays</div>
   <div class="tab" onclick="setView('pulse',this)">🔍 Pulse</div>
+  <div class="tab" onclick="setView('edge',this)">⚔️ Edge</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
@@ -511,6 +512,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 </tr></thead><tbody id="ptbody"></tbody></table></div></div>
 <div id="vpulse" class="view"><div id="pulse-grid"></div></div>
 <div id="vderby" class="view"><div id="derby-grid"></div></div>
+<div id="vedge" class="view"><div id="edge-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets" class="view"><div class="tgrid" id="tgrid"></div></div>
@@ -791,6 +793,8 @@ function getStreak(name) {
 }
 
 const BULLPEN = {}; // team bullpen stats: era, hr9, whip, k9
+const PITCHER_ARSENAL = {}; // pitcher pitch mix: { pitcherName: { FF: {pct,whiff,xba,velo}, SL: {...} } }
+const BATTER_VS_PITCH = {}; // batter vs pitch type: { batterName: { FF: {xwoba,whiff,barrel}, SL: {...} } }
 let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, teamFilt='', statReady=false;
 let curView='players';
 
@@ -1727,7 +1731,7 @@ async function saveToHistory() {
   const top40Names = new Set(top40.map(r=>r.name));
   const signalPlays = allPlayers.filter(r => {
     const {count} = getSignalsLocked(r);
-    return count >= 3 && !top40Names.has(r.name);
+    return count >= 4 && !top40Names.has(r.name);
   });
   const toSave = [...top40, ...signalPlays];
   if (!toSave.length) return;
@@ -2697,13 +2701,45 @@ function getSignals(r) {
     ? 'Pull Air% vs Fly Ball Pitcher'
     : 'Pull% vs Fly Ball Pitcher';
 
+  // ── SIGNAL 7: Pitch Edge — batter dominates pitcher's primary pitch ──
+  // Fires when pitcher uses a pitch >25% AND batter has strong metrics vs it
+  // xwOBA >= .370 vs that pitch type OR whiff% <= 15% (batter makes great contact)
+  let pitchEdgeActive = false;
+  let pitchEdgeLabel = 'Pitch Type Edge';
+  const pitArsenal = PITCHER_ARSENAL[pit.name] || PITCHER_ARSENAL[normName(pit.name)];
+  const batVsPitch = BATTER_VS_PITCH[batter.name] || BATTER_VS_PITCH[normName(batter.name)];
+  if (pitArsenal && batVsPitch) {
+    // Find pitcher's primary pitches (>25% usage)
+    const primaryPitches = Object.entries(pitArsenal)
+      .filter(([type, data]) => (data.pct||0) >= 25)
+      .sort(([,a],[,b]) => (b.pct||0) - (a.pct||0));
+    for (const [pitchType, pitchData] of primaryPitches) {
+      const bvp = batVsPitch[pitchType];
+      if (!bvp) continue;
+      const xwoba = bvp.xwoba;
+      const whiff = bvp.whiff;
+      // Strong edge: high xwOBA vs this pitch OR very low whiff (consistent contact)
+      if ((xwoba !== null && xwoba >= 0.370) || (whiff !== null && whiff <= 15)) {
+        pitchEdgeActive = true;
+        const pitchName = pitchType === 'FF' ? '4-Seam' : pitchType === 'SI' ? '2-Seam' :
+          pitchType === 'SL' ? 'Slider' : pitchType === 'CU' ? 'Curve' :
+          pitchType === 'CH' ? 'Change' : pitchType === 'CT' ? 'Cutter' :
+          pitchType === 'FS' ? 'Splitter' : pitchType === 'ST' ? 'Sweeper' : pitchType;
+        const edge = xwoba !== null ? `xwOBA .${Math.round(xwoba*1000)} vs ${pitchName}` : `${whiff?.toFixed(0)}% whiff vs ${pitchName}`;
+        pitchEdgeLabel = `Pitch Edge · ${edge} (${pitchData.pct?.toFixed(0)}% usage)`;
+        break;
+      }
+    }
+  }
+
   const signals = [
-    { key:'park',    active:parkActive,      icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
-    { key:'weather', active:wxActive,        icon:'💨', label:'Wind Out',                   dim:'opacity:0.2' },
-    { key:'pitcher', active:pitchActive,     icon:'🎯', label:'Pitcher Matchup',            dim:'opacity:0.2' },
-    { key:'streak',  active:streakActive,    icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
-    { key:'conf',    active:confActive,      icon:'🔒', label:ci.label+' Confidence',       dim:'opacity:0.2' },
-    { key:'pulledge',active:pullEdgeActive,  icon:'🏏', label:pullLabel,                   dim:'opacity:0.2' },
+    { key:'park',      active:parkActive,      icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
+    { key:'weather',   active:wxActive,        icon:'💨', label:'Wind Out',                   dim:'opacity:0.2' },
+    { key:'pitcher',   active:pitchActive,     icon:'🎯', label:'Pitcher Matchup',            dim:'opacity:0.2' },
+    { key:'streak',    active:streakActive,    icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
+    { key:'conf',      active:confActive,      icon:'🔒', label:ci.label+' Confidence',       dim:'opacity:0.2' },
+    { key:'pulledge',  active:pullEdgeActive,  icon:'🏏', label:pullLabel,                   dim:'opacity:0.2' },
+    { key:'pitchedge', active:pitchEdgeActive, icon:'⚔️', label:pitchEdgeLabel,              dim:'opacity:0.2' },
   ];
 
   const count = signals.filter(s=>s.active).length;
@@ -2711,9 +2747,8 @@ function getSignals(r) {
   // Composite badge — now based on 6 signals
   let badge = null;
   if (count >= 6)      badge = { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' };
-  else if (count >= 5) badge = { label:'🏆 Elite Play',    color:'var(--amber)',  bg:'rgba(245,158,11,.12)',  bd:'rgba(245,158,11,.3)' };
-  else if (count >= 4) badge = { label:'⭐ All-Star Play', color:'var(--teal)',   bg:'rgba(45,212,191,.10)',  bd:'rgba(45,212,191,.25)' };
-  else if (count >= 3) badge = { label:'💡 Value Play',    color:'var(--purple)', bg:'rgba(167,139,250,.10)', bd:'rgba(167,139,250,.25)' };
+  else if (count >= 5) badge = { label:'⭐ All-Star Play', color:'var(--teal)',   bg:'rgba(45,212,191,.10)',  bd:'rgba(45,212,191,.25)' };
+  else if (count >= 4) badge = { label:'💡 Value Play',    color:'var(--purple)', bg:'rgba(167,139,250,.10)', bd:'rgba(167,139,250,.25)' };
 
   return { signals, count, badge, ci };
 }
@@ -3545,7 +3580,7 @@ function filtered(){
     if(handFilt&&r.bats!==handFilt)return false;
     if(q&&!r.name.toLowerCase().includes(q)&&!r.team.toLowerCase().includes(q))return false;
     if(wxFilt&&!hasWxEdge(r))return false;
-    if(signalFilt&&getSignalsLocked(r).count<3)return false;
+    if(signalFilt&&getSignalsLocked(r).count<4)return false;
     if(gameFilt&&r.gamePk!==gameFilt)return false;
     if(teamFilt&&r.team!==teamFilt)return false;
     return true;
@@ -3848,6 +3883,7 @@ function setTodayPill(pill, btn) {
   if (pill === 'forecast') renderForecast();
   if (pill === 'fg') renderFullGame();
   if (pill === 'builder') renderBuilder();
+  if (v === 'edge') renderEdge();
   if (pill === 'f1') {
     if (!F1_CACHE.length) renderForecast(true);
     renderToday(); // always re-render so _nrfi/_yrfi are fresh
@@ -3943,7 +3979,7 @@ function renderBuilder() {
           const rows = allRows.filter(r=>r.gamePk===g.pk);
           const pf = park.f||1.0;
           const topHR = rows.filter(r=>r.hrp>=12).length;
-          const sigs = rows.filter(r=>getSignalsLocked(r).count>=3).length;
+          const sigs = rows.filter(r=>getSignalsLocked(r).count>=4).length;
           const avgHRP = rows.length ? rows.reduce((s,r)=>s+r.hrp,0)/rows.length : 0;
           return (pf-1)*100 + topHR*3 + sigs*2 + avgHRP;
         };
@@ -3967,7 +4003,7 @@ function renderBuilder() {
         const dhLabel = games.filter(x=>x.away===g.away&&x.home===g.home).length > 1 ? ' · Game '+(games.filter(x=>x.away===g.away&&x.home===g.home).indexOf(g)+1) : '';
         // Useful lineup stats
         const topHR = rows.filter(r=>r.hrp>=12).length;
-        const signalPlays = rows.filter(r=>getSignalsLocked(r).count>=3).length;
+        const signalPlays = rows.filter(r=>getSignalsLocked(r).count>=4).length;
         const avgHRP = rows.length ? (rows.reduce((s,r)=>s+r.hrp,0)/rows.length).toFixed(1) : '—';
         return '<div class="builder-game'+(sel?' selected':'')+'" onclick="toggleBuilderGame('+g.pk+',this)">'
           + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
@@ -4550,6 +4586,189 @@ function renderDerby() {
   </div>`;
 }
 
+
+// ── EDGE TAB — Pitch Matchup Research ────────────────────────
+// Shows today's best pitch matchup edges across the slate
+let _edgeGame = null; // selected gamePk for drill-down
+
+function renderEdge() {
+  const el = document.getElementById('edge-grid');
+  if (!el) return;
+
+  const hasPitchData = Object.keys(PITCHER_ARSENAL).length > 0;
+
+  if (!hasPitchData) {
+    el.innerHTML = '<div class="empty"><h3>Loading pitch data…</h3><p style="font-size:11px;font-family:var(--mono);color:var(--t3)">Pitch arsenal and batter vs pitch type data loads with Statcast</p></div>';
+    return;
+  }
+
+  // Pitch type display names
+  const PITCH_NAMES = {
+    FF:'4-Seam FB', SI:'2-Seam FB', SL:'Slider', CU:'Curveball',
+    CH:'Changeup', CT:'Cutter', FS:'Splitter', ST:'Sweeper',
+    KC:'Knuckle Curve', SV:'Slurve', FA:'Fastball'
+  };
+
+  // Color for xwOBA
+  const xwobaColor = (v) => v >= .400 ? 'var(--green)' : v >= .370 ? 'var(--teal)' : v >= .320 ? 'var(--t2)' : 'var(--red)';
+  // Color for whiff% (lower = better for batter)
+  const whiffColor = (v) => v <= 12 ? 'var(--green)' : v <= 18 ? 'var(--teal)' : v <= 25 ? 'var(--t2)' : 'var(--red)';
+  // Color for pitcher whiff% (higher = tougher for batter)
+  const pitWhiffColor = (v) => v >= 35 ? 'var(--red)' : v >= 28 ? 'var(--amber)' : v >= 20 ? 'var(--t2)' : 'var(--green)';
+
+  // Build full pitch matchup analysis for each batter-pitcher pair
+  const matchups = [];
+  for (const r of allRows) {
+    const pitName = r.pitName || r.pit?.name;
+    if (!pitName) continue;
+    const arsenal = PITCHER_ARSENAL[pitName] || PITCHER_ARSENAL[normName(pitName)];
+    const bvp     = BATTER_VS_PITCH[r.name] || BATTER_VS_PITCH[normName(r.name)];
+    if (!arsenal || !bvp) continue;
+
+    // Find primary pitches and batter's performance vs each
+    const primaryPitches = Object.entries(arsenal)
+      .filter(([,d]) => (d.pct||0) >= 15)
+      .sort(([,a],[,b]) => (b.pct||0)-(a.pct||0))
+      .slice(0, 5);
+
+    let bestEdge = null, bestVuln = null;
+    const pitchBreakdown = [];
+
+    for (const [type, pitchData] of primaryPitches) {
+      const batterData = bvp[type];
+      if (!batterData) continue;
+      const xwoba = batterData.xwoba;
+      const whiff = batterData.whiff;
+      const barrel= batterData.barrel;
+      const pa    = batterData.pa || 0;
+      if (pa < 20) continue; // need min sample
+
+      const pitchName = PITCH_NAMES[type] || type;
+      const pitchUsage = pitchData.pct || 0;
+      const pitchWhiff = pitchData.whiff;
+
+      // Edge score: batter xwOBA vs this pitch × pitcher usage
+      const edgeScore = xwoba !== null ? (xwoba - 0.310) * (pitchUsage/100) * 100 : 0;
+      const vulnScore = xwoba !== null ? (0.310 - xwoba) * (pitchUsage/100) * 100 : 0;
+
+      pitchBreakdown.push({ type, pitchName, pitchUsage, pitchWhiff, xwoba, whiff, barrel, pa, edgeScore, vulnScore });
+
+      if (xwoba !== null && xwoba >= 0.370 && (!bestEdge || xwoba > bestEdge.xwoba)) {
+        bestEdge = { type, pitchName, xwoba, whiff, pitchUsage, edgeScore };
+      }
+      if (xwoba !== null && xwoba <= 0.250 && (!bestVuln || xwoba < bestVuln.xwoba)) {
+        bestVuln = { type, pitchName, xwoba, whiff, pitchUsage, vulnScore };
+      }
+    }
+
+    if (pitchBreakdown.length > 0) {
+      matchups.push({ r, pitName, arsenal, pitchBreakdown, bestEdge, bestVuln });
+    }
+  }
+
+  // Sort by best edge score descending
+  const edgePlays = matchups
+    .filter(m => m.bestEdge)
+    .sort((a,b) => (b.bestEdge?.edgeScore||0) - (a.bestEdge?.edgeScore||0))
+    .slice(0, 20);
+
+  // Game pills for filtering
+  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
+    + `<button onclick="_edgeGame=null;renderEdge()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${!_edgeGame?'var(--teal)':'var(--bd)'};background:${!_edgeGame?'rgba(45,212,191,.1)':'transparent'};color:${!_edgeGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
+    + [...games].sort(gameTimeSort).map(g =>
+        `<button onclick="_edgeGame='${g.pk}';renderEdge()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_edgeGame==g.pk?'var(--teal)':'var(--bd)'};background:${_edgeGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_edgeGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer">${g.away} @ ${g.home}</button>`
+      ).join('')
+    + '</div>';
+
+  // Filter by game if selected
+  const filtered = _edgeGame
+    ? matchups.filter(m => m.r.gamePk == _edgeGame)
+    : edgePlays;
+
+  // Build matchup cards
+  const cards = filtered.map(m => {
+    const { r, pitName, pitchBreakdown, bestEdge, bestVuln } = m;
+    const {badge} = getSignalsLocked(r);
+    const streak = STREAK[r.name];
+    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
+    const hasEdgeSignal = getSignalsLocked(r).signals[6]?.active;
+
+    return `<div style="background:var(--bg2);border:1px solid ${hasEdgeSignal?'rgba(255,200,0,.3)':'var(--bd)'};border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}">
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div>
+          <div style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:14px;font-weight:700;color:var(--t1)">${r.name}</span>
+            <span style="font-size:12px">${streak?.flame||''}</span>
+            ${hasEdgeSignal?'<span style="font-size:12px">⚔️</span>':''}
+            ${badge?`<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}
+          </div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${r.team} · vs ${pitName} · Bat ${r.order} · ${r.time}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">HR prob</div>
+        </div>
+      </div>
+
+      <!-- Best edge highlight -->
+      ${bestEdge ? `<div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:6px;padding:8px 10px;margin-bottom:10px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;margin-bottom:3px">⚔️ Pitch Edge · ${bestEdge.pitchName} (${bestEdge.pitchUsage?.toFixed(0)}% of pitches)</div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t1)">Batter xwOBA <strong style="color:var(--green)">.${Math.round(bestEdge.xwoba*1000)}</strong> vs ${bestEdge.pitchName} · ${bestEdge.whiff?.toFixed(0)||'—'}% whiff</div>
+      </div>` : ''}
+
+      <!-- Pitch breakdown bars -->
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${pitchBreakdown.map(p => {
+          const xwColor = p.xwoba !== null ? xwobaColor(p.xwoba) : 'var(--t3)';
+          const wColor  = p.whiff !== null ? whiffColor(p.whiff) : 'var(--t3)';
+          const barWidth = Math.min(100, (p.pitchUsage / 50) * 100);
+          return `<div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:10px;font-weight:700;font-family:var(--mono);color:var(--t2);width:80px">${p.pitchName}</span>
+                <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.pitchUsage?.toFixed(0)}% usage</span>
+                ${p.pitchWhiff!==null?`<span style="font-size:9px;font-family:var(--mono);color:${pitWhiffColor(p.pitchWhiff)}">pit ${p.pitchWhiff?.toFixed(0)}% whiff</span>`:''}
+              </div>
+              <div style="display:flex;gap:10px;font-size:10px;font-family:var(--mono)">
+                ${p.xwoba!==null?`<span>xwOBA <strong style="color:${xwColor}">.${Math.round(p.xwoba*1000)}</strong></span>`:''}
+                ${p.whiff!==null?`<span>whiff <strong style="color:${wColor}">${p.whiff?.toFixed(0)}%</strong></span>`:''}
+                ${p.barrel!==null?`<span style="color:var(--t3)">brl ${p.barrel?.toFixed(1)}%</span>`:''}
+              </div>
+            </div>
+            <!-- Usage bar with xwOBA color overlay -->
+            <div style="height:4px;background:var(--bg3);border-radius:2px">
+              <div style="height:4px;border-radius:2px;background:${p.xwoba!==null?xwColor:'var(--bd)'};width:${barWidth}%;opacity:0.7"></div>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }).join('');
+
+  const emptyMsg = hasPitchData && filtered.length === 0
+    ? '<div class="empty"><p>No pitch matchup data for this selection</p></div>'
+    : '';
+
+  const legend = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:9px;font-family:var(--mono)">
+    <span style="color:var(--t3)">Batter xwOBA vs pitch:</span>
+    <span style="color:var(--green)">≥.400 Elite</span>
+    <span style="color:var(--teal)">.370-.399 Strong</span>
+    <span style="color:var(--t2)">.320-.369 Average</span>
+    <span style="color:var(--red)">Below .320 Weak</span>
+    <span style="color:var(--t3);margin-left:8px">Whiff%: lower = better contact</span>
+  </div>`;
+
+  el.innerHTML = `<div style="padding:12px 0">
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
+      ${_edgeGame ? 'Showing full matchup breakdown for selected game' : 'Top 20 pitch edge plays · ranked by batter xwOBA vs pitcher primary pitch × usage weight'}
+    </div>
+    ${gamePills}
+    ${legend}
+    ${cards || emptyMsg}
+  </div>`;
+}
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -5117,7 +5336,7 @@ function renderToday() {
   const expHR = players.reduce((s,r) => s+r.hrp/100, 0);
   const hotPlayers = players.filter(r => STREAK[r.name]?.flame === '\uD83D\uDD25\uD83D\uDD25' || STREAK[r.name]?.flame === '\uD83D\uDD25');
   const confirmed = games.reduce((n,g) => n + (g.awayLineup.length?1:0) + (g.homeLineup.length?1:0), 0);
-  const signalCount = players.filter(r=>{const {count}=getSignalsLocked(r);return count>=3;}).length;
+  const signalCount = players.filter(r=>{const {count}=getSignalsLocked(r);return count>=4;}).length;
 
   const top5 = players.slice(0,5);
 
@@ -5130,7 +5349,7 @@ function renderToday() {
 
   // Top signal plays
   const signalPlays = [...players]
-    .filter(r => { const {count}=getSignalsLocked(r); return count>=3; })
+    .filter(r => { const {count}=getSignalsLocked(r); return count>=4; })
     .sort((a,b) => {
       const ra=getSignalsLocked(a),rb=getSignalsLocked(b);
       return rb.count!==ra.count ? rb.count-ra.count : b.hrp-a.hrp;
@@ -5582,7 +5801,7 @@ async function renderTomorrow() {
   // Signal plays using tomorrow WX
   const origWX={...WX};
   Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,tWX);
-  const tSignalPlays=[...tPlayers].filter(r=>getSignalsLocked(r).count>=3).sort((a,b)=>{const ra=getSignalsLocked(a),rb=getSignalsLocked(b);return rb.count!==ra.count?rb.count-ra.count:b.hrp-a.hrp;}).slice(0,5);
+  const tSignalPlays=[...tPlayers].filter(r=>getSignalsLocked(r).count>=4).sort((a,b)=>{const ra=getSignalsLocked(a),rb=getSignalsLocked(b);return rb.count!==ra.count?rb.count-ra.count:b.hrp-a.hrp;}).slice(0,5);
   Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,origWX);
 
   const tParkRanked=tGames.map(g=>{const park=getPark(g.home)||{};const wx=tWX[g.home]||{};const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;const windOut=diff<45||diff>315;return{g,park,wx,windOut,score:(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0)};}).sort((a,b)=>b.score-a.score);
@@ -6313,7 +6532,7 @@ function renderTargets(){
   // Bucket by badge label — matches exactly what user sees on cards
   const elite    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Elite')).sort((a,b)=>scoreR(b)-scoreR(a)), 3).slice(0,6);
   const allStar  = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('All-Star')).sort((a,b)=>scoreR(b)-scoreR(a)), 3).slice(0,8);
-  const value    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Value')).sort((a,b)=>scoreR(b)-scoreR(a)), 2).slice(0,6);
+  const value    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Value')).sort((a,b)=>scoreR(b)-scoreR(a)), 2).slice(0,8);
 
   // Top probability — 15%+, no badge required, not already shown above
   const shownNames = new Set([...elite,...allStar,...value].map(r=>r.name));
@@ -6392,6 +6611,7 @@ function renderAll(){
   else if(curView==='history') renderHistory();
   else if(curView==='pulse')   renderPulse();
   else if(curView==='derby')   renderDerby();
+  else if(curView==='edge')    renderEdge();
   else renderTargets();
 }
 
@@ -6399,7 +6619,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','pulse','parlay','tomorrow','pitchers','history','derby'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
@@ -6721,6 +6941,26 @@ async function init(){
               const _nn  = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
               if (_nfc !== name) BATTER[_nfc] = _bd; // NFC variant
               if (_nn  !== name) BATTER[_nn]  = _bd; // fully stripped
+          }
+          // Store pitcher arsenal data
+          if (d.pitcherArsenal) {
+            for (const [name, arsenal] of Object.entries(d.pitcherArsenal)) {
+              const norm = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+              PITCHER_ARSENAL[name] = arsenal;
+              if (norm !== name) PITCHER_ARSENAL[norm] = arsenal;
+            }
+            console.log('Pitcher arsenal loaded:', Object.keys(PITCHER_ARSENAL).length, 'pitchers');
+          }
+          // Store batter vs pitch data
+          if (d.batterVsPitch) {
+            for (const [name, bvp] of Object.entries(d.batterVsPitch)) {
+              const norm = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+              BATTER_VS_PITCH[name] = bvp;
+              if (norm !== name) BATTER_VS_PITCH[norm] = bvp;
+            }
+            console.log('Batter vs pitch loaded:', Object.keys(BATTER_VS_PITCH).length, 'batters');
+          }
+          if (false) { // dummy to match structure
             }
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
