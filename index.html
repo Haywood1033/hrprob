@@ -4627,21 +4627,21 @@ function renderEdge() {
 
     // Find primary pitches and batter's performance vs each
     const primaryPitches = Object.entries(arsenal)
-      .filter(([,d]) => (d.pct||0) >= 15)
+      .filter(([,d]) => (d.pct||0) >= 5)
       .sort(([,a],[,b]) => (b.pct||0)-(a.pct||0))
-      .slice(0, 5);
+      .slice(0, 6);
 
     let bestEdge = null, bestVuln = null;
     const pitchBreakdown = [];
 
     for (const [type, pitchData] of primaryPitches) {
       const batterData = bvp[type];
-      if (!batterData) continue;
-      const xwoba = batterData.xwoba;
-      const whiff = batterData.whiff;
-      const barrel= batterData.barrel;
-      const pa    = batterData.pa || 0;
-      if (pa < 20) continue; // need min sample
+      // Don't skip if no batter data — show pitch with N/A
+      const xwoba = batterData?.xwoba ?? null;
+      const whiff = batterData?.whiff ?? null;
+      const barrel= batterData?.barrel ?? null;
+      const pa    = batterData?.pa ?? null;
+      if (pa !== null && pa < 10) continue; // truly too small
 
       const pitchName = PITCH_NAMES[type] || type;
       const pitchUsage = pitchData.pct || 0;
@@ -4651,7 +4651,7 @@ function renderEdge() {
       const edgeScore = xwoba !== null ? (xwoba - 0.310) * (pitchUsage/100) * 100 : 0;
       const vulnScore = xwoba !== null ? (0.310 - xwoba) * (pitchUsage/100) * 100 : 0;
 
-      pitchBreakdown.push({ type, pitchName, pitchUsage, pitchWhiff, xwoba, whiff, barrel, pa, edgeScore, vulnScore });
+      pitchBreakdown.push({ type, pitchName, pitchUsage, pitchWhiff, xwoba, whiff, barrel, pa: pa||0, edgeScore, vulnScore, noData: !batterData });
 
       if (xwoba !== null && xwoba >= 0.360 && (!bestEdge || xwoba > bestEdge.xwoba)) {
         bestEdge = { type, pitchName, xwoba, whiff, pitchUsage, edgeScore };
@@ -4727,13 +4727,14 @@ function renderEdge() {
           const isEdge = xwoba !== null && xwoba >= 0.360;
           const isWeak = xwoba !== null && xwoba <= 0.260;
           const barColor = isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--bd)';
-          const icon = isEdge ? '✅' : isWeak ? '❌' : '➖';
-          const xwobaDisplay = xwoba !== null ? '.'+Math.round(xwoba*1000).toString().padStart(3,'0') : '—';
-          const xwobaColor2 = isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--t3)';
+          const icon = p.noData ? '❓' : isEdge ? '✅' : isWeak ? '❌' : '➖';
+          const xwobaDisplay = xwoba !== null ? '.'+Math.round(xwoba*1000).toString().padStart(3,'0') : 'N/A';
+          const xwobaColor2 = p.noData ? 'var(--t3)' : isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--t3)';
+          const smallSample = !p.noData && p.pa < 20;
           return `<div style="display:grid;grid-template-columns:90px 30px 1fr 50px 20px;gap:8px;align-items:center">
             <div>
               <div style="font-size:10px;font-weight:700;font-family:var(--mono);color:var(--t2)">${p.pitchName}</div>
-              <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${p.pitchUsage?.toFixed(0)}% of pitches</div>
+              <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${p.pitchUsage?.toFixed(0)}% of pitches${p.noData?' · no batter data':p.pa<20?' · small sample':''}</div>
             </div>
             <div style="font-size:12px;text-align:center">${icon}</div>
             <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden">
