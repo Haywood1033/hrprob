@@ -2707,7 +2707,7 @@ function getSignals(r) {
   let pitchEdgeActive = false;
   let pitchEdgeLabel = 'Pitch Type Edge';
   const pitArsenal = PITCHER_ARSENAL[pit.name] || PITCHER_ARSENAL[normName(pit.name)];
-  const batVsPitch = BATTER_VS_PITCH[batter.name] || BATTER_VS_PITCH[normName(batter.name)];
+  const batVsPitch = BATTER_VS_PITCH[r.name] || BATTER_VS_PITCH[normName(r.name)];
   if (pitArsenal && batVsPitch) {
     // Find pitcher's primary pitches (>25% usage)
     const primaryPitches = Object.entries(pitArsenal)
