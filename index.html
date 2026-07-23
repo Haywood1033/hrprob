@@ -973,17 +973,21 @@ function hrProb(b,park,wx,pit,order){
   }
 
   // ── WALK FACTOR ──────────────────────────────────────────────
-  // High walk rate = fewer swingable PAs = fewer HR opportunities per game
-  // Elite hitters (Judge, Ohtani) walk 18-22% of PAs — significantly reduces
-  // their effective PA count vs average hitters at 8-9%
-  // League avg BB% ~8.5%. Adjustment: proportional reduction in effective PAs
   const bb_pct = b.bb_pct || 8.5;
   const LG_BB  = 8.5;
   if (bb_pct > LG_BB) {
-    // Each 1% above league avg reduces probability by ~0.4%
-    // Capped at 15% max reduction (even Judge still gets PAs)
     const walkPenalty = Math.min(0.15, (bb_pct - LG_BB) * 0.004);
     p *= (1 - walkPenalty);
+  }
+
+  // ── WHIFF % ──────────────────────────────────────────────────
+  // High overall whiff% = batter misses more swings = fewer balls in play
+  // League avg ~25%. High whiff hitters can still HR but need to make contact first
+  const whiff_pct = b.whiff_pct || null;
+  const LG_WHIFF  = 25.0;
+  if (whiff_pct !== null) {
+    if (whiff_pct >= 32)      p -= (whiff_pct - LG_WHIFF) * 0.0015; // high whiff = penalty
+    else if (whiff_pct <= 18) p += (LG_WHIFF - whiff_pct) * 0.0010; // low whiff = bonus (consistent contact)
   }
 
   // ── SWEET SPOT % ─────────────────────────────────────────────
@@ -6937,7 +6941,7 @@ async function init(){
         if (d.batters) {
           for (const [name,s] of Object.entries(d.batters)) {
             if ((s.ev||0)>0) {
-              const _bd={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
+              const _bd={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,whiff_pct:s.whiff_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
               BATTER[name] = _bd;
               const _nfc = name.normalize('NFC');
               const _nn  = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
