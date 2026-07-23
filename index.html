@@ -2719,7 +2719,7 @@ function getSignals(r) {
       const xwoba = bvp.xwoba;
       const whiff = bvp.whiff;
       // Strong edge: high xwOBA vs this pitch OR very low whiff (consistent contact)
-      if ((xwoba !== null && xwoba >= 0.370) || (whiff !== null && whiff <= 15)) {
+      if ((xwoba !== null && xwoba >= 0.360) || (whiff !== null && whiff <= 15)) {
         pitchEdgeActive = true;
         const pitchName = pitchType === 'FF' ? '4-Seam' : pitchType === 'SI' ? '2-Seam' :
           pitchType === 'SL' ? 'Slider' : pitchType === 'CU' ? 'Curve' :
@@ -4653,7 +4653,7 @@ function renderEdge() {
 
       pitchBreakdown.push({ type, pitchName, pitchUsage, pitchWhiff, xwoba, whiff, barrel, pa, edgeScore, vulnScore });
 
-      if (xwoba !== null && xwoba >= 0.370 && (!bestEdge || xwoba > bestEdge.xwoba)) {
+      if (xwoba !== null && xwoba >= 0.360 && (!bestEdge || xwoba > bestEdge.xwoba)) {
         bestEdge = { type, pitchName, xwoba, whiff, pitchUsage, edgeScore };
       }
       if (xwoba !== null && xwoba <= 0.250 && (!bestVuln || xwoba < bestVuln.xwoba)) {
