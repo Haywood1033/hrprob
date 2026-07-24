@@ -6729,19 +6729,9 @@ function requestSlateUpdate() {
 
 // Check if today's slate is stale and auto-prompt if in Claude chat
 function checkSlateDate() {
-  // Only show stale banner if odds haven't been updated
-  // Schedule/pitchers/lineups come from API so they're always fresh
-  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
-  const today = new Date(etStr).toLocaleDateString('en-CA');
+  // Stale banner removed — odds button removed. Function kept for compatibility.
   const banner = document.getElementById('stale-banner');
-  if (SLATE.date !== today) {
-    // Odds may be stale — show banner so user can update just the odds
-    banner.style.display = 'flex';
-    document.getElementById('stale-date').textContent = SLATE.date;
-    document.getElementById('today-date').textContent = today;
-  } else {
-    banner.style.display = 'none';
-  }
+  if (banner) banner.style.display = 'none';
 }
 
 
