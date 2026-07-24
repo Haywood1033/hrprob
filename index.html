@@ -463,14 +463,10 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="logo" onclick="setView('today',document.querySelector('.tab[onclick*=today]'))" style="cursor:pointer">⚾ HRProb</div>
   <div class="hdr-date" id="hdr-date">—</div>
   <div class="status"><div class="dot spin" id="sdot"></div><span id="stxt">Loading…</span></div>
-  <button class="btn" id="update-btn" onclick="requestSlateUpdate()" style="border-color:rgba(251,191,36,.4);color:#fbbf24;font-weight:700" title="Fetch today's HR odds from Claude">✦ Update odds</button>
   <button class="btn" onclick="showDebug()" style="font-size:10px;opacity:0.5" title="Debug">⚙</button>
   <button class="btn" onclick="showGuide()" style="font-size:11px;opacity:0.7" title="How to use">?</button>
 </header>
-<div id="stale-banner" style="display:none;align-items:center;gap:10px;padding:8px 20px;background:rgba(251,191,36,.08);border-bottom:1px solid rgba(251,191,36,.2);font-size:12px;font-family:monospace;color:#fbbf24">
-  <span>⚠ HR odds from <strong id="stale-date"></strong> — click to update odds for <strong id="today-date"></strong></span>
-  <button onclick="requestSlateUpdate()" style="background:rgba(251,191,36,.15);border:1px solid rgba(251,191,36,.3);color:#fbbf24;padding:3px 10px;border-radius:4px;cursor:pointer;font-size:11px;font-family:monospace">✦ Update odds</button>
-</div>
+<div id="stale-banner" style="display:none"></div>
 <nav class="tabs">
   <div class="tab active" onclick="setView('today',this)">⚡ Today</div>
   <div class="tab" onclick="setView('players',this)">☰ Players</div>
@@ -7079,212 +7075,126 @@ init();
 <div class="guide-box">
   <button class="guide-close" onclick="document.getElementById('guide-modal').style.display='none'">✕ Close</button>
   <div class="guide-h1">⚾ HRProb — How to Use</div>
-  <div class="guide-sub">MLB Home Run Probability Engine · Data refreshes automatically</div>
+  <div class="guide-sub">MLB Home Run Probability Engine · Updated July 2026 · 30 days tracked</div>
 
   <div class="guide-section">
     <div class="guide-h2">What This Tool Does</div>
-    <div class="guide-text">HRProb calculates each batter's probability of hitting a home run today using real Statcast data, pitcher matchup quality, park factors, weather, platoon splits, and recent form. It then compares that probability against DraftKings book odds to identify +EV betting opportunities.</div>
+    <div class="guide-text">HRProb calculates each batter's probability of hitting a home run today using real Statcast data, pitcher matchup quality, park factors, weather, platoon splits, pitch type matchups, and recent form. Signals identify convergence across multiple factors — the more signals firing, the higher the conviction.</div>
   </div>
 
   <div class="guide-section">
     <div class="guide-h2">The Tabs</div>
-    <div class="guide-row">
-      <span class="guide-tag teal">⚡ Today</span>
-      <div class="guide-text">Landing page — daily digest showing Best Play, Top HR Targets, Top Signal Plays, Hidden Edge, and Best Environments. Start here every day.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">☰ Players</span>
-      <div class="guide-text">Full ranked table of every batter. Use the 🎯 Signal Plays chip to filter to only players with 3+ signals firing. Click any row to expand the full breakdown.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">⬡ Games</span>
-      <div class="guide-text">Matchup cards — click any game to open a full overlay with both lineups, signal panels, pitcher K projections, and game context.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">🎯 Top Targets</span>
-      <div class="guide-text">Top 24 unique players by HR probability with signal panels and composite badges. Click any card to expand.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">🎰 Parlays</span>
-      <div class="guide-text">Best 2, 3, and 4-leg HR parlays built from today's top candidates.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">🔮 Forecast</span>
-      <div class="guide-text">Expected HR total, hot batters, pitcher K props, and first inning run scoring with NRFI/YRFI targets.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">📊 Accuracy</span>
-      <div class="guide-text">Model calibration — actual HR rate vs predicted rate by probability tier. Updates automatically each morning.</div>
-    </div>
+    <div class="guide-row"><span class="guide-tag teal">⚡ Today</span><div class="guide-text">Landing page — Best Play of the Day, Top HR Targets, Top Signal Plays, Hidden Edge, and Best Environments. Start here every morning.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">☰ Players</span><div class="guide-text">Full ranked table of every batter in today's lineups. Filter by Signal Plays chip to see only high-conviction plays. Click any row to expand.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">⚾ Pitchers</span><div class="guide-text">Today's starters ranked by HR vulnerability — xERA, HR/9, Whiff%, platoon splits. Identifies pitchers to target.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🎯 Best Plays</span><div class="guide-text">Curated picks bucketed by badge tier — 🏆 Elite (6 signals), ⭐ All-Star (5 signals), 💡 Value (4 signals), 📊 Top Probability (15%+). Max 3 per game per section.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🔍 Pulse</span><div class="guide-text">Recent form research. All Games view shows top 25 players with last 10 game form blocks. Click any game pill to see both full lineups — great for pre-game research.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">⚔️ Edge</span><div class="guide-text">Pitch type matchup research. Shows how each batter performs vs their pitcher's specific arsenal — bar fill = batter edge ✅, vulnerability ❌, or neutral ➖. Filter by game to drill in.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🎰 Parlays</span><div class="guide-text">Best 2, 3, and 4-leg HR parlays built from today's top signal plays.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">📅 Tomorrow</span><div class="guide-text">Early look at tomorrow's slate with projected lineups and park/weather context.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🔮 Forecast</span><div class="guide-text">Expected HR total, hot batters, pitcher K props, and NRFI/YRFI targets.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">📊 Accuracy</span><div class="guide-text">30-day model calibration — actual vs predicted HR rate by probability tier and signal badge. Updates each morning automatically.</div></div>
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">Reading the +EV Badge</div>
-    <div class="guide-row">
-      <span class="guide-tag green">+EV +4.2%</span>
-      <div class="guide-text">Our model gives this player a higher HR probability than the book's implied odds. Positive expected value — the model likes this play.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag gray">FAIR</span>
-      <div class="guide-text">Model and book are within 2% of each other. No meaningful edge either way.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag red">-EV</span>
-      <div class="guide-text">Book implies a higher probability than our model. The price is too short — pass on this one.</div>
-    </div>
-    <div class="guide-tip">💡 +EV doesn't mean it will hit. It means the odds are in your favor over a large sample. Always manage bet sizing accordingly.</div>
-  </div>
-
-  <div class="guide-section">
-    <div class="guide-h2">Confidence Tier Badge</div>
-    <div class="guide-text" style="margin-bottom:10px">Every player carries a confidence badge based on their 2026 plate appearance sample. The HR% shown is a point estimate — the badge tells you how much to trust it.</div>
-    <div class="guide-row">
-      <span class="guide-tag green">🔒 HIGH</span>
-      <div class="guide-text">200+ PA. Statcast numbers are statistically stable. Trust the HR% — uncertainty band is roughly ±1.5-2%.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag amber">⚡ MID</span>
-      <div class="guide-text">75-199 PA. Directionally reliable but still some noise. The number is probably in the right ballpark. Uncertainty band ±2.5-3.5%.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag red">⚠ LOW</span>
-      <div class="guide-text">Under 75 PA. Small sample — Bayesian regression pulls stats toward league average. Use as a directional signal only. Uncertainty band ±4-5%+.</div>
-    </div>
-    <div class="guide-tip">💡 When two players have similar HR% but different confidence tiers, lean toward the HIGH confidence player for betting purposes. A LOW player at 14% could realistically be anywhere from 9-19%.</div>
-  </div>
-
-  <div class="guide-section">
-    <div class="guide-h2">Other Player Badges</div>
-    <div class="guide-row">
-      <span class="guide-tag red">K 32%</span>
-      <div class="guide-text">High strikeout rate (28%+). Doesn't affect HR probability — purely informational. A player hitting .280 with 32% K rate is a different risk profile than one at 15% K rate, even at the same HR%.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">🔥🔥 Scorching</span>
-      <div class="guide-text">3+ HR in last 20 plate appearances. Model applies a +15% boost to their HR probability.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag amber">🔥 Hot</span>
-      <div class="guide-text">1-2 HR in last 20 PA. Model applies a +7% boost.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag gray">❄️ Cold</span>
-      <div class="guide-text">0 HR and low SLG in last 20 PA. Model applies a -10% penalty.</div>
-    </div>
-  </div>
-
-  <div class="guide-section">
-    <div class="guide-h2">Reading the Expand Row</div>
-    <div class="guide-text" style="margin-bottom:8px">Click any player row or card to expand the full breakdown:</div>
-    <div class="guide-row"><span class="guide-tag amber">HR%</span><div class="guide-text">Our model's probability for today's specific matchup — not a season average. Includes park, weather, pitcher, platoon, and streak adjustments.</div></div>
-    <div class="guide-row"><span class="guide-tag amber">ISO</span><div class="guide-text">Isolated Power — the purest measure of raw power. Higher = more HR upside.</div></div>
-    <div class="guide-row"><span class="guide-tag amber">Barrel%</span><div class="guide-text">Percentage of batted balls that are barreled (optimal launch angle + exit velocity). Strongest single predictor of home runs.</div></div>
-    <div class="guide-row"><span class="guide-tag amber">Last 20 PA</span><div class="guide-text">HR count and AVG over the last 20 plate appearances. 🔥🔥 = scorching, 🔥 = hot, ❄️ = cold.</div></div>
-    <div class="guide-row"><span class="guide-tag amber">Platoon</span><div class="guide-text">Real MLB Stats API splits — actual ISO and SLG vs today's pitcher handedness. Also shows pitcher's FIP vs this batter's hand specifically (red = pitcher is weaker vs this hand).</div></div>
-    <div class="guide-row"><span class="guide-tag amber">H2H</span><div class="guide-text">Career stats against today's specific pitcher. 2 HR in 15 AB against this guy is a meaningful signal.</div></div>
-  </div>
-
-    <div class="guide-section">
-    <div class="guide-h2">Signal Indicator Panel</div>
-    <div class="guide-text" style="margin-bottom:10px">Every player shows a 5-icon panel. Active signals are full brightness — dimmed means that factor isn't firing today.</div>
-    <div class="guide-row"><span class="guide-tag teal">🏟</span><div class="guide-text"><strong>Park</strong> — hitter-friendly park (PF ≥1.05) or career SLG boost at this venue (≥20% above season average).</div></div>
-    <div class="guide-row"><span class="guide-tag teal">💨</span><div class="guide-text"><strong>Weather</strong> — wind blowing out ≥8mph at an open-air park. Ball carries further, HR rate increases.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">🎯</span><div class="guide-text"><strong>Pitcher matchup</strong> — pitcher is vulnerable (xERA ≥4.80 or HR/9 ≥1.40). Also factors in pitcher's FIP vs this batter's handedness specifically.</div></div>
-    <div class="guide-row"><span class="guide-tag amber">🔥</span><div class="guide-text"><strong>Hot streak</strong> — player has hit at least 1 HR in their last 20 plate appearances. 🔥🔥 = scorching (3+ HR).</div></div>
-    <div class="guide-row"><span class="guide-tag green">🔒</span><div class="guide-text"><strong>Confidence</strong> — MID (75-199 PA) or HIGH (200+ PA) sample size. Enough data to trust the probability number.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">🏏</span><div class="guide-text"><strong>Pull Air% Edge</strong> — batter pull% ≥40% facing a fly ball pitcher (GB% ≤38%). Pulled fly balls against pitchers who give them up — the specific batted ball edge.</div></div>
-    <div class="guide-tip">💡 You can filter the Players tab to only show Signal Plays using the 🎯 Signal Plays chip in the filter bar.</div>
+    <div class="guide-h2">Signal Indicator Panel (7 Signals)</div>
+    <div class="guide-text" style="margin-bottom:10px">Every player shows a 7-signal panel. Active = full brightness. Locked at pre-game time so in-game stats don't inflate them.</div>
+    <div class="guide-row"><span class="guide-tag teal">🏟</span><div class="guide-text"><strong>Hitter Park</strong> — park factor ≥1.05 or career SLG boost ≥20% at this venue.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">💨</span><div class="guide-text"><strong>Wind Out</strong> — wind blowing out ≥6mph at an open-air park.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🎯</span><div class="guide-text"><strong>Pitcher Matchup</strong> — pitcher broadly vulnerable (xERA ≥4.50 or HR/9 ≥1.20). Fires for everyone facing this pitcher.</div></div>
+    <div class="guide-row"><span class="guide-tag amber">🔥</span><div class="guide-text"><strong>Hot Streak</strong> — 1+ HR in last 20 PA. 🔥🔥 = scorching (3+ HR). Model applies +7% or +15% boost.</div></div>
+    <div class="guide-row"><span class="guide-tag green">🔒</span><div class="guide-text"><strong>Confidence</strong> — MID (75-199 PA) or HIGH (200+ PA) sample. Enough data to trust the probability.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">🏏</span><div class="guide-text"><strong>Pull Air Edge</strong> — batter pull% ≥40% with FB% ≥35% facing a fly ball pitcher (GB% ≤38%).</div></div>
+    <div class="guide-row"><span class="guide-tag amber">⚔️</span><div class="guide-text"><strong>Pitch Edge</strong> — pitcher's primary pitch (>25% usage) and this batter has xwOBA ≥.360 vs that pitch type. Individual pitch-level advantage.</div></div>
+    <div class="guide-tip">💡 🎯 and ⚔️ are complementary — 🎯 means the pitcher is broadly hittable, ⚔️ means this batter specifically owns their best pitch. Both firing = highest conviction.</div>
   </div>
 
   <div class="guide-section">
     <div class="guide-h2">Composite Play Badges</div>
-    <div class="guide-text" style="margin-bottom:10px">Awarded when multiple signals converge on a player. Completely independent of probability — a 10% player with 4 signals gets the same badge as a 20% player with 4 signals.</div>
-<div class="guide-row"><span class="guide-tag amber">🏆 Elite Play</span><div class="guide-text">5 or 6 signals firing. Rare alignment — the model is converging from every angle including batted ball profile.</div></div>
-<div class="guide-row"><span class="guide-tag teal">⭐ All-Star Play</span><div class="guide-text">4 of 6 signals active. Strong multi-factor conviction. These are the plays to prioritize regardless of raw probability ranking.</div></div>
-<div class="guide-row"><span class="guide-tag gray">💡 Value Play</span><div class="guide-text">3 of 6 signals active. Multiple reasons to like this player — worth a closer look even if probability is modest.</div></div>
-    <div class="guide-tip">💡 The ⚡ Today tab shows the Best Play of the Day — a single card combining signal count, streak heat, park history, confidence, and probability into one composite score.</div>
+    <div class="guide-text" style="margin-bottom:10px">Locked pre-game. Based on 30-day accuracy data — signal badges consistently outperform raw probability tiers.</div>
+    <div class="guide-row"><span class="guide-tag amber">🏆 Elite Play</span><div class="guide-text">6 of 7 signals firing. Extremely rare. <strong>Actual: 37.5% HR rate</strong> vs 15.6% model (+21.9%).</div></div>
+    <div class="guide-row"><span class="guide-tag teal">⭐ All-Star Play</span><div class="guide-text">5 of 7 signals. Strong conviction. <strong>Actual: 25% HR rate</strong> vs 14.1% model (+10.9%).</div></div>
+    <div class="guide-row"><span class="guide-tag gray">💡 Value Play</span><div class="guide-text">4 of 7 signals. Multiple edges aligning. <strong>Actual: 16.9% HR rate</strong> vs 11.9% model (+5.0%).</div></div>
+    <div class="guide-tip">💡 A 10% player with 5 signals is a better bet than a 20% player with 1 signal — the accuracy data proves it.</div>
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">⚡ Today Tab</div>
-    <div class="guide-row"><span class="guide-tag teal">Best Play Today</span><div class="guide-text">Single card showing the highest composite score player — weighted by signal count, streak strength, career park boost, confidence, and probability. This is the model's top recommendation for the day.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">Top HR Targets</span><div class="guide-text">Top 5 by raw HR probability. The players with the statistically highest chance of homering today.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">Top Signal Plays</span><div class="guide-text">Top 5 ranked by signal convergence — Elite Play first, then All-Star, then Value. A player can rank higher here than in Top Targets if they have more signals firing despite a lower raw probability. Click "See all →" to view all signal plays in the Players tab.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">Hidden Edge</span><div class="guide-text">Mid-probability players (6-15%) with at least one strong signal. The fringe plays the market may be overlooking.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">Best Environments</span><div class="guide-text">Top 6 games ranked by park factor + wind conditions. Click any card to open the game modal.</div></div>
+    <div class="guide-h2">🔍 Pulse — Form Blocks</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:var(--green)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">HR</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:var(--teal)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">2+ hits</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:rgba(45,212,191,.3)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">1 hit</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:rgba(239,68,68,.3)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">0 for 3+</span></div>
+      <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:var(--bg3)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">no game</span></div>
+    </div>
+    <div class="guide-text">Click any game pill to see both full lineups with form blocks. Use for pre-game research before lineups lock.</div>
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">Games Tab — Click to Expand</div>
-    <div class="guide-text">Click any game card to open a full overlay showing both lineups sorted by batting order, with HR%, confidence tier, +EV, K rate flag, and streak for every player. Also shows pitcher xERA, HR/9, Whiff%, and projected strikeout total for both starters.</div>
+    <div class="guide-h2">⚔️ Edge — Pitch Matchup</div>
+    <div class="guide-row"><span class="guide-tag green">✅</span><div class="guide-text">Batter xwOBA ≥.360 vs this pitch. Bar full green — batter damages this pitch.</div></div>
+    <div class="guide-row"><span class="guide-tag gray">➖</span><div class="guide-text">xwOBA .260-.360. Neither side has a clear advantage.</div></div>
+    <div class="guide-row"><span class="guide-tag red">❌</span><div class="guide-text">Batter xwOBA ≤.260. Pitcher's weapon — batter struggles here.</div></div>
+    <div class="guide-tip">💡 Best setup: player in Best Plays + ⚔️ signal firing + Edge tab shows green on pitcher's primary pitch = highest conviction play available.</div>
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">🔮 Forecast Tab</div>
-    <div class="guide-row">
-      <span class="guide-tag teal">Expected HRs</span>
-      <div class="guide-text">Sum of all individual HR probabilities across the slate — the statistical expectation for total home runs today. Includes a 90% confidence interval range.</div>
+    <div class="guide-h2">Confidence Tier</div>
+    <div class="guide-row"><span class="guide-tag green">🔒 HIGH</span><div class="guide-text">200+ PA. Stable Statcast numbers. Uncertainty ±1.5-2%.</div></div>
+    <div class="guide-row"><span class="guide-tag amber">⚡ MID</span><div class="guide-text">75-199 PA. Directionally reliable. Uncertainty ±2.5-3.5%.</div></div>
+    <div class="guide-row"><span class="guide-tag red">⚠ LOW</span><div class="guide-text">Under 75 PA. Small sample — use as directional signal only.</div></div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">30-Day Accuracy Summary</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div style="font-size:11px;font-family:var(--mono);padding:6px 8px;background:var(--bg3);border-radius:4px;color:var(--green)">🏆 Elite: 37.5% actual</div>
+      <div style="font-size:11px;font-family:var(--mono);padding:6px 8px;background:var(--bg3);border-radius:4px;color:var(--teal)">⭐ All-Star: 25% actual</div>
+      <div style="font-size:11px;font-family:var(--mono);padding:6px 8px;background:var(--bg3);border-radius:4px;color:var(--purple)">💡 Value: 16.9% actual</div>
+      <div style="font-size:11px;font-family:var(--mono);padding:6px 8px;background:var(--bg3);border-radius:4px;color:var(--t2)">Full Game ML: 68.1%</div>
+      <div style="font-size:11px;font-family:var(--mono);padding:6px 8px;background:var(--bg3);border-radius:4px;color:var(--t2)">F5 ML: 64.2%</div>
+      <div style="font-size:11px;font-family:var(--mono);padding:6px 8px;background:var(--bg3);border-radius:4px;color:var(--t2)">NRFI/YRFI: 59.5%</div>
     </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">Hot Batters</span>
-      <div class="guide-text">Expandable section showing 🔥🔥 Scorching and 🔥 Hot players with their current form stats and book odds.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">Pitcher K Props</span>
-      <div class="guide-text">Projected strikeout totals for every starter based on their Whiff% (K% ≈ Whiff% × 0.68 + 3.5) and expected innings (based on xERA quality). Green = 7K+, teal = 5-6K.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag teal">First Inning Scoring</span>
-      <div class="guide-text">Probability that either team scores in the 1st inning. Uses real 1st-inning pitcher splits where available, falling back to overall xERA proxy. Base rate is 26% per team per inning.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag green">🔒 NRFI Target</span>
-      <div class="guide-text">No Run First Inning — games where the model projects ≤38% probability of scoring. Both pitchers are projecting clean 1st innings.</div>
-    </div>
-    <div class="guide-row">
-      <span class="guide-tag amber">🔥 YRFI Target</span>
-      <div class="guide-text">Yes Run First Inning — games at ≥55% probability. High likelihood at least one team scores in the 1st.</div>
+  </div>
+
+  <div class="guide-section">
+    <div class="guide-h2">Model Factors</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Barrel% (highest weight)</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Exit Velocity + EV50</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· xwOBA / ISO</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Hard Hit% + Sweet Spot%</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Batter Whiff% adjustment</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pull% × FB% air profile</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher xERA + HR/9</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher Whiff% + GB%</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher platoon FIP</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Batter platoon splits</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Park factor + elevation</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Wind direction + temp</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Hot streak (last 20 PA)</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Career H2H vs pitcher</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitch type matchup edge</div>
+      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Bayesian sample regression</div>
     </div>
   </div>
 
   <div class="guide-section">
     <div class="guide-h2">Daily Workflow</div>
     <div class="guide-text">
-      1. Open the app — schedule, lineups, weather and Statcast load automatically<br>
-      2. If the yellow banner appears, click <strong>✦ Odds</strong> to refresh DraftKings HR props and O/U totals<br>
-      3. Wait ~30 seconds for hot streak and platoon split data to load<br>
-      4. Check Best Plays for the day's top opportunities<br>
-      5. Use Parlays tab for multi-leg combinations<br>
-      6. Check Forecast tab for K props, NRFI/YRFI targets, and HR total projection<br>
-      7. Confirmed lineups replace projections automatically as managers post them (2-3 hrs before first pitch)
+      1. Open app — schedule, lineups, Statcast, weather load automatically<br>
+      2. Wait ~30s for streak and split data to finish loading<br>
+      3. Check <strong>Best Plays</strong> for today's top bucketed picks<br>
+      4. Use <strong>Pulse</strong> to research recent form before lineups lock<br>
+      5. Use <strong>Edge</strong> to verify pitch matchup advantages on your targets<br>
+      6. Check <strong>Forecast</strong> for K props and NRFI/YRFI targets<br>
+      7. Confirmed lineups post automatically 2-3 hrs before first pitch
     </div>
-    <div class="guide-tip">💡 The ~ badge means projected lineup. The ✓ badge means confirmed batting order. Always wait for confirmed lineups before placing bets.</div>
-  </div>
-
-  <div class="guide-section">
-    <div class="guide-h2">Model Factors</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Barrel % (weight: highest)</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Exit Velocity</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· xwOBA / ISO</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Hard Hit %</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher xERA</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher HR/9</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher Whiff%</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Pitcher Platoon FIP vs hand</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Real Batter Platoon Splits</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Park Factor + Elevation</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Wind Direction + Temp</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Batting Order Position</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Hot Streak (last 20 PA)</div>
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:4px 8px;background:var(--bg3);border-radius:3px">· Bayesian sample regression</div>
-    </div>
-  </div>
-  <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--bd);font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">
-    Odds referenced from DraftKings Sportsbook for informational purposes only. Not affiliated with or endorsed by DraftKings, MLB, or Major League Baseball Advanced Media. Statcast data sourced from Baseball Savant. This tool is for entertainment and analytical purposes only — not financial or betting advice. Please bet responsibly.
+    <div class="guide-tip">💡 ~ badge = projected lineup. ✓ badge = confirmed batting order. Always wait for confirmed lineups before placing bets.</div>
   </div>
 
 </div>
+</div></div>
 </div>
 
 <div id="game-modal" onclick="if(event.target===this)closeGameModal()">
