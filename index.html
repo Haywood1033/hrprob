@@ -4543,6 +4543,9 @@ function renderKProps() {
     + '<div id="k-parlay-content"></div>'
     + '</div>';
 
+  const kColor = (v) => v >= 8 ? 'var(--green)' : v >= 6 ? 'var(--teal)' : v >= 4 ? 'var(--amber)' : 'var(--t3)';
+  const pColor = (v) => v >= 65 ? 'var(--green)' : v >= 50 ? 'var(--teal)' : v >= 38 ? 'var(--amber)' : 'var(--t3)';
+
   const cards = kData.map(d => {
     const lean = d.p_mid >= 58 ? '✅ Over' : d.p_mid <= 42 ? '❌ Under' : '➖ Pass';
     const leanColor = d.p_mid >= 58 ? 'var(--green)' : d.p_mid <= 42 ? 'var(--red)' : 'var(--t3)';
@@ -4586,9 +4589,6 @@ function renderKProps() {
       + '</div>'
       + '</div>';
   }).join('');
-
-  const kColor = (v) => v >= 8 ? 'var(--green)' : v >= 6 ? 'var(--teal)' : v >= 4 ? 'var(--amber)' : 'var(--t3)';
-  const pColor = (v) => v >= 65 ? 'var(--green)' : v >= 50 ? 'var(--teal)' : v >= 38 ? 'var(--amber)' : 'var(--t3)';
 
   const legend = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:9px;font-family:var(--mono);color:var(--t3)">'
     + '<div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:var(--amber);border-radius:2px"></div><span>⭐ Top K Target — above slate avg</span></div>'
