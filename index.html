@@ -1720,6 +1720,18 @@ async function saveToHistory() {
   }
 
   // Save all unique players with confirmed lineup spots (or top 150 if no confirmed)
+  // View toggle pills
+  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '</div>';
+
+  // K prop view
+  if (_propsView === 'kprop') {
+    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    return;
+  }
+
   const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
@@ -1987,6 +1999,18 @@ function toggleFcastHot(header) {
 function renderForecast(silent=false) {
   const grid = document.getElementById('fcast-grid') || document.getElementById('vforecast');
   if (!allRows.length) { if (!silent && grid) grid.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
+
+  // View toggle pills
+  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '</div>';
+
+  // K prop view
+  if (_propsView === 'kprop') {
+    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    return;
+  }
 
   const seen = new Map();
   for (const r of allRows) {
@@ -4404,13 +4428,144 @@ function renderPulse() {
 }
 
 
-// ── PROPS TAB — H+R+RBI Parlay Board ────────────────────────
+// ── PROPS TAB — H+R+RBI Parlay Board + Pitcher K Props ──────
 let _propsGame = null;
+let _propsView = 'hrr'; // 'hrr' or 'kprop'
+
+
+function renderKProps() {
+  if (!games.length) return '<div class="empty"><p>No games loaded</p></div>';
+
+  // Build K projection per pitcher using enhanced model
+  const kData = [];
+  for (const g of games) {
+    for (const side of ['home','away']) {
+      const pit = side === 'home' ? g.hp : g.ap;
+      const oppTeam = side === 'home' ? g.away : g.home;
+      if (!pit?.name) continue;
+
+      const pitData = getPitcher(pit.name) || {};
+      const ps = PITCHER_SPLITS[pit.name] || PITCHER_SPLITS[normName(pit.name)] || {};
+      const xera  = pitData.xera || pit.xera || pit.era || 4.50;
+      const whiff = pitData.whiff || pit.whiff || 22;
+      const k_pct = pitData.k_pct || pit.k_pct || +(whiff * 0.72 + 3.0).toFixed(1);
+
+      // Expected IP — better calibrated (elite pitchers go deeper)
+      const expIP = Math.min(7.0, Math.max(4.0, 6.8 - (xera - 4.00) * 0.6));
+      // BF per IP — modern average is ~4.0
+      const expBF = Math.round(expIP * 4.0);
+
+      // Opposing lineup whiff% adjustment
+      const oppBatters = allRows.filter(r => r.team === oppTeam);
+      const avgWhiff = oppBatters.length
+        ? oppBatters.reduce((s, r) => s + (getBatter(r.name)?.whiff_pct || 25), 0) / oppBatters.length
+        : 25;
+      const lgWhiff = 25;
+      // High whiff lineup = more Ks; low whiff lineup = fewer Ks
+      const lineupAdj = 1 + (avgWhiff - lgWhiff) * 0.012;
+
+      const projK = +(k_pct / 100 * expBF * lineupAdj).toFixed(1);
+
+      // K probability tiers using Poisson
+      const lambda = projK;
+      const poisson = (k) => {
+        let p = Math.exp(-lambda);
+        for (let i = 0; i < k; i++) p *= lambda / (i + 1);
+        return p;
+      };
+      const p_over = (line) => {
+        let cumProb = 0;
+        for (let i = 0; i <= Math.floor(line); i++) cumProb += poisson(i);
+        // Fractional part
+        if (line !== Math.floor(line)) cumProb += (line - Math.floor(line)) * poisson(Math.ceil(line));
+        return Math.max(0, Math.min(100, (1 - cumProb) * 100));
+      };
+
+      // Common book lines
+      const line_low  = Math.floor(projK - 0.5) + 0.5;
+      const line_mid  = Math.floor(projK) + 0.5;
+      const line_high = Math.floor(projK + 0.5) + 0.5;
+
+      kData.push({
+        pit, pitData, oppTeam, g, side,
+        xera, whiff: +whiff.toFixed(1), k_pct: +k_pct.toFixed(1),
+        expIP: +expIP.toFixed(1), expBF, projK,
+        avgWhiff: +avgWhiff.toFixed(1), lineupAdj: +lineupAdj.toFixed(2),
+        line_low, line_mid, line_high,
+        p_low:  +p_over(line_low).toFixed(1),
+        p_mid:  +p_over(line_mid).toFixed(1),
+        p_high: +p_over(line_high).toFixed(1),
+      });
+    }
+  }
+
+  kData.sort((a,b) => b.projK - a.projK);
+
+  const kColor = (v) => v >= 8 ? 'var(--green)' : v >= 6 ? 'var(--teal)' : v >= 4 ? 'var(--amber)' : 'var(--t3)';
+  const pColor = (v) => v >= 65 ? 'var(--green)' : v >= 50 ? 'var(--teal)' : v >= 38 ? 'var(--amber)' : 'var(--t3)';
+
+  const cards = kData.map(d => {
+    const lean = d.p_mid >= 58 ? '✅ Over' : d.p_mid <= 42 ? '❌ Under' : '➖ Pass';
+    const leanColor = d.p_mid >= 58 ? 'var(--green)' : d.p_mid <= 42 ? 'var(--red)' : 'var(--t3)';
+
+    return '<div style="border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:10px">'
+      // Header
+      + '<div style="padding:10px 14px;border-bottom:1px solid var(--bg3);display:flex;justify-content:space-between;align-items:center">'
+      + '<div>'
+      + '<div style="font-size:13px;font-weight:700;color:var(--t1)">' + d.pit.name + '</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">' + (d.side==='home'?d.g.home:d.g.away) + ' vs ' + d.oppTeam + ' · ' + d.g.time + '</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">xERA ' + d.xera.toFixed(2) + ' · Whiff ' + d.whiff + '% · K% ' + d.k_pct + '% · Opp lineup whiff ' + d.avgWhiff + '%</div>'
+      + '</div>'
+      + '<div style="text-align:right">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Proj Ks</div>'
+      + '<div style="font-size:26px;font-weight:700;font-family:var(--mono);color:' + kColor(d.projK) + '">' + d.projK + '</div>'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ' + d.expIP + 'IP · ' + d.expBF + 'BF</div>'
+      + '</div>'
+      + '</div>'
+      // K line tiers
+      + '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-bottom:1px solid var(--bg3)">'
+      + '<div style="padding:10px;text-align:center;border-right:1px solid var(--bg3)">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">O ' + d.line_low + ' Ks</div>'
+      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:' + pColor(d.p_low) + '">' + d.p_low + '%</div>'
+      + '</div>'
+      + '<div style="padding:10px;text-align:center;border-right:1px solid var(--bg3);background:rgba(45,212,191,.03)">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--teal);margin-bottom:3px">O ' + d.line_mid + ' Ks ← Most likely line</div>'
+      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:' + pColor(d.p_mid) + '">' + d.p_mid + '%</div>'
+      + '</div>'
+      + '<div style="padding:10px;text-align:center">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">O ' + d.line_high + ' Ks</div>'
+      + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:' + pColor(d.p_high) + '">' + d.p_high + '%</div>'
+      + '</div>'
+      + '</div>'
+      // Lean
+      + '<div style="padding:8px 14px;display:flex;justify-content:space-between;align-items:center">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Lineup adj: ×' + d.lineupAdj + ' · Poisson model</div>'
+      + '<div style="font-size:13px;font-weight:700;font-family:var(--mono);color:' + leanColor + '">' + lean + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">'
+    + 'Pitcher K projections · Poisson model · adjusted for opposing lineup whiff% · ranked by projected Ks'
+    + '</div>' + cards;
+}
 
 function renderDerby() {
   const el = document.getElementById('derby-grid');
   if (!el) return;
   if (!allRows.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
+
+  // View toggle pills
+  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '</div>';
+
+  // K prop view
+  if (_propsView === 'kprop') {
+    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    return;
+  }
 
   const seen = new Map();
   for (const r of allRows) {
@@ -4575,6 +4730,7 @@ function renderDerby() {
     + '</div>';
 
   el.innerHTML = `<div style="padding:12px 0">
+    ${viewToggle}
     <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
       H+R+RBI — player records at least 1 hit, 1 run, and 1 RBI · sorted by probability
     </div>
@@ -4593,6 +4749,18 @@ function closePlayerModal() {
 
 function openPlayerModal(name) {
   // Find best row for this player
+  // View toggle pills
+  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '</div>';
+
+  // K prop view
+  if (_propsView === 'kprop') {
+    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    return;
+  }
+
   const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
@@ -5143,6 +5311,18 @@ function renderToday() {
   const today = new Date(etStr);
   const dayName = today.toLocaleDateString('en-US',{weekday:'long'});
   const dateStr = today.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+  // View toggle pills
+  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '</div>';
+
+  // K prop view
+  if (_propsView === 'kprop') {
+    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    return;
+  }
 
   const seen = new Map();
   for (const r of allRows) {
@@ -6243,6 +6423,18 @@ function expandTarget(i) {
   }
 
   // Get the player row data
+  // View toggle pills
+  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
+    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '</div>';
+
+  // K prop view
+  if (_propsView === 'kprop') {
+    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    return;
+  }
+
   const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
