@@ -4511,14 +4511,69 @@ function renderDerby() {
     </div>`;
   }).join('');
 
+  // Build best parlay legs — elite first then highest prob
+  const parlayPool = sorted.slice().sort((a,b) => {
+    const aE = a.props.p_hrr1 >= threshold && getSignalsLocked(a.r).count >= 4 ? 1 : 0;
+    const bE = b.props.p_hrr1 >= threshold && getSignalsLocked(b.r).count >= 4 ? 1 : 0;
+    if (bE !== aE) return bE - aE;
+    return b.props.p_hrr1 - a.props.p_hrr1;
+  });
+  const parlayLegs = parlayPool.slice(0, 5);
+
+  // Store globally so pill buttons can call without re-closing over stale data
+  window._hrr_legs  = parlayLegs;
+  window._hrr_thresh = threshold;
+
+  window._showParlay = function(n) {
+    const legs = window._hrr_legs.slice(0, n);
+    const prob  = (legs.reduce((acc, {props}) => acc * (props.p_hrr1/100), 1) * 100).toFixed(1);
+    const pC    = +prob >= 15 ? 'var(--green)' : +prob >= 8 ? 'var(--teal)' : 'var(--amber)';
+    const rows  = legs.map(({r, props: p}) => {
+      const isE = p.p_hrr1 >= window._hrr_thresh && getSignalsLocked(r).count >= 4;
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bg3)">'
+        + '<div>'
+        + '<span style="font-size:12px;font-weight:700;color:var(--t1)">' + r.name + '</span>'
+        + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-left:6px">' + r.team + ' · Bat ' + r.order + ' · ' + r.time + '</span>'
+        + (isE ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);margin-left:4px">⭐</span>' : '')
+        + '</div>'
+        + '<span style="font-size:13px;font-weight:700;font-family:var(--mono);color:' + (p.p_hrr1>=55?'var(--green)':p.p_hrr1>=40?'var(--teal)':'var(--amber)') + '">' + p.p_hrr1 + '%</span>'
+        + '</div>';
+    }).join('');
+    const content = document.getElementById('props-parlay-content');
+    if (content) content.innerHTML = rows
+      + '<div style="display:flex;justify-content:space-between;align-items:center;padding-top:10px;margin-top:4px;border-top:1px solid var(--bd)">'
+      + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">' + n + '-leg combined probability</div>'
+      + '<div style="font-size:22px;font-weight:700;font-family:var(--mono);color:' + pC + '">' + prob + '%</div>'
+      + '</div>';
+    // Update pill active states
+    document.querySelectorAll('.hrr-pill').forEach(b => {
+      const active = b.dataset.n == n;
+      b.style.background = active ? 'rgba(45,212,191,.1)' : 'transparent';
+      b.style.borderColor = active ? 'var(--teal)' : 'var(--bd)';
+      b.style.color = active ? 'var(--teal)' : 'var(--t3)';
+    });
+  };
+
+  const parlaySection = '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:14px">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px;text-transform:uppercase;letter-spacing:.06em">Best H+R+RBI Parlays</div>'
+    + '<div style="display:flex;gap:8px;margin-bottom:12px">'
+    + '<button class="hrr-pill" data-n="3" onclick="window._showParlay(3)" style="font-size:10px;font-family:var(--mono);padding:4px 14px;border-radius:20px;border:1px solid var(--teal);background:rgba(45,212,191,.1);color:var(--teal);cursor:pointer">3-Leg</button>'
+    + '<button class="hrr-pill" data-n="4" onclick="window._showParlay(4)" style="font-size:10px;font-family:var(--mono);padding:4px 14px;border-radius:20px;border:1px solid var(--bd);background:transparent;color:var(--t3);cursor:pointer">4-Leg</button>'
+    + '<button class="hrr-pill" data-n="5" onclick="window._showParlay(5)" style="font-size:10px;font-family:var(--mono);padding:4px 14px;border-radius:20px;border:1px solid var(--bd);background:transparent;color:var(--t3);cursor:pointer">5-Leg</button>'
+    + '</div>'
+    + '<div id="props-parlay-content"></div>'
+    + '</div>';
+
   el.innerHTML = `<div style="padding:12px 0">
     <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
       H+R+RBI — player records at least 1 hit, 1 run, and 1 RBI · sorted by probability
     </div>
     ${gamePills}
+    ${parlaySection}
     ${legend}
     ${cards}
   </div>`;
+  setTimeout(() => window._showParlay && window._showParlay(3), 0);
 }
 
 function closePlayerModal() {
