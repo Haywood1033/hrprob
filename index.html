@@ -6180,10 +6180,11 @@ function buildPitcherCard(pit, team, oppTeam, side, g) {
   const hr9     = pit.hr9 || 1.20;
   const gbPct   = pit.gb_pct;
   const pitId   = PITCHER_IDS[pit.name] || PITCHER_IDS[normName(pit.name)];
-  const k_pct   = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
-  const expIP   = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
-  const expBF   = +(expIP * 3.4).toFixed(0);
-  const projK   = +(k_pct/100*expBF).toFixed(1);
+  const k_pct   = pit.k_pct || +(whiff * 0.72 + 3.0).toFixed(1);
+  const _kc     = calcPitcherK(pit, oppTeam);
+  const expIP   = _kc.expIP;
+  const expBF   = _kc.expBF;
+  const projK   = _kc.projK;
   const oppRows = allRows.filter(r=>r.team===oppTeam).sort((a,b)=>a.order-b.order).slice(0,9);
   const avgXwoba  = oppRows.length ? +(oppRows.reduce((s,r)=>s+(r.xwoba||0.310),0)/oppRows.length).toFixed(3) : 0.310;
   const avgBarrel = oppRows.length ? +(oppRows.reduce((s,r)=>s+(getBatter(r.name)?.ba||8),0)/oppRows.length).toFixed(1) : 8.0;
@@ -6266,20 +6267,14 @@ function renderPitchers() {
 
   // Sort by K projection descending
   pitcherCards.sort((a,b) => {
-    const kA = getKProj(a.pit);
-    const kB = getKProj(b.pit);
+    const kA = getKProj(a.pit, a.oppTeam);
+    const kB = getKProj(b.pit, b.oppTeam);
     return kB.projK - kA.projK;
   });
 
-  // K projection helper (reuse from Forecast logic)
-  function getKProj(pit) {
-    const whiff = pit.whiff || 22;
-    const k_pct = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
-    const xera  = pit.xera || pit.era || 4.20;
-    const expIP = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
-    const expBF = +(expIP * 3.4).toFixed(0);
-    const projK = +(k_pct / 100 * expBF).toFixed(1);
-    return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, projK };
+  // K projection helper — uses shared calcPitcherK for consistency
+  function getKProj(pit, oppTeam) {
+    return calcPitcherK(pit, oppTeam);
   }
 
   // F1 probability helper
