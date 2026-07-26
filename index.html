@@ -4406,7 +4406,6 @@ function renderPulse() {
 
 // ── PROPS TAB — H+R+RBI Parlay Board ────────────────────────
 let _propsGame = null;
-let _propsSort = 'hrr1';
 
 function renderDerby() {
   const el = document.getElementById('derby-grid');
@@ -4420,20 +4419,15 @@ function renderDerby() {
 
   const allProps = [...seen.values()].map(r => ({ r, props: calcBatterProps(r) }));
   const filtered = _propsGame ? allProps.filter(({r}) => r.gamePk == _propsGame) : allProps;
+  const sorted = filtered.sort((a,b) => b.props.p_hrr1 - a.props.p_hrr1).slice(0, 30);
 
-  const sortFns = {
-    hrr1: p => p.props.p_hrr1,
-    hit:  p => p.props.p_hit,
-    tb:   p => p.props.p_2tb,
-    rbi:  p => p.props.p_rbi,
-    hr:   p => p.r.hrp,
-  };
-  const sorted = filtered.sort((a,b) => (sortFns[_propsSort]||sortFns.hrr1)(b) - (sortFns[_propsSort]||sortFns.hrr1)(a)).slice(0,30);
+  // Dynamic threshold — slate avg + 1 std dev
+  const allHRR = filtered.map(({props}) => props.p_hrr1);
+  const slateAvg = allHRR.reduce((a,b)=>a+b,0) / Math.max(1, allHRR.length);
+  const slateStd = Math.sqrt(allHRR.map(v=>(v-slateAvg)**2).reduce((a,b)=>a+b,0)/Math.max(1,allHRR.length));
+  const threshold = slateAvg + slateStd;
 
   const pColor = (v,hi,mid) => v>=hi?'var(--green)':v>=mid?'var(--teal)':v>=mid*0.65?'var(--amber)':'var(--t3)';
-
-  // Sort pills
-  const pill = (key, label) => `<button onclick="_propsSort='${key}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_propsSort===key?'var(--teal)':'var(--bd)'};background:${_propsSort===key?'rgba(45,212,191,.1)':'transparent'};color:${_propsSort===key?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${label}</button>`;
 
   // Game pills
   const gamePills = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
@@ -4441,80 +4435,77 @@ function renderDerby() {
     + [...games].sort(gameTimeSort).map(g => `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away} @ ${g.home}</button>`).join('')
     + '</div>';
 
-  const sortPills = '';  // removed — default sort by H+R+RBI prob
-
-  // Table header
-  const thead = `<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 200px;gap:8px;padding:7px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd);background:var(--bg3)">
-    <div>Player</div>
-    <div style="text-align:center">1+ Hit</div>
-    <div style="text-align:center">2+ TB</div>
-    <div style="text-align:center">1+ RBI</div>
-    <div style="text-align:center;color:var(--teal)">H + R + RBI</div>
+  // Legend
+  const legend = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px;font-size:9px;font-family:var(--mono);color:var(--t3)">
+    <div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:var(--amber);border-radius:2px"></div><span>Elite — above avg + signals</span></div>
+    <div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:rgba(45,212,191,.6);border-radius:2px"></div><span>Strong — above slate avg</span></div>
+    <div style="color:var(--t3)">Slate avg: ${slateAvg.toFixed(1)}% · Edge threshold: ${threshold.toFixed(1)}%</div>
   </div>`;
 
-  // Dynamic highlighting — slate median + 1 standard deviation
-  const allHRR = filtered.map(({props}) => props.p_hrr1);
-  const slateAvg = allHRR.reduce((a,b)=>a+b,0) / allHRR.length;
-  const slateStd = Math.sqrt(allHRR.map(v=>(v-slateAvg)**2).reduce((a,b)=>a+b,0)/allHRR.length);
-  const highlightThreshold = slateAvg + slateStd;
-
-  const rows = sorted.map(({r, props: p}) => {
-    const {count} = getSignalsLocked(r);
-    const {badge} = getSignalsLocked(r);
+  // Card per player — stacks on mobile
+  const cards = sorted.map(({r, props: p}) => {
+    const {count, badge} = getSignalsLocked(r);
     const streak = STREAK[r.name];
-    // Top play: above dynamic threshold AND 4+ signals
-    const isElite = p.p_hrr1 >= highlightThreshold && count >= 4;
-    // Strong play: above dynamic threshold OR 4+ signals with high prob
-    const isTop = p.p_hrr1 >= highlightThreshold || (count >= 4 && p.p_hrr1 >= slateAvg);
-    const rowBg = isElite ? 'rgba(245,158,11,.04)' : isTop ? 'rgba(45,212,191,.03)' : 'transparent';
-    const borderL = isElite ? '3px solid var(--amber)' : isTop ? '3px solid rgba(45,212,191,.4)' : '3px solid transparent';
+    const isElite = p.p_hrr1 >= threshold && count >= 4;
+    const isTop   = !isElite && p.p_hrr1 >= threshold;
+    const borderColor = isElite ? 'var(--amber)' : isTop ? 'rgba(45,212,191,.5)' : 'var(--bd)';
+    const hrrBg = isElite ? 'rgba(245,158,11,.08)' : isTop ? 'rgba(45,212,191,.06)' : 'var(--bg3)';
+    const total = (+p.exp_hits + +p.exp_runs + +p.exp_rbi).toFixed(1);
 
-    return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}"
-      style="display:grid;grid-template-columns:1fr 80px 80px 80px 200px;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;background:${rowBg};border-left:${borderL}"
-      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='${rowBg}'">
+    return `<div style="border:1px solid ${borderColor};border-radius:10px;overflow:hidden;margin-bottom:10px;cursor:pointer" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}">
 
-      <!-- Player -->
-      <div>
-        <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:13px;font-weight:700;color:var(--t1)">${r.name}</span>
-          <span style="font-size:11px">${streak?.flame||''}</span>
-          ${badge?`<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
+      <!-- Player header -->
+      <div style="padding:10px 14px;border-bottom:1px solid var(--bg3);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+            <span style="font-size:13px;font-weight:700;color:var(--t1)">${r.name}</span>
+            <span style="font-size:11px">${streak?.flame||''}</span>
+            ${isElite?'<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);border:1px solid rgba(245,158,11,.3)">⭐ Elite</span>':''}
+            ${!isElite&&isTop?'<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(45,212,191,.1);color:var(--teal);border:1px solid rgba(45,212,191,.2)">Strong</span>':''}
+            ${badge?`<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}
+          </div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:2px">${r.team} · vs ${r.pitName} · Bat ${r.order} · ${r.time}</div>
         </div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · vs ${r.pitName} · Bat ${r.order} · ${r.time}</div>
-      </div>
-
-      <!-- 1+ Hit -->
-      <div style="text-align:center">
-        <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hit,72,58)}">${p.p_hit}%</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_hits}H</div>
-      </div>
-
-      <!-- 2+ TB -->
-      <div style="text-align:center">
-        <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_2tb,55,40)}">${p.p_2tb}%</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_tb}TB</div>
-      </div>
-
-      <!-- 1+ RBI -->
-      <div style="text-align:center">
-        <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_rbi,32,20)}">${p.p_rbi}%</div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_rbi}RBI</div>
-      </div>
-
-      <!-- H+R+RBI -->
-      <div style="background:${isElite?'rgba(245,158,11,.08)':isTop?'rgba(45,212,191,.06)':'var(--bg3)'};border-radius:8px;padding:8px 12px;text-align:center">
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">Projected Total</div>
-        <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--t1);line-height:1">${(+p.exp_hits + +p.exp_runs + +p.exp_rbi).toFixed(1)}</div>
-        <div style="display:flex;justify-content:center;gap:6px;margin:4px 0 6px">
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_hits}H</span>
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">·</span>
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_runs}R</span>
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">·</span>
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_rbi}RBI</span>
+        <div style="text-align:right;flex-shrink:0;margin-left:10px">
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">HR Prob</div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t3)'}">${r.hrp.toFixed(1)}%</div>
         </div>
-        <div style="border-top:1px solid var(--bd);padding-top:6px">
-          <span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hrr1,55,40)}">${p.p_hrr1}%</span>
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-left:2px">prob</span>
+      </div>
+
+      <!-- Stats grid — responsive -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;border-bottom:1px solid var(--bg3)">
+        <div style="padding:10px 12px;border-right:1px solid var(--bg3);text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">1+ HIT</div>
+          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hit,72,58)}">${p.p_hit}%</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_hits}H</div>
+        </div>
+        <div style="padding:10px 12px;border-right:1px solid var(--bg3);text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">2+ TB</div>
+          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_2tb,55,40)}">${p.p_2tb}%</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_tb}TB</div>
+        </div>
+        <div style="padding:10px 12px;border-right:1px solid var(--bg3);text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">1+ RBI</div>
+          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_rbi,32,20)}">${p.p_rbi}%</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_rbi}RBI</div>
+        </div>
+        <div style="padding:10px 12px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">1+ RUN</div>
+          <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_run,38,25)}">${p.p_run}%</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_runs}R</div>
+        </div>
+      </div>
+
+      <!-- H+R+RBI combined -->
+      <div style="background:${hrrBg};padding:10px 14px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">H + R + RBI · Projected Total</div>
+          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--t1)">${total}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_hits}H · ${p.exp_runs}R · ${p.exp_rbi}RBI</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">Prob</div>
+          <div style="font-size:28px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hrr1,55,40)}">${p.p_hrr1}%</div>
         </div>
       </div>
     </div>`;
@@ -4522,17 +4513,11 @@ function renderDerby() {
 
   el.innerHTML = `<div style="padding:12px 0">
     <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
-      H+R+RBI probability — player records at least 1 hit, 1 run scored, and 1 RBI in the same game
+      H+R+RBI — player records at least 1 hit, 1 run, and 1 RBI · sorted by probability
     </div>
-    ${gamePills}${sortPills}
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
-      ${thead}${rows}
-    </div>
-    <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 4px;font-size:9px;font-family:var(--mono);color:var(--t3)">
-      <div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:var(--amber);border-radius:2px"></div>Elite — above slate avg + 4 signals</div>
-      <div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:rgba(45,212,191,.6);border-radius:2px"></div>Strong — above slate average</div>
-      <div style="color:var(--t3)">Based on xwOBA · ISO · order · park · streak</div>
-    </div>
+    ${gamePills}
+    ${legend}
+    ${cards}
   </div>`;
 }
 
