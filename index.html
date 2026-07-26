@@ -1080,11 +1080,14 @@ function hrProbWithStreak(batter, park, wx, pit, order) {
     if (s.slg > 0.600 && s.ab >= 15) p *= 1.05;
   }
 
-  // ── CALIBRATION CORRECTION (based on 25-day accuracy data, 1950 predictions) ──
-  // Apply to raw p before tier check to avoid cascade effects
+  // ── CALIBRATION CORRECTION (based on 28-day accuracy data, 1893 predictions) ──
+  // 20%+ tier: model avg 22.4% but actual 15.7% → still overconfident, reduce further
+  // 15-19% tier: model avg 17.4% but actual 19.7% → nearly calibrated, slight nudge
+  // 10-14% tier: 12.0% actual vs 12.4% model → perfect, leave alone
+  // 5-9% tier: 7.9% actual vs 7.7% model → perfect, leave alone
   const pRaw = p;
-  if      (pRaw >= 20) p *= 0.82; // 20%+ overconfident: 23.2% avg → ~19%
-  else if (pRaw >= 15) p *= 1.10; // 15-19% underestimate: 17.1% avg → ~18.8%
+  if      (pRaw >= 20) p *= 0.75; // 22.4% avg → ~16.8% (target 15.7%)
+  else if (pRaw >= 15) p *= 1.05; // 17.4% avg → ~18.3% (target 19.7%)
 
   return Math.min(35, p);
 }
