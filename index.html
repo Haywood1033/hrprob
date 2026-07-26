@@ -4493,25 +4493,17 @@ function renderDerby() {
 
       <!-- H+R+RBI -->
       <div style="background:${isTop?'rgba(45,212,191,.08)':'var(--bg3)'};border-radius:8px;padding:8px 12px;text-align:center">
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:4px">Projected</div>
-        <div style="display:flex;justify-content:center;gap:8px;margin-bottom:6px">
-          <div style="text-align:center">
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${p.exp_hits}</div>
-            <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">H</div>
-          </div>
-          <div style="font-size:14px;color:var(--bd);padding-top:2px">·</div>
-          <div style="text-align:center">
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${p.exp_runs}</div>
-            <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">R</div>
-          </div>
-          <div style="font-size:14px;color:var(--bd);padding-top:2px">·</div>
-          <div style="text-align:center">
-            <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${p.exp_rbi}</div>
-            <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">RBI</div>
-          </div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">Projected Total</div>
+        <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--t1);line-height:1">${(+p.exp_hits + +p.exp_runs + +p.exp_rbi).toFixed(1)}</div>
+        <div style="display:flex;justify-content:center;gap:6px;margin:4px 0 6px">
+          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_hits}H</span>
+          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">·</span>
+          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_runs}R</span>
+          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">·</span>
+          <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.exp_rbi}RBI</span>
         </div>
         <div style="border-top:1px solid var(--bd);padding-top:6px">
-          <span style="font-size:22px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hrr1,55,40)}">${p.p_hrr1}%</span>
+          <span style="font-size:20px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hrr1,55,40)}">${p.p_hrr1}%</span>
           <span style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-left:2px">prob</span>
         </div>
       </div>
