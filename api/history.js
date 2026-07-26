@@ -169,7 +169,8 @@ module.exports = async function handler(req, res) {
         }));
 
         // Update HR predictions
-        const updated = record.predictions.map(p => ({ ...p, hit: hrPlayers.has(p.name) ? 1 : 0 }));
+        const existing_preds = record.predictions || [];
+        const updated = existing_preds.map(p => ({ ...p, hit: hrPlayers.has(p.name) ? 1 : 0 }));
 
         // Update game leans with results
         const updatedLeans = (record.game_leans || []).map(lean => {
@@ -213,7 +214,9 @@ module.exports = async function handler(req, res) {
         });
 
         const hits = updated.filter(p => p.hit === 1).length;
-        const summary = `${hits}/${updated.length} HR · ${((hits/updated.length)*100).toFixed(1)}% hit rate`;
+        const summary = updated.length > 0
+          ? `${hits}/${updated.length} HR · ${((hits/updated.length)*100).toFixed(1)}% hit rate`
+          : `No predictions saved for ${date}`;
 
         await query(`
           UPDATE daily_predictions
