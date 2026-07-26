@@ -477,7 +477,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
-  <div class="tab" onclick="setView('derby',this)">⭐ All-Star</div>
+  <div class="tab" onclick="setView('derby',this)">📋 Props</div>
 </nav>
 <div class="fbar" id="fbar">
   <input type="text" id="srch" placeholder="Search player…" oninput="renderPlayers()">
@@ -3708,7 +3708,28 @@ function calcBatterProps(r) {
   const run_opp = {1:.35,2:.33,3:.30,4:.27,5:.25,6:.22,7:.20,8:.18,9:.16};
   const p_run  = +(Math.min(75, (run_opp[order]||.25) * (xobp/0.315) * streak_mult * 100)).toFixed(1);
 
-  return { p_hit, p_2tb, p_rbi, p_run, exp_tb: +exp_tb.toFixed(2) };
+  // Extended ladder for Props tab
+  // P(2+ hits)
+  const p_2hit = +(Math.max(0, 1 - Math.pow(1-hit_rate, swing_pa) - swing_pa*hit_rate*Math.pow(1-hit_rate,swing_pa-1)) * 100).toFixed(1);
+  // P(3+ hits)
+  const p_3hit = +(Math.max(0, p_2hit/100 - (swing_pa*(swing_pa-1)/2)*Math.pow(hit_rate,2)*Math.pow(1-hit_rate,swing_pa-2)) * 100).toFixed(1);
+
+  // P(3+ TB) and P(4+ TB)
+  const p_3tb = +(Math.max(0, 1 - p_0tb - p_1tb - (Math.pow(exp_tb,2)/2)*Math.exp(-exp_tb)) * 100).toFixed(1);
+  const p_4tb = +(Math.max(0, p_3tb/100 - (Math.pow(exp_tb,3)/6)*Math.exp(-exp_tb)) * 100).toFixed(1);
+
+  // P(2+ RBI)
+  const p_2rbi = +(Math.max(0, 1 - Math.pow(1-rbi_rate, swing_pa) - swing_pa*rbi_rate*Math.pow(1-rbi_rate,swing_pa-1)) * 100).toFixed(1);
+
+  // P(2+ Runs)
+  const run_rate = (run_opp[order]||.25) * (xobp/0.315) * streak_mult;
+  const p_2run = +(Math.max(0, 1 - Math.pow(1-run_rate, swing_pa) - swing_pa*run_rate*Math.pow(1-run_rate,swing_pa-1)) * 100).toFixed(1);
+
+  // H+R+RBI combined (assuming mild correlation ~0.85 independence factor)
+  const p_hrr1 = +(p_hit/100 * p_run/100 * p_rbi/100 * 0.85 * 100).toFixed(1);
+  const p_hrr2 = +(p_2hit/100 * p_2run/100 * p_2rbi/100 * 0.80 * 100).toFixed(1);
+
+  return { p_hit, p_2hit, p_3hit, p_2tb, p_3tb, p_4tb, p_rbi, p_2rbi, p_run, p_2run, p_hrr1, p_hrr2, exp_tb: +exp_tb.toFixed(2) };
 }
 
 function closePitcherModal() {
@@ -4369,405 +4390,132 @@ function renderPulse() {
 }
 
 
-// ── ALL-STAR GAME TAB ─────────────────────────────────────────
-// July 14, 2026 · Citizens Bank Park · Philadelphia · 8PM ET · FOX
-const AS_AL = [
-  { name:'Mike Trout',      order:1, pos:'CF', team:'Angels'   },
-  { name:'Yordan Alvarez',  order:2, pos:'DH', team:'Astros'   },
-  { name:'Shea Langeliers', order:3, pos:'C',  team:'Athletics'},
-  { name:'Junior Caminero', order:4, pos:'3B', team:'Rays'     },
-  { name:'Bobby Witt Jr.',  order:5, pos:'SS', team:'Royals'   },
-  { name:'Cody Bellinger',  order:6, pos:'RF', team:'Yankees'  },
-  { name:'Ben Rice',        order:7, pos:'1B', team:'Yankees'  },
-  { name:'Riley Greene',    order:8, pos:'LF', team:'Tigers'   },
-  { name:'Ernie Clement',   order:9, pos:'2B', team:'Blue Jays'},
-];
-const AS_NL = [
-  { name:'Kyle Schwarber',  order:1, pos:'DH', team:'Phillies' },
-  { name:'Juan Soto',       order:2, pos:'LF', team:'Mets'     },
-  { name:'Freddie Freeman', order:3, pos:'1B', team:'Dodgers'  },
-  { name:'CJ Abrams',       order:4, pos:'SS', team:'Nationals'},
-  { name:'Max Muncy',       order:5, pos:'3B', team:'Dodgers'  },
-  { name:'Ozzie Albies',    order:6, pos:'2B', team:'Braves'   },
-  { name:'Brandon Marsh',   order:7, pos:'RF', team:'Phillies' },
-  { name:'Andy Pages',      order:8, pos:'CF', team:'Dodgers'  },
-  { name:'Drake Baldwin',   order:9, pos:'C',  team:'Braves'   },
-];
-
-let _allStarPollInterval = null;
-
-function startAllStarPolling() {
-  if (_allStarPollInterval) return;
-  _allStarPollInterval = setInterval(() => {
-    if (curView === 'derby') renderDerby();
-  }, 60000); // refresh every 60s to update live odds/streak data
-}
+// ── PROPS TAB — H+R+RBI Parlay Board ────────────────────────
+let _propsGame = null;
+let _propsSort = 'hrr1'; // default sort: H+R+RBI 1+
 
 function renderDerby() {
   const el = document.getElementById('derby-grid');
   if (!el) return;
-  startAllStarPolling();
+  if (!allRows.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
 
-  // Build player rows using our Statcast + model data
-  const buildPlayerRow = (p, pitcherHand) => {
-    const b = getBatter(p.name) || getBatter(normName(p.name)) || {};
-    const streak = STREAK[p.name] || STREAK[normName(p.name)] || {};
-    const r = allRows.find(row => row.name === p.name);
-
-    // HR probability vs this pitcher hand
-    const xw    = b.xw    || 0.310;
-    const barrel= b.ba    || 8;
-    const ev    = b.ev    || 88;
-    const iso   = b.iso   || 0.150;
-
-    // Simple HR probability based on our model data
-    const vsHandSplits = SPLITS[p.name] || SPLITS[normName(p.name)];
-    const splitKey = pitcherHand === 'L' ? 'vsLHP' : 'vsRHP';
-    const split = vsHandSplits?.[splitKey];
-    const slg  = split?.slg || (iso + 0.250);
-    const hrAB = split ? (split.hr||0) / Math.max(split.ab||1, 1) : null;
-
-    // HR prob estimate
-    const hrProb = hrAB !== null
-      ? Math.min(25, Math.max(3, hrAB * 100 * 3.2)).toFixed(1)
-      : Math.min(25, Math.max(3, barrel * 0.8 + (ev-88)*0.3)).toFixed(1);
-
-    // Hit prob (rough estimate from xwOBA)
-    const hitProb = Math.min(75, Math.max(20, (xw - 0.250) * 200 + 28)).toFixed(0);
-
-    // RBI opportunity (batting order based)
-    const rbiProb = Math.min(40, Math.max(8, (10 - p.order) * 2.5 + 10 + (slg - 0.400) * 15)).toFixed(0);
-
-    const hrpColor = parseFloat(hrProb)>=15?'var(--green)':parseFloat(hrProb)>=10?'var(--teal)':parseFloat(hrProb)>=6?'var(--amber)':'var(--t2)';
-    const flame = streak?.flame ? `<span style="font-size:11px">${streak.flame}</span>` : '';
-    const {badge} = getSignalsLocked({name:p.name, hrp:parseFloat(hrProb), pit:{hand:pitcherHand}, ...b}) || {};
-
-    return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${p.name}"
-      style="display:grid;grid-template-columns:24px 28px 1fr 55px 45px 45px;gap:6px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--bg3);cursor:pointer"
-      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='transparent'">
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-align:center">${p.order}</div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-align:center;background:var(--bg3);padding:2px 3px;border-radius:3px">${p.pos}</div>
-      <div>
-        <div style="display:flex;align-items:center;gap:4px">
-          <span style="font-size:12px;font-weight:700;color:var(--t1)">${p.name}</span>${flame}
-          ${badge?`<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}
-        </div>
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · Brl ${barrel.toFixed?barrel.toFixed(1):barrel}% · EV ${ev.toFixed?ev.toFixed(1):ev} · xwOBA ${xw.toFixed?xw.toFixed(3):xw}</div>
-      </div>
-      <div style="text-align:center;font-size:13px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${hrProb}%</div>
-      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--teal)">${hitProb}%</div>
-      <div style="text-align:center;font-size:12px;font-family:var(--mono);color:var(--amber)">${rbiProb}%</div>
-    </div>`;
-  };
-
-  const mvpCard = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:14px">
-    <!-- Our model pick -->
-    <div style="background:var(--bg2);border:1px solid rgba(245,158,11,.4);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--amber);text-transform:uppercase;margin-bottom:6px">🏆 Model MVP Pick</div>
-      <div style="font-size:16px;font-weight:700;color:var(--t1)">Kyle Schwarber</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">NL · Phillies · Home crowd</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-top:4px">Reigning MVP · MLB-best 32 HR · Leads off NL · Brl 19.6% · EV 93.5</div>
-    </div>
-    <!-- Value pick -->
-    <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:6px">💡 Value Pick</div>
-      <div style="font-size:16px;font-weight:700;color:var(--t1)">Ben Rice</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">AL · Yankees · +3000 odds</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--teal);margin-top:4px">.423 AVG last 6G · 68.4% HH% · 30%+ Brl rate · vs LHP Sánchez in R1</div>
-    </div>
-    <!-- AL dark horse -->
-    <div style="background:var(--bg2);border:1px solid rgba(167,139,250,.3);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--purple);text-transform:uppercase;margin-bottom:6px">🎯 AL Dark Horse</div>
-      <div style="font-size:16px;font-weight:700;color:var(--t1)">Junior Caminero</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">AL · Rays · +2500 odds</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--purple);margin-top:4px">AL Player of Week · Power tear last 3 weeks · Brl 13.6% · EV 93.2</div>
-    </div>
-    <!-- Book odds summary -->
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:6px">📊 Book Favorites</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t2);line-height:1.8">
-        Schwarber +1300<br>Harper +1300<br>Caminero +2000<br>Witt Jr. +2500<br>Freeman +2500<br>Rice +3000
-      </div>
-    </div>
-  </div>`;
-
-  // Top HR threats across both lineups
-  const allPlayers = [
-    ...AS_AL.map(p => ({ ...p, league:'AL', pitHand:'L' })),  // vs Sánchez LHP
-    ...AS_NL.map(p => ({ ...p, league:'NL', pitHand:'R' })),  // vs Cease RHP
-  ];
-  
-  const topThreats = allPlayers.map(p => {
-    const b = getBatter(p.name) || getBatter(normName(p.name)) || {};
-    const barrel = b.ba || 8;
-    const ev = b.ev || 88;
-    const hrEst = Math.min(25, Math.max(3, barrel * 0.8 + (ev-88)*0.3));
-    return { ...p, b, hrEst };
-  }).sort((a,b) => b.hrEst - a.hrEst).slice(0,5);
-
-  const topCard = `<div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px 14px;margin-bottom:14px">
-    <div style="font-size:10px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:8px">🎯 Top HR Threats Tonight</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      ${topThreats.map((p,i) => {
-        const hrEst = p.hrEst.toFixed(1);
-        const color = i===0?'var(--green)':i<=2?'var(--teal)':'var(--amber)';
-        return `<div style="background:var(--bg3);border-radius:8px;padding:8px 10px;min-width:100px;text-align:center">
-          <div style="font-size:11px;font-weight:700;color:var(--t1)">${p.name.split(' ').pop()}</div>
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.league} · ${p.team}</div>
-          <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${color};margin-top:2px">${hrEst}%</div>
-        </div>`;
-      }).join('')}
-    </div>
-  </div>`;
-
-  const gameHeader = `<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:12px">
-    <div style="font-size:14px;font-weight:700;color:var(--t1);margin-bottom:4px">⭐ 2026 MLB All-Star Game</div>
-    <div style="display:flex;gap:12px;flex-wrap:wrap;font-size:10px;font-family:var(--mono);color:var(--t3)">
-      <span>📅 Tonight · July 14 · 8PM ET · FOX</span>
-      <span>🏟 Citizens Bank Park · Philadelphia</span>
-      <span>⚾ AL: Dylan Cease (RHP) vs NL: Cristopher Sánchez (LHP)</span>
-      <span>📐 5th-best HR park in MLB</span>
-    </div>
-  </div>`;
-
-  const gamePredCard = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-bottom:12px">
-    <div style="background:var(--bg2);border:1px solid rgba(52,211,153,.3);border-radius:10px;padding:12px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;margin-bottom:6px">🏆 ML Lean</div>
-      <div style="font-size:18px;font-weight:700;color:var(--t1)">NL</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Home field · Deeper roster</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--green);margin-top:3px">NL -110 · AL +110</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid rgba(56,189,248,.3);border-radius:10px;padding:12px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--teal);text-transform:uppercase;margin-bottom:6px">📊 Proj Total</div>
-      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--teal)">8.5</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">O/U 8.5 · Lean Under</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--amber);margin-top:3px">Short outings · Many arms</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:6px">⚾ Score Pred</div>
-      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--t1)">5–4</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">NL over AL</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">CBP plays as hitter's park</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;padding:12px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;margin-bottom:6px">📈 HR Proj</div>
-      <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--amber)">4–6</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Total HRs hit tonight</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">Elite power on both sides</div>
-    </div>
-  </div>`;
-
-  function tableHeader(league, pitcher, pitHand) {
-    return '<div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden;margin-bottom:14px">'
-      + '<div style="padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--bd)">'
-      + '<div style="font-size:13px;font-weight:700;color:var(--t1)">'+league+'</div>'
-      + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs '+pitcher+' · '+pitHand+'HP starter</div>'
-      + '</div>'
-      + '<div style="display:grid;grid-template-columns:24px 28px 1fr 55px 45px 45px;gap:6px;padding:5px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bg3)">'
-      + '<div>#</div><div>Pos</div><div>Player</div>'
-      + '<div style="text-align:center">HR%</div><div style="text-align:center">Hit%</div><div style="text-align:center">RBI%</div>'
-      + '</div>';
-  }
-
-  el.innerHTML = `<div style="padding:12px 0">
-    ${gameHeader}
-    ${gamePredCard}
-    ${mvpCard}
-    ${topCard}
-    ${tableHeader('🔵 American League', 'Cristopher Sánchez', 'L')}
-      ${AS_AL.map(p => buildPlayerRow(p, 'L')).join('')}
-    </div>
-    ${tableHeader('🔴 National League', 'Dylan Cease', 'R')}
-      ${AS_NL.map(p => buildPlayerRow(p, 'R')).join('')}
-    </div>
-    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 0">
-      HR% based on career vs pitcher hand splits · Hit% based on xwOBA · RBI% based on lineup position + power · Click any player for full profile
-    </div>
-  </div>`;
-}
-
-
-// ── EDGE TAB — Pitch Matchup Research ────────────────────────
-// Shows today's best pitch matchup edges across the slate
-let _edgeGame = null; // selected gamePk for drill-down
-
-function renderEdge() {
-  const el = document.getElementById('edge-grid');
-  if (!el) return;
-
-  const hasPitchData = Object.keys(PITCHER_ARSENAL).length > 0;
-
-  if (!hasPitchData) {
-    el.innerHTML = '<div class="empty"><h3>Loading pitch data…</h3><p style="font-size:11px;font-family:var(--mono);color:var(--t3)">Pitch arsenal and batter vs pitch type data loads with Statcast</p></div>';
-    return;
-  }
-
-  // Pitch type display names
-  const PITCH_NAMES = {
-    FF:'4-Seam FB', SI:'2-Seam FB', SL:'Slider', CU:'Curveball',
-    CH:'Changeup', CT:'Cutter', FS:'Splitter', ST:'Sweeper',
-    KC:'Knuckle Curve', SV:'Slurve', FA:'Fastball'
-  };
-
-  // Color for xwOBA
-  const xwobaColor = (v) => v >= .400 ? 'var(--green)' : v >= .370 ? 'var(--teal)' : v >= .320 ? 'var(--t2)' : 'var(--red)';
-  // Color for whiff% (lower = better for batter)
-  const whiffColor = (v) => v <= 12 ? 'var(--green)' : v <= 18 ? 'var(--teal)' : v <= 25 ? 'var(--t2)' : 'var(--red)';
-  // Color for pitcher whiff% (higher = tougher for batter)
-  const pitWhiffColor = (v) => v >= 35 ? 'var(--red)' : v >= 28 ? 'var(--amber)' : v >= 20 ? 'var(--t2)' : 'var(--green)';
-
-  // Build full pitch matchup analysis for each batter-pitcher pair
-  const matchups = [];
+  // Deduplicate by name
+  const seen = new Map();
   for (const r of allRows) {
-    const pitName = r.pitName || r.pit?.name;
-    if (!pitName) continue;
-    const arsenal = PITCHER_ARSENAL[pitName] || PITCHER_ARSENAL[normName(pitName)];
-    const bvp     = BATTER_VS_PITCH[r.name] || BATTER_VS_PITCH[normName(r.name)];
-    if (!arsenal || !bvp) continue;
-
-    // Find primary pitches and batter's performance vs each
-    const primaryPitches = Object.entries(arsenal)
-      .filter(([,d]) => (d.pct||0) >= 5)
-      .sort(([,a],[,b]) => (b.pct||0)-(a.pct||0))
-      .slice(0, 6);
-
-    let bestEdge = null, bestVuln = null;
-    const pitchBreakdown = [];
-
-    for (const [type, pitchData] of primaryPitches) {
-      const batterData = bvp[type];
-      // Don't skip if no batter data — show pitch with N/A
-      const xwoba = batterData?.xwoba ?? null;
-      const whiff = batterData?.whiff ?? null;
-      const barrel= batterData?.barrel ?? null;
-      const pa    = batterData?.pa ?? null;
-      if (pa !== null && pa < 10) continue; // truly too small
-
-      const pitchName = PITCH_NAMES[type] || type;
-      const pitchUsage = pitchData.pct || 0;
-      const pitchWhiff = pitchData.whiff;
-
-      // Edge score: batter xwOBA vs this pitch × pitcher usage
-      const edgeScore = xwoba !== null ? (xwoba - 0.310) * (pitchUsage/100) * 100 : 0;
-      const vulnScore = xwoba !== null ? (0.310 - xwoba) * (pitchUsage/100) * 100 : 0;
-
-      pitchBreakdown.push({ type, pitchName, pitchUsage, pitchWhiff, xwoba, whiff, barrel, pa: pa||0, edgeScore, vulnScore, noData: !batterData });
-
-      if (xwoba !== null && xwoba >= 0.360 && (!bestEdge || xwoba > bestEdge.xwoba)) {
-        bestEdge = { type, pitchName, xwoba, whiff, pitchUsage, edgeScore };
-      }
-      if (xwoba !== null && xwoba <= 0.250 && (!bestVuln || xwoba < bestVuln.xwoba)) {
-        bestVuln = { type, pitchName, xwoba, whiff, pitchUsage, vulnScore };
-      }
-    }
-
-    if (pitchBreakdown.length > 0) {
-      matchups.push({ r, pitName, arsenal, pitchBreakdown, bestEdge, bestVuln });
-    }
+    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
 
-  // Sort by best edge score descending
-  const edgePlays = matchups
-    .filter(m => m.bestEdge)
-    .sort((a,b) => (b.bestEdge?.edgeScore||0) - (a.bestEdge?.edgeScore||0))
-    .slice(0, 20);
+  // Calculate props for all players
+  const allProps = [...seen.values()].map(r => {
+    const props = calcBatterProps(r);
+    return { r, props };
+  });
 
-  // Game pills for filtering
-  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">'
-    + `<button onclick="_edgeGame=null;renderEdge()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${!_edgeGame?'var(--teal)':'var(--bd)'};background:${!_edgeGame?'rgba(45,212,191,.1)':'transparent'};color:${!_edgeGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
+  // Filter by game if selected
+  const filtered = _propsGame
+    ? allProps.filter(({r}) => r.gamePk == _propsGame)
+    : allProps;
+
+  // Sort by selected column
+  const sortKey = {
+    hrr1: p => p.props.p_hrr1,
+    hrr2: p => p.props.p_hrr2,
+    hit:  p => p.props.p_hit,
+    hit2: p => p.props.p_2hit,
+    tb3:  p => p.props.p_3tb,
+    tb4:  p => p.props.p_4tb,
+    rbi:  p => p.props.p_rbi,
+    rbi2: p => p.props.p_2rbi,
+    run:  p => p.props.p_run,
+  }[_propsSort] || (p => p.props.p_hrr1);
+
+  const sorted = filtered.sort((a,b) => sortKey(b) - sortKey(a)).slice(0, 30);
+
+  // Color helpers
+  const pctColor = (v, hi, mid) => v >= hi ? 'var(--green)' : v >= mid ? 'var(--teal)' : v >= mid*0.6 ? 'var(--amber)' : 'var(--t3)';
+  const pctCell = (v, hi, mid) => `<span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${pctColor(v,hi,mid)}">${v}%</span>`;
+
+  // Sort button helper
+  const sortBtn = (key, label) => `<div onclick="_propsSort='${key}';renderDerby()" style="font-size:9px;font-family:var(--mono);padding:3px 8px;border-radius:4px;border:1px solid ${_propsSort===key?'var(--teal)':'var(--bd)'};background:${_propsSort===key?'rgba(45,212,191,.1)':'transparent'};color:${_propsSort===key?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${label}</div>`;
+
+  // Game pills
+  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+    + `<button onclick="_propsGame=null;renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${!_propsGame?'var(--teal)':'var(--bd)'};background:${!_propsGame?'rgba(45,212,191,.1)':'transparent'};color:${!_propsGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
     + [...games].sort(gameTimeSort).map(g =>
-        `<button onclick="_edgeGame='${g.pk}';renderEdge()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_edgeGame==g.pk?'var(--teal)':'var(--bd)'};background:${_edgeGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_edgeGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer">${g.away} @ ${g.home}</button>`
+        `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away}@${g.home}</button>`
       ).join('')
     + '</div>';
 
-  // Filter by game if selected
-  const filtered = _edgeGame
-    ? matchups.filter(m => m.r.gamePk == _edgeGame)
-    : edgePlays;
+  // Sort buttons
+  const sortBtns = `<div style="margin-bottom:12px">
+    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Sort by</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap">
+      ${sortBtn('hrr1','H+R+RBI 1+')}
+      ${sortBtn('hrr2','H+R+RBI 2+')}
+      ${sortBtn('hit','1+ Hit')}
+      ${sortBtn('hit2','2+ Hits')}
+      ${sortBtn('tb3','3+ TB')}
+      ${sortBtn('tb4','4+ TB')}
+      ${sortBtn('rbi','1+ RBI')}
+      ${sortBtn('rbi2','2+ RBI')}
+      ${sortBtn('run','1+ Run')}
+    </div>
+  </div>`;
 
-  // Build matchup cards
-  const cards = filtered.map(m => {
-    const { r, pitName, pitchBreakdown, bestEdge, bestVuln } = m;
+  // Table header
+  const tableHeader = `<div style="display:grid;grid-template-columns:1fr 55px 55px 55px 55px 55px 55px 65px 65px;gap:4px;padding:6px 14px;font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bd);background:var(--bg3)">
+    <div>Player</div>
+    <div style="text-align:center;cursor:pointer" onclick="_propsSort='hit';renderDerby()">1+H${_propsSort==='hit'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer" onclick="_propsSort='hit2';renderDerby()">2+H${_propsSort==='hit2'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer" onclick="_propsSort='tb3';renderDerby()">3+TB${_propsSort==='tb3'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer" onclick="_propsSort='tb4';renderDerby()">4+TB${_propsSort==='tb4'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer" onclick="_propsSort='rbi';renderDerby()">1+R${_propsSort==='rbi'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer" onclick="_propsSort='rbi2';renderDerby()">1+RBI${_propsSort==='rbi2'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer;color:var(--teal);font-weight:700" onclick="_propsSort='hrr1';renderDerby()">H+R+RBI 1+${_propsSort==='hrr1'?'▼':''}</div>
+    <div style="text-align:center;cursor:pointer;color:var(--amber);font-weight:700" onclick="_propsSort='hrr2';renderDerby()">H+R+RBI 2+${_propsSort==='hrr2'?'▼':''}</div>
+  </div>`;
+
+  const rows = sorted.map(({r, props}) => {
     const {badge} = getSignalsLocked(r);
     const streak = STREAK[r.name];
-    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-    const hasEdgeSignal = getSignalsLocked(r).signals[6]?.active;
+    const isTopHRR = props.p_hrr1 >= 15;
+    const rowBg = isTopHRR ? 'rgba(45,212,191,.04)' : 'transparent';
+    const borderLeft = isTopHRR ? '3px solid var(--teal)' : '3px solid transparent';
 
-    return `<div style="background:var(--bg2);border:1px solid ${hasEdgeSignal?'rgba(255,200,0,.3)':'var(--bd)'};border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}">
-      <!-- Header -->
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
-        <div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:14px;font-weight:700;color:var(--t1)">${r.name}</span>
-            <span style="font-size:12px">${streak?.flame||''}</span>
-            ${hasEdgeSignal?'<span style="font-size:12px">⚔️</span>':''}
-            ${badge?`<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}
-          </div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${r.team} · vs ${pitName} · Bat ${r.order} · ${r.time}</div>
+    return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}"
+      style="display:grid;grid-template-columns:1fr 55px 55px 55px 55px 55px 55px 65px 65px;gap:4px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;background:${rowBg};border-left:${borderLeft}"
+      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='${rowBg}'">
+      <div>
+        <div style="display:flex;align-items:center;gap:5px">
+          <span style="font-size:12px;font-weight:700;color:var(--t1)">${r.name}</span>
+          <span style="font-size:11px">${streak?.flame||''}</span>
+          ${badge?`<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
         </div>
-        <div style="text-align:right">
-          <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">HR prob</div>
-        </div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · vs ${r.pitName} · Bat ${r.order} · ${r.time}</div>
       </div>
-
-      <!-- Best edge highlight -->
-      ${bestEdge ? `<div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:6px;padding:8px 10px;margin-bottom:10px">
-        <div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;margin-bottom:3px">⚔️ Pitch Edge · ${bestEdge.pitchName} (${bestEdge.pitchUsage?.toFixed(0)}% of pitches)</div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t1)">Batter xwOBA <strong style="color:var(--green)">.${Math.round(bestEdge.xwoba*1000)}</strong> vs ${bestEdge.pitchName} · ${bestEdge.whiff?.toFixed(0)||'—'}% whiff</div>
-      </div>` : ''}
-
-      <!-- Pitch breakdown — xwOBA bar per pitch -->
-      <div style="display:flex;flex-direction:column;gap:5px;margin-top:8px">
-        ${pitchBreakdown.map(p => {
-          // Bar fills based on batter xwOBA vs this pitch
-          // .200 = 0%, .310 = 50% (league avg), .450+ = 100%
-          const xwoba = p.xwoba;
-          const barPct = xwoba !== null ? Math.min(100, Math.max(0, ((xwoba - 0.200) / 0.250) * 100)) : null;
-          const isEdge = xwoba !== null && xwoba >= 0.360;
-          const isWeak = xwoba !== null && xwoba <= 0.260;
-          const barColor = isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--bd)';
-          const icon = p.noData ? '❓' : isEdge ? '✅' : isWeak ? '❌' : '➖';
-          const xwobaDisplay = xwoba !== null ? '.'+Math.round(xwoba*1000).toString().padStart(3,'0') : 'N/A';
-          const xwobaColor2 = p.noData ? 'var(--t3)' : isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--t3)';
-          const smallSample = !p.noData && p.pa < 20;
-          return `<div style="display:grid;grid-template-columns:90px 30px 1fr 50px 20px;gap:8px;align-items:center">
-            <div>
-              <div style="font-size:10px;font-weight:700;font-family:var(--mono);color:var(--t2)">${p.pitchName}</div>
-              <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${p.pitchUsage?.toFixed(0)}% of pitches${p.noData?' · no batter data':p.pa<20?' · small sample':''}</div>
-            </div>
-            <div style="font-size:12px;text-align:center">${icon}</div>
-            <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden">
-              ${barPct !== null
-                ? `<div style="height:8px;border-radius:3px;background:${barColor};width:${barPct}%;transition:width .3s"></div>`
-                : `<div style="height:8px;border-radius:3px;background:var(--bg3);width:50%"></div>`}
-            </div>
-            <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${xwobaColor2};text-align:right">${xwobaDisplay}</div>
-            <div style="font-size:8px;font-family:var(--mono);color:var(--t3);text-align:right">xwOBA</div>
-          </div>`;
-        }).join('')}
-      </div>
+      <div style="text-align:center">${pctCell(props.p_hit, 70, 55)}</div>
+      <div style="text-align:center">${pctCell(props.p_2hit, 35, 22)}</div>
+      <div style="text-align:center">${pctCell(props.p_3tb, 40, 28)}</div>
+      <div style="text-align:center">${pctCell(props.p_4tb, 22, 14)}</div>
+      <div style="text-align:center">${pctCell(props.p_run, 35, 22)}</div>
+      <div style="text-align:center">${pctCell(props.p_rbi, 30, 18)}</div>
+      <div style="text-align:center;padding:4px 6px;background:${props.p_hrr1>=15?'rgba(45,212,191,.1)':'transparent'};border-radius:4px">${pctCell(props.p_hrr1, 15, 10)}</div>
+      <div style="text-align:center;padding:4px 6px;background:${props.p_hrr2>=5?'rgba(245,158,11,.08)':'transparent'};border-radius:4px">${pctCell(props.p_hrr2, 8, 4)}</div>
     </div>`;
   }).join('');
 
-  const emptyMsg = hasPitchData && filtered.length === 0
-    ? '<div class="empty"><p>No pitch matchup data for this selection</p></div>'
-    : '';
-
-  const legend = `<div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:12px;font-size:9px;font-family:var(--mono);color:var(--t3)">
-    Bar = batter xwOBA vs that pitch type &nbsp;·&nbsp;
-    <span style="color:var(--green)">✅ Batter edge (.360+)</span> &nbsp;
-    <span style="color:var(--t3)">➖ Neutral</span> &nbsp;
-    <span style="color:var(--red)">❌ Pitcher advantage (.260−)</span>
-  </div>`;
-
   el.innerHTML = `<div style="padding:12px 0">
-    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
-      ${_edgeGame ? 'Showing full matchup breakdown for selected game' : 'Top 20 pitch edge plays · ranked by batter xwOBA vs pitcher primary pitch × usage weight'}
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">
+      H+R+RBI probability ranked across today's slate · click column headers to re-sort · teal highlight = strong parlay candidate
     </div>
     ${gamePills}
-    ${legend}
-    ${cards || emptyMsg}
+    ${sortBtns}
+    <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
+      ${tableHeader}${rows}
+    </div>
+    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 4px">
+      H+R+RBI combined assumes mild stat correlation · 1+ version = player records at least 1 hit, 1 run, and 1 RBI · 2+ version = 2 of each · Based on xwOBA, ISO, batting order, park factor, streak
+    </div>
   </div>`;
 }
 
