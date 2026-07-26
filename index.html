@@ -3730,11 +3730,17 @@ function calcBatterProps(r) {
   const exp_rbi  = +(rbi_rate * swing_pa).toFixed(2);
   const exp_runs = +((run_opp[order]||.25) * (xobp/0.315) * streak_mult * exp_pa).toFixed(2);
 
-  // H+R+RBI combined — correlated: getting a hit boosts run/RBI probability
-  // Correlation factor increases for cleanup spots (higher RBI opportunity)
-  const corrFactor = order <= 2 ? 1.35 : order <= 4 ? 1.45 : order <= 6 ? 1.30 : 1.20;
-  const p_hrr1 = +(Math.min(65, p_hit/100 * p_run/100 * p_rbi/100 * corrFactor * 100)).toFixed(1);
-  const p_hrr2 = +(Math.min(25, p_2hit/100 * p_2run/100 * p_2rbi/100 * corrFactor * 0.85 * 100)).toFixed(1);
+  // H+R+RBI combined — strongly correlated
+  // A hit dramatically increases probability of scoring and driving in runs
+  // Real-world calibration: cleanup ~55-65%, leadoff ~45-55%, lower order ~30-40%
+  // Conditional on getting a hit: scoring and driving in a run are highly correlated
+  // A XBH often achieves both, a single with runners on often drives one in
+  const p_rri_given_hit = Math.min(0.90, (rbi_opp[order]||.11) * 6.5 * (xwoba/0.315) * pf * streak_mult);
+  const p_run_given_hit = Math.min(0.90, (run_opp[order]||.25) * 3.0 * streak_mult);
+  const p_hrr1 = +(Math.min(72, p_hit/100 * p_rri_given_hit * p_run_given_hit * 100)).toFixed(1);
+
+  // 2+ version — needs a big game (2H + 2R + 2RBI)
+  const p_hrr2 = +(Math.min(22, p_2hit/100 * p_rri_given_hit * 0.60 * p_run_given_hit * 0.55 * 100)).toFixed(1);
 
   return { p_hit, p_2hit, p_3hit, p_2tb, p_3tb, p_4tb, p_rbi, p_2rbi, p_run, p_2run,
            p_hrr1, p_hrr2, exp_hits, exp_rbi, exp_runs, exp_tb: +exp_tb.toFixed(2) };
