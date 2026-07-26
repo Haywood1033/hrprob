@@ -4608,15 +4608,19 @@ function renderDerby() {
   if (!el) return;
   if (!allRows.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
 
-  // View toggle pills
+  // View toggle — use global function to avoid quote escaping issues
+  window._setPropsView = function(v) { _propsView = v; renderDerby(); };
+  const hrrActive  = _propsView === 'hrr';
+  const kActive    = _propsView === 'kprop';
   const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
-    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
-    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
+    + '<button onclick="window._setPropsView(\'hrr\')" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (hrrActive?'var(--teal)':'var(--bd)') + ';background:' + (hrrActive?'rgba(45,212,191,.1)':'transparent') + ';color:' + (hrrActive?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
+    + '<button onclick="window._setPropsView(\'kprop\')" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (kActive?'var(--teal)':'var(--bd)') + ';background:' + (kActive?'rgba(45,212,191,.1)':'transparent') + ';color:' + (kActive?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
     + '</div>';
 
   // K prop view
   if (_propsView === 'kprop') {
     el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
+    setTimeout(() => window._showKParlay && window._showKParlay(3), 0);
     return;
   }
 
