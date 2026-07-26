@@ -3725,11 +3725,19 @@ function calcBatterProps(r) {
   const run_rate = (run_opp[order]||.25) * (xobp/0.315) * streak_mult;
   const p_2run = +(Math.max(0, 1 - Math.pow(1-run_rate, swing_pa) - swing_pa*run_rate*Math.pow(1-run_rate,swing_pa-1)) * 100).toFixed(1);
 
-  // H+R+RBI combined (assuming mild correlation ~0.85 independence factor)
-  const p_hrr1 = +(p_hit/100 * p_run/100 * p_rbi/100 * 0.85 * 100).toFixed(1);
-  const p_hrr2 = +(p_2hit/100 * p_2run/100 * p_2rbi/100 * 0.80 * 100).toFixed(1);
+  // Expected totals
+  const exp_hits = +(hit_rate * swing_pa).toFixed(2);
+  const exp_rbi  = +(rbi_rate * swing_pa).toFixed(2);
+  const exp_runs = +((run_opp[order]||.25) * (xobp/0.315) * streak_mult * exp_pa).toFixed(2);
 
-  return { p_hit, p_2hit, p_3hit, p_2tb, p_3tb, p_4tb, p_rbi, p_2rbi, p_run, p_2run, p_hrr1, p_hrr2, exp_tb: +exp_tb.toFixed(2) };
+  // H+R+RBI combined — correlated: getting a hit boosts run/RBI probability
+  // Correlation factor increases for cleanup spots (higher RBI opportunity)
+  const corrFactor = order <= 2 ? 1.35 : order <= 4 ? 1.45 : order <= 6 ? 1.30 : 1.20;
+  const p_hrr1 = +(Math.min(65, p_hit/100 * p_run/100 * p_rbi/100 * corrFactor * 100)).toFixed(1);
+  const p_hrr2 = +(Math.min(25, p_2hit/100 * p_2run/100 * p_2rbi/100 * corrFactor * 0.85 * 100)).toFixed(1);
+
+  return { p_hit, p_2hit, p_3hit, p_2tb, p_3tb, p_4tb, p_rbi, p_2rbi, p_run, p_2run,
+           p_hrr1, p_hrr2, exp_hits, exp_rbi, exp_runs, exp_tb: +exp_tb.toFixed(2) };
 }
 
 function closePitcherModal() {
@@ -4392,129 +4400,138 @@ function renderPulse() {
 
 // ── PROPS TAB — H+R+RBI Parlay Board ────────────────────────
 let _propsGame = null;
-let _propsSort = 'hrr1'; // default sort: H+R+RBI 1+
+let _propsSort = 'hrr1';
 
 function renderDerby() {
   const el = document.getElementById('derby-grid');
   if (!el) return;
   if (!allRows.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
 
-  // Deduplicate by name
   const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
 
-  // Calculate props for all players
-  const allProps = [...seen.values()].map(r => {
-    const props = calcBatterProps(r);
-    return { r, props };
-  });
+  const allProps = [...seen.values()].map(r => ({ r, props: calcBatterProps(r) }));
+  const filtered = _propsGame ? allProps.filter(({r}) => r.gamePk == _propsGame) : allProps;
 
-  // Filter by game if selected
-  const filtered = _propsGame
-    ? allProps.filter(({r}) => r.gamePk == _propsGame)
-    : allProps;
-
-  // Sort by selected column
-  const sortKey = {
+  const sortKeys = {
     hrr1: p => p.props.p_hrr1,
     hrr2: p => p.props.p_hrr2,
     hit:  p => p.props.p_hit,
     hit2: p => p.props.p_2hit,
-    tb3:  p => p.props.p_3tb,
-    tb4:  p => p.props.p_4tb,
+    tb:   p => p.props.p_2tb,
     rbi:  p => p.props.p_rbi,
-    rbi2: p => p.props.p_2rbi,
     run:  p => p.props.p_run,
-  }[_propsSort] || (p => p.props.p_hrr1);
+  };
+  const sorted = filtered.sort((a,b) => (sortKeys[_propsSort]||sortKeys.hrr1)(b) - (sortKeys[_propsSort]||sortKeys.hrr1)(a)).slice(0,30);
 
-  const sorted = filtered.sort((a,b) => sortKey(b) - sortKey(a)).slice(0, 30);
+  const pColor = (v,hi,mid) => v>=hi?'var(--green)':v>=mid?'var(--teal)':v>=mid*0.6?'var(--amber)':'var(--t3)';
 
-  // Color helpers
-  const pctColor = (v, hi, mid) => v >= hi ? 'var(--green)' : v >= mid ? 'var(--teal)' : v >= mid*0.6 ? 'var(--amber)' : 'var(--t3)';
-  const pctCell = (v, hi, mid) => `<span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${pctColor(v,hi,mid)}">${v}%</span>`;
-
-  // Sort button helper
-  const sortBtn = (key, label) => `<div onclick="_propsSort='${key}';renderDerby()" style="font-size:9px;font-family:var(--mono);padding:3px 8px;border-radius:4px;border:1px solid ${_propsSort===key?'var(--teal)':'var(--bd)'};background:${_propsSort===key?'rgba(45,212,191,.1)':'transparent'};color:${_propsSort===key?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${label}</div>`;
+  // Sort pill helper
+  const pill = (key, label) => `<button onclick="_propsSort='${key}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 10px;border-radius:20px;border:1px solid ${_propsSort===key?'var(--teal)':'var(--bd)'};background:${_propsSort===key?'rgba(45,212,191,.1)':'transparent'};color:${_propsSort===key?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${label}</button>`;
 
   // Game pills
-  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'
+  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
     + `<button onclick="_propsGame=null;renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${!_propsGame?'var(--teal)':'var(--bd)'};background:${!_propsGame?'rgba(45,212,191,.1)':'transparent'};color:${!_propsGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
-    + [...games].sort(gameTimeSort).map(g =>
-        `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away}@${g.home}</button>`
-      ).join('')
+    + [...games].sort(gameTimeSort).map(g => `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 10px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away}@${g.home}</button>`).join('')
     + '</div>';
 
-  // Sort buttons
-  const sortBtns = `<div style="margin-bottom:12px">
-    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:5px;text-transform:uppercase;letter-spacing:.06em">Sort by</div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap">
-      ${sortBtn('hrr1','H+R+RBI 1+')}
-      ${sortBtn('hrr2','H+R+RBI 2+')}
-      ${sortBtn('hit','1+ Hit')}
-      ${sortBtn('hit2','2+ Hits')}
-      ${sortBtn('tb3','3+ TB')}
-      ${sortBtn('tb4','4+ TB')}
-      ${sortBtn('rbi','1+ RBI')}
-      ${sortBtn('rbi2','2+ RBI')}
-      ${sortBtn('run','1+ Run')}
-    </div>
+  // Sort pills
+  const sortPills = `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px">
+    ${pill('hrr1','⭐ H+R+RBI 1+')}
+    ${pill('hrr2','⭐ H+R+RBI 2+')}
+    ${pill('hit','1+ Hit')}
+    ${pill('hit2','2+ Hits')}
+    ${pill('tb','2+ TB')}
+    ${pill('rbi','1+ RBI')}
+    ${pill('run','1+ Run')}
   </div>`;
 
   // Table header
-  const tableHeader = `<div style="display:grid;grid-template-columns:1fr 55px 55px 55px 55px 55px 55px 65px 65px;gap:4px;padding:6px 14px;font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;border-bottom:1px solid var(--bd);background:var(--bg3)">
+  const thead = `<div style="display:grid;grid-template-columns:1fr 100px 100px 100px 150px;gap:8px;padding:7px 14px;font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid var(--bd);background:var(--bg3)">
     <div>Player</div>
-    <div style="text-align:center;cursor:pointer" onclick="_propsSort='hit';renderDerby()">1+H${_propsSort==='hit'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer" onclick="_propsSort='hit2';renderDerby()">2+H${_propsSort==='hit2'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer" onclick="_propsSort='tb3';renderDerby()">3+TB${_propsSort==='tb3'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer" onclick="_propsSort='tb4';renderDerby()">4+TB${_propsSort==='tb4'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer" onclick="_propsSort='rbi';renderDerby()">1+R${_propsSort==='rbi'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer" onclick="_propsSort='rbi2';renderDerby()">1+RBI${_propsSort==='rbi2'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer;color:var(--teal);font-weight:700" onclick="_propsSort='hrr1';renderDerby()">H+R+RBI 1+${_propsSort==='hrr1'?'▼':''}</div>
-    <div style="text-align:center;cursor:pointer;color:var(--amber);font-weight:700" onclick="_propsSort='hrr2';renderDerby()">H+R+RBI 2+${_propsSort==='hrr2'?'▼':''}</div>
+    <div style="text-align:center">Hits<br><span style="color:var(--t3);font-size:8px">1+ · 2+ · Exp</span></div>
+    <div style="text-align:center">Total Bases<br><span style="color:var(--t3);font-size:8px">2+ · 3+ · Exp</span></div>
+    <div style="text-align:center">R · RBI<br><span style="color:var(--t3);font-size:8px">1+ each · Exp</span></div>
+    <div style="text-align:center;color:var(--teal)">H+R+RBI<br><span style="color:var(--t3);font-size:8px">1+ · 2+ combined</span></div>
   </div>`;
 
-  const rows = sorted.map(({r, props}) => {
+  const rows = sorted.map(({r, props: p}) => {
     const {badge} = getSignalsLocked(r);
     const streak = STREAK[r.name];
-    const isTopHRR = props.p_hrr1 >= 15;
-    const rowBg = isTopHRR ? 'rgba(45,212,191,.04)' : 'transparent';
-    const borderLeft = isTopHRR ? '3px solid var(--teal)' : '3px solid transparent';
+    const isTop = p.p_hrr1 >= 18;
+    const rowBg = isTop ? 'rgba(45,212,191,.03)' : 'transparent';
+    const borderL = isTop ? '3px solid rgba(45,212,191,.4)' : '3px solid transparent';
 
     return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}"
-      style="display:grid;grid-template-columns:1fr 55px 55px 55px 55px 55px 55px 65px 65px;gap:4px;align-items:center;padding:9px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;background:${rowBg};border-left:${borderLeft}"
+      style="display:grid;grid-template-columns:1fr 100px 100px 100px 150px;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;background:${rowBg};border-left:${borderL}"
       onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background='${rowBg}'">
+
+      <!-- Player -->
       <div>
         <div style="display:flex;align-items:center;gap:5px">
-          <span style="font-size:12px;font-weight:700;color:var(--t1)">${r.name}</span>
+          <span style="font-size:13px;font-weight:700;color:var(--t1)">${r.name}</span>
           <span style="font-size:11px">${streak?.flame||''}</span>
           ${badge?`<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
         </div>
         <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · vs ${r.pitName} · Bat ${r.order} · ${r.time}</div>
       </div>
-      <div style="text-align:center">${pctCell(props.p_hit, 70, 55)}</div>
-      <div style="text-align:center">${pctCell(props.p_2hit, 35, 22)}</div>
-      <div style="text-align:center">${pctCell(props.p_3tb, 40, 28)}</div>
-      <div style="text-align:center">${pctCell(props.p_4tb, 22, 14)}</div>
-      <div style="text-align:center">${pctCell(props.p_run, 35, 22)}</div>
-      <div style="text-align:center">${pctCell(props.p_rbi, 30, 18)}</div>
-      <div style="text-align:center;padding:4px 6px;background:${props.p_hrr1>=15?'rgba(45,212,191,.1)':'transparent'};border-radius:4px">${pctCell(props.p_hrr1, 15, 10)}</div>
-      <div style="text-align:center;padding:4px 6px;background:${props.p_hrr2>=5?'rgba(245,158,11,.08)':'transparent'};border-radius:4px">${pctCell(props.p_hrr2, 8, 4)}</div>
+
+      <!-- Hits: 1+ · 2+ · Exp -->
+      <div style="text-align:center">
+        <div style="display:flex;justify-content:center;gap:6px;margin-bottom:2px">
+          <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hit,72,58)}">${p.p_hit}%</span>
+          <span style="font-size:10px;font-family:var(--mono);color:${pColor(p.p_2hit,35,22)}">${p.p_2hit}%</span>
+        </div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_hits}H</div>
+      </div>
+
+      <!-- Total Bases: 2+ · 3+ · Exp -->
+      <div style="text-align:center">
+        <div style="display:flex;justify-content:center;gap:6px;margin-bottom:2px">
+          <span style="font-size:12px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_2tb,55,40)}">${p.p_2tb}%</span>
+          <span style="font-size:10px;font-family:var(--mono);color:${pColor(p.p_3tb,35,22)}">${p.p_3tb}%</span>
+        </div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_tb}TB</div>
+      </div>
+
+      <!-- Run · RBI: 1+ each · Exp -->
+      <div style="text-align:center">
+        <div style="display:flex;justify-content:center;gap:6px;margin-bottom:2px">
+          <span style="font-size:11px;font-family:var(--mono);color:${pColor(p.p_run,38,25)}">R ${p.p_run}%</span>
+          <span style="font-size:11px;font-family:var(--mono);color:${pColor(p.p_rbi,32,20)}">RBI ${p.p_rbi}%</span>
+        </div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Exp ${p.exp_runs}R · ${p.exp_rbi}RBI</div>
+      </div>
+
+      <!-- H+R+RBI combined -->
+      <div style="text-align:center;background:${isTop?'rgba(45,212,191,.08)':'var(--bg3)'};border-radius:8px;padding:6px 8px">
+        <div style="display:flex;justify-content:center;gap:8px;margin-bottom:2px">
+          <div>
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hrr1,20,13)}">${p.p_hrr1}%</div>
+            <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+ each</div>
+          </div>
+          <div style="border-left:1px solid var(--bd);margin:0 2px"></div>
+          <div>
+            <div style="font-size:16px;font-weight:700;font-family:var(--mono);color:${pColor(p.p_hrr2,8,4)}">${p.p_hrr2}%</div>
+            <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">2+ each</div>
+          </div>
+        </div>
+      </div>
     </div>`;
   }).join('');
 
   el.innerHTML = `<div style="padding:12px 0">
-    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">
-      H+R+RBI probability ranked across today's slate · click column headers to re-sort · teal highlight = strong parlay candidate
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
+      Prop probabilities across today's slate · H+R+RBI combines hit, run scored, and RBI probability · teal highlight = top parlay candidate
     </div>
-    ${gamePills}
-    ${sortBtns}
+    ${gamePills}${sortPills}
     <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
-      ${tableHeader}${rows}
+      ${thead}${rows}
     </div>
     <div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 4px">
-      H+R+RBI combined assumes mild stat correlation · 1+ version = player records at least 1 hit, 1 run, and 1 RBI · 2+ version = 2 of each · Based on xwOBA, ISO, batting order, park factor, streak
+      Based on xwOBA · ISO · batting order · park factor · hot streak · correlation-adjusted for lineup position
     </div>
   </div>`;
 }
