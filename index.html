@@ -4436,9 +4436,9 @@ function renderDerby() {
   const pill = (key, label) => `<button onclick="_propsSort='${key}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${_propsSort===key?'var(--teal)':'var(--bd)'};background:${_propsSort===key?'rgba(45,212,191,.1)':'transparent'};color:${_propsSort===key?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${label}</button>`;
 
   // Game pills
-  const gamePills = '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">'
-    + `<button onclick="_propsGame=null;renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 12px;border-radius:20px;border:1px solid ${!_propsGame?'var(--teal)':'var(--bd)'};background:${!_propsGame?'rgba(45,212,191,.1)':'transparent'};color:${!_propsGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
-    + [...games].sort(gameTimeSort).map(g => `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:4px 10px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away}@${g.home}</button>`).join('')
+  const gamePills = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">'
+    + `<button onclick="_propsGame=null;renderDerby()" style="font-size:10px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid ${!_propsGame?'var(--teal)':'var(--bd)'};background:${!_propsGame?'rgba(45,212,191,.1)':'transparent'};color:${!_propsGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
+    + [...games].sort(gameTimeSort).map(g => `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away} @ ${g.home}</button>`).join('')
     + '</div>';
 
   const sortPills = '';  // removed — default sort by H+R+RBI prob
@@ -4452,12 +4452,22 @@ function renderDerby() {
     <div style="text-align:center;color:var(--teal)">H + R + RBI</div>
   </div>`;
 
+  // Dynamic highlighting — slate median + 1 standard deviation
+  const allHRR = filtered.map(({props}) => props.p_hrr1);
+  const slateAvg = allHRR.reduce((a,b)=>a+b,0) / allHRR.length;
+  const slateStd = Math.sqrt(allHRR.map(v=>(v-slateAvg)**2).reduce((a,b)=>a+b,0)/allHRR.length);
+  const highlightThreshold = slateAvg + slateStd;
+
   const rows = sorted.map(({r, props: p}) => {
+    const {count} = getSignalsLocked(r);
     const {badge} = getSignalsLocked(r);
     const streak = STREAK[r.name];
-    const isTop = p.p_hrr1 >= 50;
-    const rowBg = isTop ? 'rgba(45,212,191,.03)' : 'transparent';
-    const borderL = isTop ? '3px solid rgba(45,212,191,.4)' : '3px solid transparent';
+    // Top play: above dynamic threshold AND 4+ signals
+    const isElite = p.p_hrr1 >= highlightThreshold && count >= 4;
+    // Strong play: above dynamic threshold OR 4+ signals with high prob
+    const isTop = p.p_hrr1 >= highlightThreshold || (count >= 4 && p.p_hrr1 >= slateAvg);
+    const rowBg = isElite ? 'rgba(245,158,11,.04)' : isTop ? 'rgba(45,212,191,.03)' : 'transparent';
+    const borderL = isElite ? '3px solid var(--amber)' : isTop ? '3px solid rgba(45,212,191,.4)' : '3px solid transparent';
 
     return `<div onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}"
       style="display:grid;grid-template-columns:1fr 80px 80px 80px 200px;gap:8px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;background:${rowBg};border-left:${borderL}"
@@ -4492,7 +4502,7 @@ function renderDerby() {
       </div>
 
       <!-- H+R+RBI -->
-      <div style="background:${isTop?'rgba(45,212,191,.08)':'var(--bg3)'};border-radius:8px;padding:8px 12px;text-align:center">
+      <div style="background:${isElite?'rgba(245,158,11,.08)':isTop?'rgba(45,212,191,.06)':'var(--bg3)'};border-radius:8px;padding:8px 12px;text-align:center">
         <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">Projected Total</div>
         <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:var(--t1);line-height:1">${(+p.exp_hits + +p.exp_runs + +p.exp_rbi).toFixed(1)}</div>
         <div style="display:flex;justify-content:center;gap:6px;margin:4px 0 6px">
@@ -4518,8 +4528,10 @@ function renderDerby() {
     <div style="background:var(--bg2);border:1px solid var(--bd);border-radius:10px;overflow:hidden">
       ${thead}${rows}
     </div>
-    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);padding:8px 4px">
-      Based on xwOBA · ISO · batting order · park factor · hot streak · correlation-adjusted for lineup position
+    <div style="display:flex;gap:14px;flex-wrap:wrap;padding:8px 4px;font-size:9px;font-family:var(--mono);color:var(--t3)">
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:var(--amber);border-radius:2px"></div>Elite — above slate avg + 4 signals</div>
+      <div style="display:flex;align-items:center;gap:5px"><div style="width:3px;height:14px;background:rgba(45,212,191,.6);border-radius:2px"></div>Strong — above slate average</div>
+      <div style="color:var(--t3)">Based on xwOBA · ISO · order · park · streak</div>
     </div>
   </div>`;
 }
