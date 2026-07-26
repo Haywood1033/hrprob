@@ -4483,18 +4483,19 @@ function renderKProps() {
     + [...games].sort(gameTimeSort).map(g => `<button onclick="_propsGame='${g.pk}';renderDerby()" style="font-size:10px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid ${_propsGame==g.pk?'var(--teal)':'var(--bd)'};background:${_propsGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_propsGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away} @ ${g.home}</button>`).join('')
     + '</div>';
 
+  // Parlay pool — always full unfiltered slate, best 5 by projK
+  const kDataFull = [...kData].sort((a,b) => b.projK - a.projK);
+  window._kParlay = kDataFull.slice(0,5);
+
   if (_propsGame) {
     const pg = games.find(g => g.pk == _propsGame);
     if (pg) kData = kData.filter(d => d.g.pk == _propsGame);
   }
 
-  // Dynamic highlight threshold
-  const kAvg = kData.reduce((s,d)=>s+d.projK,0)/Math.max(1,kData.length);
-  const kStd = Math.sqrt(kData.map(d=>(d.projK-kAvg)**2).reduce((a,b)=>a+b,0)/Math.max(1,kData.length));
+  // Dynamic highlight threshold — use full slate for consistency
+  const kAvg = kDataFull.reduce((s,d)=>s+d.projK,0)/Math.max(1,kDataFull.length);
+  const kStd = Math.sqrt(kDataFull.map(d=>(d.projK-kAvg)**2).reduce((a,b)=>a+b,0)/Math.max(1,kDataFull.length));
   const kThreshold = kAvg + kStd;
-
-  // Best parlay legs — highest p_mid probability
-  window._kParlay = kData.slice(0,5);
   window._showKParlay = function(n) {
     const legs = window._kParlay.slice(0,n);
     const prob = (legs.reduce((acc,d) => acc * (d.p_mid/100), 1) * 100).toFixed(1);
