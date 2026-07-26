@@ -4529,14 +4529,25 @@ function renderDerby() {
     const prob  = (legs.reduce((acc, {props}) => acc * (props.p_hrr1/100), 1) * 100).toFixed(1);
     const pC    = +prob >= 15 ? 'var(--green)' : +prob >= 8 ? 'var(--teal)' : 'var(--amber)';
     const rows  = legs.map(({r, props: p}) => {
-      const isE = p.p_hrr1 >= window._hrr_thresh && getSignalsLocked(r).count >= 4;
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--bg3)">'
+      const isE  = p.p_hrr1 >= window._hrr_thresh && getSignalsLocked(r).count >= 4;
+      const tot  = (+p.exp_hits + +p.exp_runs + +p.exp_rbi).toFixed(1);
+      const pCol = p.p_hrr1>=55?'var(--green)':p.p_hrr1>=40?'var(--teal)':'var(--amber)';
+      return '<div style="display:grid;grid-template-columns:1fr 80px 70px;gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--bg3)">'
         + '<div>'
-        + '<span style="font-size:12px;font-weight:700;color:var(--t1)">' + r.name + '</span>'
-        + '<span style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-left:6px">' + r.team + ' · Bat ' + r.order + ' · ' + r.time + '</span>'
-        + (isE ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber);margin-left:4px">⭐</span>' : '')
+        + '<div style="display:flex;align-items:center;gap:5px"><span style="font-size:12px;font-weight:700;color:var(--t1)">' + r.name + '</span>'
+        + (isE ? '<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:rgba(245,158,11,.15);color:var(--amber)">⭐</span>' : '')
         + '</div>'
-        + '<span style="font-size:13px;font-weight:700;font-family:var(--mono);color:' + (p.p_hrr1>=55?'var(--green)':p.p_hrr1>=40?'var(--teal)':'var(--amber)') + '">' + p.p_hrr1 + '%</span>'
+        + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">' + r.team + ' · Bat ' + r.order + ' · ' + r.time + '</div>'
+        + '</div>'
+        + '<div style="text-align:center">'
+        + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Proj</div>'
+        + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:var(--t1)">' + tot + '</div>'
+        + '<div style="font-size:8px;font-family:var(--mono);color:var(--t3)">' + p.exp_hits + 'H · ' + p.exp_runs + 'R · ' + p.exp_rbi + 'RBI</div>'
+        + '</div>'
+        + '<div style="text-align:center">'
+        + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">Prob</div>'
+        + '<div style="font-size:20px;font-weight:700;font-family:var(--mono);color:' + pCol + '">' + p.p_hrr1 + '%</div>'
+        + '</div>'
         + '</div>';
     }).join('');
     const content = document.getElementById('props-parlay-content');
@@ -4545,7 +4556,6 @@ function renderDerby() {
       + '<div style="font-size:9px;font-family:var(--mono);color:var(--t3)">' + n + '-leg combined probability</div>'
       + '<div style="font-size:22px;font-weight:700;font-family:var(--mono);color:' + pC + '">' + prob + '%</div>'
       + '</div>';
-    // Update pill active states
     document.querySelectorAll('.hrr-pill').forEach(b => {
       const active = b.dataset.n == n;
       b.style.background = active ? 'rgba(45,212,191,.1)' : 'transparent';
