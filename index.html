@@ -2258,20 +2258,8 @@ function renderForecast(silent=false) {
             const apStats = {...g.ap, ...(getPitcher(g.ap.name)||{})};
             const hpStats = {...g.hp, ...(getPitcher(g.hp.name)||{})};
 
-            const calcKProj = (pit) => {
-              // K% via calibrated whiff% regression (K% ≈ Whiff% × 0.68 + 3.5, r²=0.84)
-              const whiff = pit.whiff || 22;
-              const k_pct = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
-              // Expected IP — modern starters avg ~5.5 IP, better pitchers go deeper
-              const xera = pit.xera || pit.era || 4.20;
-              const expIP = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
-              const expBF = +(expIP * 3.3).toFixed(0);
-              const projK = +(k_pct / 100 * expBF).toFixed(1);
-              return { k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1), expBF, projK, hasDirectK: !!pit.k_pct };
-            };
-
-            const awayK = calcKProj(apStats);
-            const homeK = calcKProj(hpStats);
+            const awayK = calcPitcherK(apStats, g.home);
+            const homeK = calcPitcherK(hpStats, g.away);
 
             return { g, awayK, homeK, apStats, hpStats };
           }).sort((a,b) => Math.max(b.awayK.projK, b.homeK.projK) - Math.max(a.awayK.projK, a.homeK.projK));
@@ -5192,17 +5180,9 @@ function openGameModal(gamePk) {
   const wstr = park.roof === 'dome' ? '🏟 Dome'
     : wx.ws ? `${Math.round(wx.ws)}mph ${windDir} · ${Math.round(wx.t||70)}°F` : '—';
 
-  // K projections
-  const calcKProj = (pit) => {
-    const whiff = pit.whiff || 22;
-    const k_pct = pit.k_pct || +(whiff * 0.75 + 2.0).toFixed(1);
-    const xera  = pit.xera || pit.era || 4.20;
-    const expIP = Math.min(7.5, Math.max(3.5, 6.5 - (xera - 4.50) * 0.8));
-    const expBF = +(expIP * 3.4).toFixed(0);
-    return { projK: +(k_pct/100*expBF).toFixed(1), k_pct: +k_pct.toFixed(1), expIP: +expIP.toFixed(1) };
-  };
-  const awayKProj = calcKProj(ap);
-  const homeKProj = calcKProj(hp);
+  // K projections — using shared calcPitcherK for consistency with Props tab
+  const awayKProj = calcPitcherK(ap, g.home);
+  const homeKProj = calcPitcherK(hp, g.away);
 
   // Run projection
   const rp = calcGameRunProjection(g);
