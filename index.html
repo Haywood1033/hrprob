@@ -1857,7 +1857,7 @@ async function autoFetchResults() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
-  // Find ALL records without results — not just the first one
+  // Find ALL records without results
   const missing = historyRecords.filter(r => r.date < today && !r.resultsAdded);
   if (!missing.length) return;
 
@@ -1871,8 +1871,23 @@ async function autoFetchResults() {
         body: JSON.stringify({ action: 'results', date: record.date })
       });
       const d = await r.json();
-      if (d.ok) {
-        console.log('Results fetched:', record.date, d.summary || d.record?.summary);
+      if (d.ok || d.alreadyAdded) {
+        console.log('Results fetched:', record.date, d.summary || d.record?.summary || 'ok');
+        anyUpdated = true;
+      } else if (r.status === 404) {
+        // No record in DB — create empty stub so it stops retrying
+        console.log('No DB record for', record.date, '— creating stub');
+        await fetch('/api/history', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ action: 'save', date: record.date, predictions: [], gameLeans: [] })
+        });
+        // Then fetch results for stub
+        await fetch('/api/history', {
+          method: 'POST',
+          headers: {'Content-Type':'application/json'},
+          body: JSON.stringify({ action: 'results', date: record.date })
+        });
         anyUpdated = true;
       } else {
         console.warn('Results failed for', record.date, d.error);
