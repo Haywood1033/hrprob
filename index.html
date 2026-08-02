@@ -1857,26 +1857,33 @@ async function autoFetchResults() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
-  // Find yesterday's record without results
-  const yesterday = historyRecords.find(r => r.date < today && !r.resultsAdded);
-  if (!yesterday) return;
+  // Find ALL records without results — not just the first one
+  const missing = historyRecords.filter(r => r.date < today && !r.resultsAdded);
+  if (!missing.length) return;
 
-  console.log('Auto-fetching results for:', yesterday.date);
-  try {
-    const r = await fetch('/api/history', {
-      method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ action: 'results', date: yesterday.date })
-    });
-    const d = await r.json();
-    if (d.ok) {
-      console.log('Results fetched:', d.summary || d.record?.summary);
-      // Reload history to get the updated record with hit values
-      await loadHistory();
-      if (curView==='history') renderHistory();
+  console.log('Auto-fetching results for', missing.length, 'days:', missing.map(r=>r.date).join(', '));
+  let anyUpdated = false;
+  for (const record of missing) {
+    try {
+      const r = await fetch('/api/history', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: 'results', date: record.date })
+      });
+      const d = await r.json();
+      if (d.ok) {
+        console.log('Results fetched:', record.date, d.summary || d.record?.summary);
+        anyUpdated = true;
+      } else {
+        console.warn('Results failed for', record.date, d.error);
+      }
+    } catch(e) {
+      console.warn('Auto results fetch failed for', record.date, e.message);
     }
-  } catch(e) {
-    console.warn('Auto results fetch failed:', e.message);
+  }
+  if (anyUpdated) {
+    await loadHistory();
+    if (curView==='history') renderHistory();
   }
 }
 
@@ -3936,8 +3943,13 @@ function setTodayPill(pill, btn) {
   if (pill === 'builder') renderBuilder();
   if (v === 'edge') renderEdge();
   if (pill === 'f1') {
-    if (!F1_CACHE.length) renderForecast(true);
-    renderToday(); // always re-render so _nrfi/_yrfi are fresh
+    if (!F1_CACHE.length) {
+      renderForecast(true);
+      // Re-render Today after short delay to pick up _nrfiGames
+      setTimeout(() => renderToday(), 300);
+    } else {
+      renderToday();
+    }
   }
 }
 
