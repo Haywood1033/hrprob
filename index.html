@@ -3956,7 +3956,7 @@ function setTodayPill(pill, btn) {
   if (pill === 'forecast') renderForecast();
   if (pill === 'fg') renderFullGame();
   if (pill === 'builder') renderBuilder();
-  if (v === 'edge') renderEdge();
+  if (pill === 'edge') renderEdge();
   if (pill === 'f1') {
     if (!F1_CACHE.length) {
       renderForecast(true);
