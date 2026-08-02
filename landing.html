@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HRProb — MLB Home Run Probability Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0e1a;
+  --bg2:#0d1220;
+  --bg3:#111827;
+  --bd:rgba(255,255,255,0.10);
+  --green:#4ade80;
+  --green-dim:rgba(74,222,128,0.10);
+  --green-border:rgba(74,222,128,0.25);
+  --amber:#f59e0b;
+  --blue:#60a5fa;
+  --t1:rgba(255,255,255,0.92);
+  --t2:rgba(255,255,255,0.55);
+  --t3:rgba(255,255,255,0.30);
+  --mono:'Space Mono',monospace;
+  --sans:'DM Sans',system-ui,sans-serif;
+}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* NAV */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:rgba(10,14,26,0.85);backdrop-filter:blur(12px);border-bottom:0.5px solid var(--bd);padding:0 32px}
+.nav-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;height:56px}
+.nav-logo{display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:15px;font-weight:700;color:var(--t1);text-decoration:none;letter-spacing:-0.3px}
+.nav-dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+.nav-links{display:flex;align-items:center;gap:28px}
+.nav-links a{font-size:13px;color:var(--t2);text-decoration:none;transition:color .15s}
+.nav-links a:hover{color:var(--t1)}
+.nav-cta-placeholder{width:120px;height:36px;border-radius:6px;background:var(--bg3);border:0.5px solid var(--bd)}
+
+/* HERO */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:120px 24px 80px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse 80% 50% at 50% 0%,rgba(74,222,128,0.06) 0%,transparent 70%);pointer-events:none}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:8px;background:var(--green-dim);border:0.5px solid var(--green-border);color:var(--green);font-size:11px;font-family:var(--mono);padding:5px 14px;border-radius:20px;margin-bottom:28px;letter-spacing:0.04em}
+.hero-eyebrow-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.hero h1{font-size:clamp(36px,6vw,68px);font-weight:300;line-height:1.1;letter-spacing:-1.5px;color:var(--t1);margin-bottom:20px;max-width:800px}
+.hero h1 em{font-style:normal;color:var(--green)}
+.hero-sub{font-size:clamp(15px,2vw,18px);color:var(--t2);max-width:520px;margin:0 auto 48px;line-height:1.65;font-weight:300}
+.hero-cta-area{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:64px}
+.hero-cta-placeholder{width:200px;height:48px;border-radius:8px;background:var(--bg3);border:0.5px solid var(--bd)}
+.hero-cta-sub{font-size:12px;font-family:var(--mono);color:var(--t3)}
+
+/* PROOF STRIP */
+.proof{display:flex;justify-content:center;gap:48px;flex-wrap:wrap}
+.proof-item{text-align:center}
+.proof-num{font-size:28px;font-weight:500;font-family:var(--mono);color:var(--green);letter-spacing:-0.5px;line-height:1}
+.proof-label{font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;margin-top:5px}
+
+/* DIVIDER */
+.divider{height:0.5px;background:var(--bd);max-width:1100px;margin:0 auto}
+
+/* SECTIONS */
+.section{max-width:1100px;margin:0 auto;padding:80px 32px}
+.section-label{font-size:10px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:14px}
+.section-title{font-size:clamp(26px,4vw,40px);font-weight:300;letter-spacing:-0.8px;color:var(--t1);margin-bottom:16px;line-height:1.15}
+.section-body{font-size:16px;color:var(--t2);max-width:560px;line-height:1.7;font-weight:300}
+
+/* ACCURACY SECTION */
+.accuracy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:40px}
+.acc-card{background:var(--bg2);border:0.5px solid var(--bd);border-radius:10px;padding:20px}
+.acc-card.featured{border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.04)}
+.acc-tier{font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.acc-actual{font-size:36px;font-weight:500;font-family:var(--mono);letter-spacing:-1px;line-height:1;margin-bottom:4px}
+.acc-card.featured .acc-actual{color:var(--amber)}
+.acc-card:nth-child(2) .acc-actual{color:var(--blue)}
+.acc-card:nth-child(3) .acc-actual{color:var(--t1)}
+.acc-model{font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:8px}
+.acc-delta{font-size:12px;font-family:var(--mono);font-weight:700}
+.acc-card.featured .acc-delta{color:var(--amber)}
+.acc-card:nth-child(2) .acc-delta{color:var(--blue)}
+.acc-card:nth-child(3) .acc-delta{color:var(--green)}
+.acc-bar{height:3px;background:var(--bg3);border-radius:2px;margin-top:14px;overflow:hidden}
+.acc-bar-fill{height:3px;border-radius:2px}
+.acc-card.featured .acc-bar-fill{background:var(--amber)}
+.acc-card:nth-child(2) .acc-bar-fill{background:var(--blue)}
+.acc-card:nth-child(3) .acc-bar-fill{background:var(--green)}
+
+/* SIGNALS SECTION */
+.signals-layout{display:grid;grid-template-columns:1fr 1fr;gap:48px;margin-top:40px;align-items:start}
+.signal-list{display:flex;flex-direction:column;gap:8px}
+.signal-row{display:flex;align-items:flex-start;gap:14px;padding:14px;background:var(--bg2);border:0.5px solid var(--bd);border-radius:8px}
+.signal-row.highlight{border-color:rgba(74,222,128,0.2);background:rgba(74,222,128,0.03)}
+.signal-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.signal-info{}
+.signal-name{font-size:13px;font-weight:500;color:var(--t1);margin-bottom:2px}
+.signal-desc{font-size:12px;color:var(--t3);line-height:1.5}
+.signal-badge-preview{background:var(--bg2);border:0.5px solid var(--bd);border-radius:10px;padding:20px;display:flex;flex-direction:column;gap:10px}
+.sbp-header{font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+.sbp-player{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px}
+.sbp-name{font-size:17px;font-weight:500;color:var(--t1)}
+.sbp-meta{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+.sbp-prob{text-align:right}
+.sbp-prob-num{font-size:28px;font-weight:500;font-family:var(--mono);color:var(--green);letter-spacing:-0.5px;line-height:1}
+.sbp-prob-label{font-size:9px;font-family:var(--mono);color:var(--t3)}
+.sbp-signals{display:flex;gap:4px;padding-top:12px;border-top:0.5px solid var(--bd);margin-top:4px;align-items:center}
+.sbp-sig{font-size:14px}
+.sbp-sig-count{font-size:10px;font-family:var(--mono);color:var(--t2);margin-left:4px}
+.sbp-badge{background:rgba(245,158,11,0.12);border:0.5px solid rgba(245,158,11,0.25);color:var(--amber);font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;margin-left:auto}
+
+/* TABS PREVIEW */
+.tabs-preview{margin-top:40px;background:var(--bg2);border:0.5px solid var(--bd);border-radius:12px;overflow:hidden}
+.tabs-preview-nav{display:flex;gap:6px;padding:12px 16px;border-bottom:0.5px solid var(--bd);overflow-x:auto;scrollbar-width:none}
+.tabs-preview-nav::-webkit-scrollbar{display:none}
+.tpn-pill{padding:5px 12px;border-radius:20px;font-size:11px;font-family:var(--mono);color:var(--t3);border:0.5px solid transparent;white-space:nowrap}
+.tpn-pill.active{color:var(--green);background:var(--green-dim);border-color:var(--green-border)}
+.tabs-preview-body{padding:20px}
+.tpb-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:0.5px solid var(--bd)}
+.tpb-row:last-child{border-bottom:none}
+.tpb-name{font-size:13px;font-weight:500;color:var(--t1)}
+.tpb-meta{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px}
+.tpb-right{display:flex;align-items:center;gap:12px}
+.tpb-sigs{display:flex;gap:2px}
+.tpb-sig{font-size:11px}
+.tpb-prob{font-size:14px;font-weight:500;font-family:var(--mono)}
+
+/* PROPS SECTION */
+.props-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:40px}
+.prop-card{background:var(--bg2);border:0.5px solid var(--bd);border-radius:10px;padding:18px}
+.prop-card.highlight{border-color:var(--green-border);background:rgba(74,222,128,0.03)}
+.prop-label{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px}
+.prop-name{font-size:15px;font-weight:500;color:var(--t1);margin-bottom:3px}
+.prop-meta{font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:14px}
+.prop-stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:14px}
+.prop-stat-label{font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px}
+.prop-stat-val{font-size:16px;font-weight:500;font-family:var(--mono)}
+.prop-hrr{background:rgba(74,222,128,0.06);border:0.5px solid rgba(74,222,128,0.15);border-radius:6px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center}
+.prop-hrr-label{font-size:9px;font-family:var(--mono);color:var(--t3)}
+.prop-hrr-val{font-size:18px;font-weight:500;font-family:var(--mono);color:var(--green)}
+.prop-hrr-prob{font-size:13px;font-family:var(--mono);color:var(--t2)}
+
+/* ML SECTION */
+.ml-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:32px}
+.ml-card{background:var(--bg2);border:0.5px solid var(--bd);border-radius:8px;padding:16px;text-align:center}
+.ml-num{font-size:26px;font-weight:500;font-family:var(--mono);color:var(--green);letter-spacing:-0.5px}
+.ml-label{font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:0.06em;margin-top:4px}
+.ml-sub{font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px}
+
+/* FOOTER */
+footer{border-top:0.5px solid var(--bd);padding:32px;text-align:center}
+.footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.footer-logo{font-family:var(--mono);font-size:13px;color:var(--t3);display:flex;align-items:center;gap:6px}
+.footer-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.footer-note{font-size:11px;font-family:var(--mono);color:var(--t3)}
+
+/* RESPONSIVE */
+@media(max-width:768px){
+  nav{padding:0 16px}
+  .section{padding:60px 20px}
+  .accuracy-grid{grid-template-columns:1fr}
+  .signals-layout{grid-template-columns:1fr}
+  .props-grid{grid-template-columns:1fr}
+  .ml-grid{grid-template-columns:repeat(3,1fr)}
+  .footer-inner{flex-direction:column;text-align:center}
+  .nav-links{display:none}
+}
+@media(max-width:480px){
+  .ml-grid{grid-template-columns:1fr}
+  .acc-card{padding:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-inner">
+    <a href="#" class="nav-logo">
+      <div class="nav-dot"></div>
+      HRProb
+    </a>
+    <div class="nav-links">
+      <a href="#how-it-works">How it works</a>
+      <a href="#accuracy">Accuracy</a>
+      <a href="#signals">Signals</a>
+      <a href="#props">Props</a>
+    </div>
+    <!-- CTA placeholder — auth buttons go here -->
+    <div class="nav-cta-placeholder"></div>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">
+    <div class="hero-eyebrow-dot"></div>
+    30-day live track record
+  </div>
+  <h1>MLB home run predictions<br>backed by <em>real data</em></h1>
+  <p class="hero-sub">Signal-driven probabilities for every batter in today's slate — built on Statcast, pitch matchups, park factors, and live weather.</p>
+
+  <!-- CTA placeholder -->
+  <div class="hero-cta-area">
+    <div class="hero-cta-placeholder"></div>
+    <div class="hero-cta-sub">No credit card required · Free tier available</div>
+  </div>
+
+  <!-- Proof strip -->
+  <div class="proof">
+    <div class="proof-item">
+      <div class="proof-num">38%</div>
+      <div class="proof-label">Elite play hit rate</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-num">24%</div>
+      <div class="proof-label">All-star hit rate</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-num">68%</div>
+      <div class="proof-label">ML pick accuracy</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-num">30</div>
+      <div class="proof-label">Days tracked</div>
+    </div>
+    <div class="proof-item">
+      <div class="proof-num">1,900+</div>
+      <div class="proof-label">Predictions made</div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ACCURACY -->
+<section class="section" id="accuracy">
+  <div class="section-label">Track record</div>
+  <div class="section-title">The model earns its signals</div>
+  <div class="section-body">Signal badge players outperform raw probability tiers every time. A 12% player with 6 signals is a better bet than a 22% player with 1.</div>
+
+  <div class="accuracy-grid">
+    <div class="acc-card featured">
+      <div class="acc-tier">🏆 Elite play · 6 signals</div>
+      <div class="acc-actual">38.1%</div>
+      <div class="acc-model">Model avg: 15.3%</div>
+      <div class="acc-delta">+22.8% vs model · 8/21 tracked</div>
+      <div class="acc-bar"><div class="acc-bar-fill" style="width:80%"></div></div>
+    </div>
+    <div class="acc-card">
+      <div class="acc-tier">⭐ All-star play · 5 signals</div>
+      <div class="acc-actual">23.9%</div>
+      <div class="acc-model">Model avg: 13.6%</div>
+      <div class="acc-delta">+10.3% vs model · 45/188 tracked</div>
+      <div class="acc-bar"><div class="acc-bar-fill" style="width:55%"></div></div>
+    </div>
+    <div class="acc-card">
+      <div class="acc-tier">💡 Value play · 4 signals</div>
+      <div class="acc-actual">16.9%</div>
+      <div class="acc-model">Model avg: 12.1%</div>
+      <div class="acc-delta">+4.8% vs model · 111/655 tracked</div>
+      <div class="acc-bar"><div class="acc-bar-fill" style="width:38%"></div></div>
+    </div>
+  </div>
+
+  <!-- ML accuracy -->
+  <div style="margin-top:16px">
+    <div class="ml-grid">
+      <div class="ml-card">
+        <div class="ml-num">68.1%</div>
+        <div class="ml-label">Full game ML</div>
+        <div class="ml-sub">81/119 correct</div>
+      </div>
+      <div class="ml-card">
+        <div class="ml-num">64.2%</div>
+        <div class="ml-label">F5 ML</div>
+        <div class="ml-sub">68/106 correct</div>
+      </div>
+      <div class="ml-card">
+        <div class="ml-num">59.5%</div>
+        <div class="ml-label">NRFI / YRFI</div>
+        <div class="ml-sub">22/37 correct</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- SIGNALS -->
+<section class="section" id="signals">
+  <div class="section-label">How it works</div>
+  <div class="section-title">7 signals. One conviction score.</div>
+  <div class="section-body">Every batter is evaluated against 7 independent factors. When 4 or more align, that's a signal play — and the data shows that's where the edge lives.</div>
+
+  <div class="signals-layout">
+    <div class="signal-list">
+      <div class="signal-row highlight">
+        <div class="signal-icon">⚔️</div>
+        <div class="signal-info">
+          <div class="signal-name">Pitch edge</div>
+          <div class="signal-desc">Batter's xwOBA ≥.360 vs pitcher's primary pitch type. The most selective signal.</div>
+        </div>
+      </div>
+      <div class="signal-row">
+        <div class="signal-icon">🎯</div>
+        <div class="signal-info">
+          <div class="signal-name">Pitcher matchup</div>
+          <div class="signal-desc">Pitcher xERA ≥4.50 or HR/9 ≥1.20 — broadly hittable today.</div>
+        </div>
+      </div>
+      <div class="signal-row">
+        <div class="signal-icon">🏟</div>
+        <div class="signal-info">
+          <div class="signal-name">Hitter park</div>
+          <div class="signal-desc">Park factor ≥1.05 or career SLG boost ≥20% at this venue.</div>
+        </div>
+      </div>
+      <div class="signal-row">
+        <div class="signal-icon">💨</div>
+        <div class="signal-info">
+          <div class="signal-name">Wind out</div>
+          <div class="signal-desc">Wind blowing out ≥6mph at an open-air park. Ball carries further.</div>
+        </div>
+      </div>
+      <div class="signal-row">
+        <div class="signal-icon">🔥</div>
+        <div class="signal-info">
+          <div class="signal-name">Hot streak</div>
+          <div class="signal-desc">1+ HR in last 20 PA. 🔥🔥 scorching = 3+ HR. Model applies +7–15% boost.</div>
+        </div>
+      </div>
+      <div class="signal-row">
+        <div class="signal-icon">🏏</div>
+        <div class="signal-info">
+          <div class="signal-name">Pull air edge</div>
+          <div class="signal-desc">Pull% ≥40% with FB% ≥35% facing a fly ball pitcher (GB% ≤38%).</div>
+        </div>
+      </div>
+      <div class="signal-row">
+        <div class="signal-icon">🔒</div>
+        <div class="signal-info">
+          <div class="signal-name">High confidence</div>
+          <div class="signal-desc">200+ PA sample. Statcast numbers are stable and trustworthy.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Live card preview -->
+    <div class="signal-badge-preview">
+      <div class="sbp-header">Example · today's slate</div>
+      <div class="sbp-player">
+        <div>
+          <div class="sbp-name">Kyle Schwarber 🔥</div>
+          <div class="sbp-meta">Phillies · vs Lauer · Bat 1 · 7:05 PM</div>
+        </div>
+        <div class="sbp-prob">
+          <div class="sbp-prob-num">22.1%</div>
+          <div class="sbp-prob-label">HR prob</div>
+        </div>
+      </div>
+      <div style="background:rgba(74,222,128,0.06);border:0.5px solid rgba(74,222,128,0.15);border-radius:6px;padding:10px 12px;margin-bottom:10px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-bottom:3px">⚔️ PITCH EDGE · 4-SEAM FB (44% USAGE)</div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t1)">xwOBA <strong style="color:var(--green)">.368</strong> vs 4-Seam · 29% whiff</div>
+      </div>
+      <div class="sbp-signals">
+        <span class="sbp-sig">🏟</span>
+        <span class="sbp-sig">🎯</span>
+        <span class="sbp-sig">🔒</span>
+        <span class="sbp-sig">🏏</span>
+        <span class="sbp-sig">⚔️</span>
+        <span class="sbp-sig-count">5 signals</span>
+        <span class="sbp-badge">⭐ All-star</span>
+      </div>
+      <div style="height:0.5px;background:var(--bd);margin:14px 0"></div>
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Today's best plays</div>
+      <div class="tabs-preview-body" style="padding:0">
+        <div class="tpb-row">
+          <div>
+            <div class="tpb-name">Yordan Alvarez <span style="font-size:11px">🔥🔥</span></div>
+            <div class="tpb-meta">Astros · Bat 2 · 7:10 PM</div>
+          </div>
+          <div class="tpb-right">
+            <div class="tpb-sigs"><span class="tpb-sig">🏟</span><span class="tpb-sig">🎯</span><span class="tpb-sig">🔒</span><span class="tpb-sig">🔥</span></div>
+            <div class="tpb-prob" style="color:#2dd4bf">19.8%</div>
+          </div>
+        </div>
+        <div class="tpb-row">
+          <div>
+            <div class="tpb-name">Pete Crow-Armstrong</div>
+            <div class="tpb-meta">Cubs · Bat 1 · 1:35 PM</div>
+          </div>
+          <div class="tpb-right">
+            <div class="tpb-sigs"><span class="tpb-sig">🏟</span><span class="tpb-sig">💨</span><span class="tpb-sig">🔒</span><span class="tpb-sig">🔥</span></div>
+            <div class="tpb-prob" style="color:var(--amber)">14.2%</div>
+          </div>
+        </div>
+        <div class="tpb-row">
+          <div>
+            <div class="tpb-name">Ben Rice</div>
+            <div class="tpb-meta">Yankees · Bat 1 · 7:05 PM</div>
+          </div>
+          <div class="tpb-right">
+            <div class="tpb-sigs"><span class="tpb-sig">🎯</span><span class="tpb-sig">🔥</span><span class="tpb-sig">🔒</span><span class="tpb-sig">⚔️</span></div>
+            <div class="tpb-prob" style="color:var(--amber)">13.5%</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- PROPS -->
+<section class="section" id="props">
+  <div class="section-label">Props + parlays</div>
+  <div class="section-title">H+R+RBI probabilities across the slate</div>
+  <div class="section-body">Beyond home runs — projected totals and combined probability for hits, runs, and RBIs. Built-in 3, 4, and 5-leg parlay recommendations, ranked by the best plays first.</div>
+
+  <div class="props-grid">
+    <div class="prop-card highlight">
+      <div class="prop-label">⭐ Top H+R+RBI target</div>
+      <div class="prop-name">Yordan Alvarez</div>
+      <div class="prop-meta">Astros · vs Burke · Bat 2 · 7:10 PM</div>
+      <div class="prop-stats">
+        <div>
+          <div class="prop-stat-label">1+ Hit</div>
+          <div class="prop-stat-val" style="color:var(--green)">88%</div>
+        </div>
+        <div>
+          <div class="prop-stat-label">2+ TB</div>
+          <div class="prop-stat-val" style="color:var(--green)">86%</div>
+        </div>
+        <div>
+          <div class="prop-stat-label">1+ RBI</div>
+          <div class="prop-stat-val" style="color:#2dd4bf">53%</div>
+        </div>
+      </div>
+      <div class="prop-hrr">
+        <div>
+          <div class="prop-hrr-label">H+R+RBI · Projected total</div>
+          <div class="prop-hrr-val">4.4</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">1.7H · 2.0R · 0.7RBI</div>
+        </div>
+        <div class="prop-hrr-prob">71.4% prob</div>
+      </div>
+    </div>
+    <div class="prop-card">
+      <div class="prop-label">Strong target</div>
+      <div class="prop-name">Kyle Schwarber</div>
+      <div class="prop-meta">Phillies · vs Lauer · Bat 1 · 7:05 PM</div>
+      <div class="prop-stats">
+        <div>
+          <div class="prop-stat-label">1+ Hit</div>
+          <div class="prop-stat-val" style="color:var(--green)">82%</div>
+        </div>
+        <div>
+          <div class="prop-stat-label">2+ TB</div>
+          <div class="prop-stat-val" style="color:#2dd4bf">76%</div>
+        </div>
+        <div>
+          <div class="prop-stat-label">1+ RBI</div>
+          <div class="prop-stat-val" style="color:#2dd4bf">48%</div>
+        </div>
+      </div>
+      <div class="prop-hrr">
+        <div>
+          <div class="prop-hrr-label">H+R+RBI · Projected total</div>
+          <div class="prop-hrr-val">3.9</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">1.5H · 1.8R · 0.6RBI</div>
+        </div>
+        <div class="prop-hrr-prob">64.1% prob</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- BOTTOM CTA -->
+<section class="section" style="text-align:center;padding:80px 32px">
+  <div class="section-label" style="display:inline-block">Get started</div>
+  <div class="section-title" style="max-width:520px;margin:14px auto 16px">Ready to see today's slate?</div>
+  <div class="section-body" style="margin:0 auto 40px">Updated every morning with confirmed lineups, live weather, and fresh Statcast data. No gut picks — just the model.</div>
+  <!-- CTA placeholder -->
+  <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+    <div style="width:200px;height:48px;border-radius:8px;background:var(--bg3);border:0.5px solid var(--bd)"></div>
+    <div style="font-size:12px;font-family:var(--mono);color:var(--t3)">Free tier available · No credit card required</div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-logo">
+      <div class="footer-dot"></div>
+      HRProb
+    </div>
+    <div class="footer-note">For entertainment and research purposes only · Not financial advice</div>
+    <div class="footer-note" style="color:var(--t3)">© 2026 HRProb</div>
+  </div>
+</footer>
+
+</body>
+</html>
