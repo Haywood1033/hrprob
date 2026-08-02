@@ -7153,10 +7153,11 @@ async function init(){
               BATTER[name] = _bd;
               const _nfc = name.normalize('NFC');
               const _nn  = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-              if (_nfc !== name) BATTER[_nfc] = _bd; // NFC variant
-              if (_nn  !== name) BATTER[_nn]  = _bd; // fully stripped
-          }
-          // Store pitcher arsenal data
+              if (_nfc !== name) BATTER[_nfc] = _bd;
+              if (_nn  !== name) BATTER[_nn]  = _bd;
+            }
+          } // end batter loop
+          // Store pitcher arsenal data — runs once after all batters processed
           if (d.pitcherArsenal) {
             for (const [name, arsenal] of Object.entries(d.pitcherArsenal)) {
               const norm = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -7165,7 +7166,7 @@ async function init(){
             }
             console.log('Pitcher arsenal loaded:', Object.keys(PITCHER_ARSENAL).length, 'pitchers');
           }
-          // Store batter vs pitch data
+          // Store batter vs pitch data — runs once
           if (d.batterVsPitch) {
             for (const [name, bvp] of Object.entries(d.batterVsPitch)) {
               const norm = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
@@ -7173,9 +7174,6 @@ async function init(){
               if (norm !== name) BATTER_VS_PITCH[norm] = bvp;
             }
             console.log('Batter vs pitch loaded:', Object.keys(BATTER_VS_PITCH).length, 'batters');
-          }
-          if (false) { // dummy to match structure
-            }
           }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
