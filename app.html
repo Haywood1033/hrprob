@@ -94,8 +94,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge,#vlive{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on,#vlive.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -471,6 +471,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="stale-banner" style="display:none"></div>
 <nav class="tabs">
   <div class="tab active" onclick="setView('today',this)">⚡ Today</div>
+  <div class="tab" onclick="setView('live',this)">🔴 Live</div>
   <div class="tab" onclick="setView('players',this)">☰ Players</div>
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Best Plays</div>
@@ -510,6 +511,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 </tr></thead><tbody id="ptbody"></tbody></table></div></div>
 <div id="vpulse" class="view"><div id="pulse-grid"></div></div>
 <div id="vderby" class="view"><div id="derby-grid"></div></div>
+<div id="vlive" class="view"><div id="live-grid" style="padding:14px 20px"></div></div>
 <div id="vedge" class="view"><div id="edge-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
@@ -791,7 +793,8 @@ function getStreak(name) {
 }
 
 const BULLPEN = {}; // team bullpen stats: era, hr9, whip, k9
-const PITCHER_ARSENAL = {}; // pitcher pitch mix: { pitcherName: { FF: {pct,whiff,xba,velo}, SL: {...} } }
+const PITCHER_ARSENAL = {}; // pitcher pitch mix
+const BATTER_L7 = {}; // last 7 days: { name: { ev7, barrel7, hh7, pa7 } }: { pitcherName: { FF: {pct,whiff,xba,velo}, SL: {...} } }
 const BATTER_VS_PITCH = {}; // batter vs pitch type: { batterName: { FF: {xwoba,whiff,barrel}, SL: {...} } }
 let allRows=[], sortKey='hrp', sortAsc=false, handFilt='', wxFilt=false, signalFilt=false, gameFilt=0, teamFilt='', statReady=false;
 let curView='players';
@@ -2758,14 +2761,24 @@ function getSignals(r) {
     }
   }
 
+  // ── SIGNAL 8: Hot Contact — L7 barrel% or hard hit% elite ──
+  const l7data = BATTER_L7[r.name] || BATTER_L7[normName(r.name)];
+  const hotContactActive = !!(l7data && l7data.pa7 >= 5 &&
+    ((l7data.barrel7 !== null && l7data.barrel7 >= 15) ||
+     (l7data.hh7 !== null && l7data.hh7 >= 55)));
+  const hotContactLabel = l7data && hotContactActive
+    ? `Hot Contact · L7 Brl ${l7data.barrel7?.toFixed(1)||'—'}% · HH ${l7data.hh7?.toFixed(0)||'—'}%`
+    : 'Hot Contact (L7)';
+
   const signals = [
-    { key:'park',      active:parkActive,      icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
-    { key:'weather',   active:wxActive,        icon:'💨', label:'Wind Out',                   dim:'opacity:0.2' },
-    { key:'pitcher',   active:pitchActive,     icon:'🎯', label:'Pitcher Matchup',            dim:'opacity:0.2' },
-    { key:'streak',    active:streakActive,    icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
-    { key:'conf',      active:confActive,      icon:'🔒', label:ci.label+' Confidence',       dim:'opacity:0.2' },
-    { key:'pulledge',  active:pullEdgeActive,  icon:'🏏', label:pullLabel,                   dim:'opacity:0.2' },
-    { key:'pitchedge', active:pitchEdgeActive, icon:'⚔️', label:pitchEdgeLabel,              dim:'opacity:0.2' },
+    { key:'park',       active:parkActive,         icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
+    { key:'weather',    active:wxActive,            icon:'💨', label:'Wind Out',                   dim:'opacity:0.2' },
+    { key:'pitcher',    active:pitchActive,         icon:'🎯', label:'Pitcher Matchup',            dim:'opacity:0.2' },
+    { key:'streak',     active:streakActive,        icon:'🔥', label:streak?.flame==='🔥🔥'?'Scorching':'Hot Streak', dim:'opacity:0.2' },
+    { key:'conf',       active:confActive,          icon:'🔒', label:ci.label+' Confidence',       dim:'opacity:0.2' },
+    { key:'pulledge',   active:pullEdgeActive,      icon:'🏏', label:pullLabel,                   dim:'opacity:0.2' },
+    { key:'pitchedge',  active:pitchEdgeActive,     icon:'⚔️', label:pitchEdgeLabel,              dim:'opacity:0.2' },
+    { key:'hotcontact', active:hotContactActive,    icon:'💥', label:hotContactLabel,              dim:'opacity:0.2' },
   ];
 
   const count = signals.filter(s=>s.active).length;
@@ -4817,7 +4830,230 @@ function renderDerby() {
   setTimeout(() => window._showParlay && window._showParlay(3), 0);
 }
 
-// ── EDGE TAB — Pitch Matchup Research ────────────────────────
+// ── LIVE HR TRACKER ──────────────────────────────────────────
+let _liveHRs       = [];   // { name, team, inning, gameId, gamePk, time, predicted, hrp, signals, badge }
+let _liveGames     = {};   // { gamePk: { status, homeTeam, awayTeam, inning, linescore } }
+let _livePollTimer = null;
+let _liveLastPoll  = null;
+
+function isLiveHours() {
+  const et = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const h  = new Date(et).getHours();
+  return h >= 11 && h < 26; // 11am–2am ET (26=2am next day handled by <26)
+}
+
+async function fetchLiveHRs() {
+  try {
+    const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+    const today = new Date(etStr).toLocaleDateString('en-CA');
+    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}&hydrate=linescore,boxscore,game(content(highlights))`;
+    const r = await fetch(url);
+    const d = await r.json();
+    const dates = d.dates || [];
+    if (!dates.length) return;
+
+    const newHRs = [];
+    const gameMap = {};
+
+    for (const date of dates) {
+      for (const game of (date.games || [])) {
+        const pk = game.gamePk;
+        const status = game.status?.abstractGameState || 'Preview';
+        const homeTeam = game.teams?.home?.team?.name || '';
+        const awayTeam = game.teams?.away?.team?.name || '';
+        const inning = game.linescore?.currentInning || 0;
+        const inningHalf = game.linescore?.inningHalf || '';
+
+        gameMap[pk] = { status, homeTeam, awayTeam, inning, inningHalf };
+
+        if (status === 'Preview') continue;
+
+        // Extract HR plays from boxscore
+        const boxscore = game.boxscore || {};
+        for (const side of ['home','away']) {
+          const batters = boxscore.teams?.[side]?.batters || [];
+          const players = boxscore.teams?.[side]?.players || {};
+          for (const id of batters) {
+            const p = players[`ID${id}`];
+            if (!p) continue;
+            const hrs = p.stats?.batting?.homeRuns || 0;
+            if (hrs === 0) continue;
+            const fullName = p.person?.fullName || '';
+            // Check if already tracked
+            const exists = _liveHRs.find(h => h.name === fullName && h.gamePk === pk);
+            if (!exists) {
+              // Match against today's predictions
+              const predicted = allRows.find(r =>
+                r.name === fullName ||
+                normName(r.name) === normName(fullName)
+              );
+              const {count, badge, signals} = predicted ? getSignalsLocked(predicted) : {count:0,badge:null,signals:[]};
+              newHRs.push({
+                name: fullName,
+                team: side === 'home' ? homeTeam : awayTeam,
+                gamePk: pk,
+                homeTeam, awayTeam,
+                hrs,
+                predicted: !!predicted,
+                hrp: predicted?.hrp || null,
+                count, badge, signals,
+                addedAt: Date.now(),
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // Merge new HRs — add any not already tracked
+    for (const hr of newHRs) {
+      const exists = _liveHRs.find(h => h.name === hr.name && h.gamePk === hr.gamePk);
+      if (!exists) _liveHRs.push(hr);
+    }
+    _liveGames = gameMap;
+    _liveLastPoll = new Date();
+
+    if (curView === 'live') renderLive();
+  } catch(e) {
+    console.warn('Live HR fetch failed:', e.message);
+  }
+}
+
+function startLivePolling() {
+  if (_livePollTimer) return; // already running
+  fetchLiveHRs(); // immediate
+  _livePollTimer = setInterval(() => {
+    if (!isLiveHours()) {
+      clearInterval(_livePollTimer);
+      _livePollTimer = null;
+      return;
+    }
+    fetchLiveHRs();
+  }, 3 * 60 * 1000); // every 3 minutes
+}
+
+function renderLive() {
+  const el = document.getElementById('live-grid');
+  if (!el) return;
+
+  // Start polling if in game hours
+  if (isLiveHours() && !_livePollTimer) startLivePolling();
+
+  // Build prediction scorecard from today's predictions
+  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const todayET = new Date(etStr).toLocaleDateString('en-CA');
+  const todayRecord = historyRecords.find(r => r.date === todayET);
+  const todayPreds = todayRecord?.predictions || [];
+
+  // Running totals
+  const hitNames = new Set(_liveHRs.filter(h=>h.predicted).map(h=>h.name));
+  const predHits   = todayPreds.filter(p => hitNames.has(p.name)).length;
+  const signalPreds = todayPreds.filter(p => {
+    const r = allRows.find(r=>r.name===p.name);
+    return r && getSignalsLocked(r).count >= 4;
+  });
+  const signalHits = signalPreds.filter(p => hitNames.has(p.name)).length;
+  const elitePreds = todayPreds.filter(p => {
+    const r = allRows.find(r=>r.name===p.name);
+    return r && getSignalsLocked(r).count >= 6;
+  });
+  const eliteHits = elitePreds.filter(p => hitNames.has(p.name)).length;
+
+  // Last poll time
+  const pollStr = _liveLastPoll
+    ? _liveLastPoll.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})
+    : 'Not yet polled';
+
+  // Scorecard header
+  const scorecard = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
+    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">All predictions</div>
+      <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${predHits>0?'var(--green)':'var(--t2)'}">${predHits}/${todayPreds.length}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">${todayPreds.length?((predHits/todayPreds.length)*100).toFixed(1)+'% today':'No predictions'}</div>
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Signal plays</div>
+      <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${signalHits>0?'var(--teal)':'var(--t2)'}">${signalHits}/${signalPreds.length}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">4+ signals</div>
+    </div>
+    <div style="background:var(--bg2);border:0.5px solid rgba(245,158,11,.2);border-radius:10px;padding:14px;text-align:center">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Elite plays</div>
+      <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${eliteHits>0?'var(--amber)':'var(--t2)'}">${eliteHits}/${elitePreds.length}</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">6+ signals</div>
+    </div>
+  </div>`;
+
+  // HR Feed
+  const sortedHRs = [..._liveHRs].sort((a,b) => b.addedAt - a.addedAt);
+  const feedItems = sortedHRs.length ? sortedHRs.map(hr => {
+    const bg = hr.predicted ? 'rgba(74,222,128,0.05)' : 'var(--bg2)';
+    const border = hr.predicted ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.11)';
+    return `<div style="background:${bg};border:0.5px solid ${border};border-radius:10px;padding:14px 16px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hr.predicted?'10px':'0'}">
+        <div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+            <span style="font-size:16px">🚀</span>
+            <span style="font-size:14px;font-weight:500;color:var(--t1)">${hr.name}</span>
+            ${hr.predicted ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:rgba(74,222,128,0.15);color:var(--green);border:0.5px solid rgba(74,222,128,0.3)">✓ Predicted</span>` : '<span style="font-size:8px;font-family:var(--mono);color:var(--t3)">Not in predictions</span>'}
+          </div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${hr.awayTeam} @ ${hr.homeTeam} · ${hr.hrs} HR${hr.hrs>1?'s':''} today</div>
+        </div>
+        ${hr.predicted && hr.hrp ? `<div style="text-align:right"><div style="font-size:18px;font-weight:500;font-family:var(--mono);color:var(--green)">${hr.hrp.toFixed(1)}%</div><div style="font-size:9px;font-family:var(--mono);color:var(--t3)">predicted</div></div>` : ''}
+      </div>
+      ${hr.predicted && hr.count > 0 ? `<div style="display:flex;align-items:center;gap:5px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.06)">
+        ${hr.signals.map(s => `<span style="font-size:13px;opacity:${s.active?1:0.2}">${s.icon}</span>`).join('')}
+        <span style="font-size:9px;font-family:var(--mono);color:var(--t2);margin-left:4px">${hr.count} signals</span>
+        ${hr.badge ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${hr.badge.bg};color:${hr.badge.color};border:0.5px solid ${hr.badge.bd};margin-left:auto">${hr.badge.label.replace(' Play','')}</span>` : ''}
+      </div>` : ''}
+    </div>`;
+  }).join('') : `<div style="text-align:center;padding:32px;color:var(--t3);font-family:var(--mono);font-size:12px">No home runs recorded yet today</div>`;
+
+  // Prediction scorecard — all today's predictions with live status
+  const predRows = todayPreds.length ? todayPreds.slice(0,50).map(p => {
+    const hit = hitNames.has(p.name);
+    const r = allRows.find(r => r.name === p.name);
+    const game = r ? _liveGames[r.gamePk] : null;
+    const gameStatus = game?.status || 'Preview';
+    const inProgress = gameStatus === 'Live';
+    const final = gameStatus === 'Final';
+    const notStarted = gameStatus === 'Preview';
+    const statusIcon = hit ? '✅' : final ? '❌' : inProgress ? '⏳' : '⬜';
+    const statusColor = hit ? 'var(--green)' : final ? 'var(--red)' : inProgress ? 'var(--amber)' : 'var(--t3)';
+    const {count, badge} = r ? getSignalsLocked(r) : {count:0,badge:null};
+    return `<div style="display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
+      <span style="font-size:14px;flex-shrink:0">${statusIcon}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:12px;font-weight:500;color:${hit?'var(--green)':final?'var(--t3)':'var(--t1)'}">${p.name}</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team} · ${inProgress?`In progress${game?.inning?' · '+game.inningHalf+' '+game.inning:''}`:final?'Final':notStarted?'Not started':'—'}</div>
+      </div>
+      ${count >= 4 ? `<div style="display:flex;gap:2px">${(r?getSignalsLocked(r).signals:[]).slice(0,7).map(s=>`<span style="font-size:10px;opacity:${s.active?1:0.2}">${s.icon}</span>`).join('')}</div>` : ''}
+      ${badge ? `<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>` : ''}
+      <div style="font-size:12px;font-weight:500;font-family:var(--mono);color:${p.hrp>=20?'var(--green)':p.hrp>=15?'var(--teal)':p.hrp>=10?'var(--amber)':'var(--t3)'};flex-shrink:0">${p.hrp?.toFixed(1)}%</div>
+    </div>`;
+  }).join('') : '<div style="color:var(--t3);font-family:var(--mono);font-size:12px;padding:16px 0">No predictions saved for today yet — check back after lineup lock</div>';
+
+  const pollStatus = isLiveHours()
+    ? `<div style="display:flex;align-items:center;gap:6px"><div style="width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s ease-in-out infinite"></div><span>Live · updates every 3 min · last updated ${pollStr} ET</span></div>`
+    : `<div style="color:var(--t3)">Polling active 11am–2am ET · ${pollStr}</div>`;
+
+  el.innerHTML = `
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center">
+      ${pollStatus}
+      <button onclick="fetchLiveHRs()" style="font-size:10px;font-family:var(--mono);color:var(--green);background:transparent;border:0.5px solid var(--green-border);padding:4px 10px;border-radius:20px;cursor:pointer">↻ Refresh</button>
+    </div>
+
+    ${scorecard}
+
+    <div style="font-size:11px;font-weight:500;color:var(--t1);margin-bottom:10px">🚀 HR Feed</div>
+    <div style="margin-bottom:20px">${feedItems}</div>
+
+    <div style="font-size:11px;font-weight:500;color:var(--t1);margin-bottom:10px">📋 Today's Predictions</div>
+    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:10px 14px">
+      ${predRows}
+    </div>
+  `;
+}
+
 let _edgeGame = null;
 
 function renderEdge() {
@@ -5629,6 +5865,38 @@ function renderToday() {
       +'</div></div>';
   }).join('') : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
 
+  // Hot Contact board — ranked by L7 barrel% facing today's pitchers
+  const hotContactPlays = [...players]
+    .map(r => {
+      const l7 = BATTER_L7[r.name] || BATTER_L7[normName(r.name)];
+      if (!l7 || !l7.pa7 || l7.pa7 < 5) return null;
+      const score = (l7.barrel7 || 0) * 1.5 + (l7.hh7 || 0) * 0.5;
+      return { r, l7, score };
+    })
+    .filter(Boolean)
+    .sort((a,b) => b.score - a.score)
+    .slice(0, 8);
+
+  const hotContactHTML = hotContactPlays.length ? hotContactPlays.map(({r, l7}) => {
+    const brlColor = (l7.barrel7||0) >= 20 ? 'var(--green)' : (l7.barrel7||0) >= 12 ? 'var(--teal)' : 'var(--amber)';
+    const hhColor  = (l7.hh7||0) >= 55 ? 'var(--green)' : (l7.hh7||0) >= 45 ? 'var(--teal)' : 'var(--t2)';
+    const pit = getPitcher(r.pitName) || {};
+    const hrBBE = pit.hrBBE ? (pit.hrBBE * 100).toFixed(1) + '%' : '—';
+    return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
+      +'<div style="flex:1">'
+      +'<div class="today-target-name">💥 '+r.name+'</div>'
+      +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+' · HR/BBE '+hrBBE+'</div>'
+      +'<div style="display:flex;gap:10px;margin-top:4px;font-size:10px;font-family:var(--mono)">'
+      +'<span>Brl <strong style="color:'+brlColor+'">'+(l7.barrel7?.toFixed(1)||'—')+'%</strong></span>'
+      +'<span>HH <strong style="color:'+hhColor+'">'+(l7.hh7?.toFixed(0)||'—')+'%</strong></span>'
+      +'<span style="color:var(--t3)">EV <strong style="color:var(--t2)">'+(l7.ev7?.toFixed(1)||'—')+'</strong></span>'
+      +'<span style="color:var(--t3)">L7 PA '+(l7.pa7||'—')+'</span>'
+      +'</div></div>'
+      +'<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+(r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)')+'">'+r.hrp.toFixed(1)+'%</div></div>'
+      +'</div>';
+  }).join('')
+  : '<div style="font-size:12px;color:var(--t3);padding:8px 0">L7 data loads with Statcast</div>';
+
 
   // ── YESTERDAY'S RESULTS BANNER ───────────────────────────────
   const yesterdayHTML = buildYesterdayBanner();
@@ -5884,6 +6152,7 @@ function renderToday() {
     + '<div class="today-two-col">'
     + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
     + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
+    + '<div class="today-section"><div class="today-section-hdr"><span>💥 Hot Contact · L7</span><span style="color:var(--t3);font-size:9px">Last 7 days barrel% + hard hit%</span></div><div class="today-section-body">'+hotContactHTML+'</div></div>'
     + '</div>'
     + topGameHTML
     + '<div id="yesterday-banner">'+yesterdayHTML+'</div>'
@@ -6825,6 +7094,7 @@ function renderAll(){
   else if(curView==='pulse')   renderPulse();
   else if(curView==='derby')   renderDerby();
   else if(curView==='edge')    renderEdge();
+  else if(curView==='live')    renderLive();
   else renderTargets();
 }
 
@@ -6832,7 +7102,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby','live'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
@@ -6977,6 +7247,9 @@ async function init(){
   // Hard fallback — dismiss overlay after 12s regardless
   setTimeout(() => dismissOverlay(), 12000);
   checkSlateDate();
+
+  // Start live HR polling if in game hours
+  if (isLiveHours()) startLivePolling();
 
   // Load history early so yesterday's banner is ready
   loadHistory().then(() => {
@@ -7164,6 +7437,15 @@ async function init(){
             }
             console.log('Batter vs pitch loaded:', Object.keys(BATTER_VS_PITCH).length, 'batters');
           }
+          // Store L7 rolling data
+          if (d.batterL7) {
+            for (const [name, l7] of Object.entries(d.batterL7)) {
+              const norm = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+              BATTER_L7[name] = l7;
+              if (norm !== name) BATTER_L7[norm] = l7;
+            }
+            console.log('Batter L7 loaded:', Object.keys(BATTER_L7).length, 'batters');
+          }
           console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
         if (d.pitchers) {
@@ -7172,6 +7454,7 @@ async function init(){
               xera:   +(s.xera||4.50).toFixed(2),
               whiff:  +(s.whiff||22).toFixed(1),
               hr9:    +(s.hr9||1.2).toFixed(2),
+              hrBBE:  s.hrBBE ? +(s.hrBBE).toFixed(3) : null,
               hh:     +(s.hh_pct||s.hh||38).toFixed(1),
               hand:   PITCHER_SPLITS[name]?.pitHand || PITCHER[name]?.hand || 'R',
               k_pct:  s.k_pct||null,
