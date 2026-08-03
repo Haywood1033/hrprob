@@ -1955,7 +1955,7 @@ function computeSignalAccuracy(records, window='all') {
   if (window==='7d')  cutoff = new Date(Date.now()-7*864e5).toLocaleDateString('en-CA');
   if (window==='30d') cutoff = new Date(Date.now()-30*864e5).toLocaleDateString('en-CA');
 
-  const filtered = records.filter(r=>r.date>=cutoff && r.date<now && r.resultsAdded);
+  const filtered = records.filter(r=>r.date>=cutoff && r.date<now && r.resultsAdded && r.predictions?.length > 0);
 
   const badges = {
     'elite':   {label:'🏆 Elite Play',    color:'var(--amber)',  hits:0, total:0, hrps:[]},
@@ -2444,7 +2444,7 @@ function renderHistory() {
         <div class="htier-stat-lbl">HRs Hit</div>
       </div>
       <div class="htier-stat">
-        <div class="htier-stat-val">${historyRecords.filter(r=>r.resultsAdded).length}</div>
+        <div class="htier-stat-val">${historyRecords.filter(r=>r.resultsAdded && r.predictions?.length > 0).length}</div>
         <div class="htier-stat-lbl">Days Tracked</div>
       </div>
     </div>
