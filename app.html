@@ -6142,8 +6142,8 @@ function renderToday() {
     + kpiHTML
     + '</div>'
     + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','props','f5','fg','f1','forecast','envs','builder'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',props:'Props',f5:'F5',fg:'Full Game',f1:'1st Inning',forecast:'Forecast',envs:'Environments',builder:'⚡ Builder'};
+    + ['overview','signals','hotcontact','props','f5','fg','f1','forecast','envs','builder'].map(p=>{
+        const labels={overview:'Overview',signals:'Signal Plays',hotcontact:'💥 Hot Contact',props:'Props',f5:'F5',fg:'Full Game',f1:'1st Inning',forecast:'Forecast',envs:'Environments',builder:'⚡ Builder'};
         return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
       }).join('')
     + '</div>'
@@ -6152,13 +6152,16 @@ function renderToday() {
     + '<div class="today-two-col">'
     + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
     + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
-    + '<div class="today-section"><div class="today-section-hdr"><span>💥 Hot Contact · L7</span><span style="color:var(--t3);font-size:9px">Last 7 days barrel% + hard hit%</span></div><div class="today-section-body">'+hotContactHTML+'</div></div>'
     + '</div>'
     + topGameHTML
     + '<div id="yesterday-banner">'+yesterdayHTML+'</div>'
     + '</div>'
     + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
     + fringeHTML
+    + '</div>'
+    + '<div class="today-pane'+(todayPill==='hotcontact'?' on':'')+'" id="pane-hotcontact" style="padding:14px 16px">'
+    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">Ranked by L7 barrel% × hard hit% · minimum 5 PA last 7 days · pitcher HR/BBE shows home run rate per ball in play</div>'
+    + hotContactHTML
     + '</div>'
     + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
     + multiPropHTML
