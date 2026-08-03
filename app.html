@@ -5865,37 +5865,47 @@ function renderToday() {
       +'</div></div>';
   }).join('') : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
 
-  // Hot Contact board — ranked by L7 barrel% facing today's pitchers
+  // Hot Contact board — season barrel% + recent game log SLG as recency proxy
   const hotContactPlays = [...players]
     .map(r => {
-      const l7 = BATTER_L7[r.name] || BATTER_L7[normName(r.name)];
-      if (!l7 || !l7.pa7 || l7.pa7 < 5) return null;
-      const score = (l7.barrel7 || 0) * 1.5 + (l7.hh7 || 0) * 0.5;
-      return { r, l7, score };
+      const b = getBatter(r.name);
+      if (!b || !b.ba) return null;
+      const streak = STREAK[r.name];
+      const gameLog = streak?.gameLog || [];
+      const recent = gameLog.slice(0, 7);
+      const recentAB = recent.reduce((s,g) => s + (g.ab||0), 0);
+      const recentTB = recent.reduce((s,g) => s + (g.tb||0), 0);
+      const recentSLG = recentAB >= 8 ? recentTB / recentAB : null;
+      const barrel = b.ba || 0;
+      const hh     = b.hh || 0;
+      const ev     = b.ev || 0;
+      const score  = barrel * 1.5 + hh * 0.3 + (recentSLG !== null ? recentSLG * 20 : 0);
+      return { r, b, barrel, hh, ev, recentSLG, score };
     })
     .filter(Boolean)
     .sort((a,b) => b.score - a.score)
-    .slice(0, 8);
+    .slice(0, 10);
 
-  const hotContactHTML = hotContactPlays.length ? hotContactPlays.map(({r, l7}) => {
-    const brlColor = (l7.barrel7||0) >= 20 ? 'var(--green)' : (l7.barrel7||0) >= 12 ? 'var(--teal)' : 'var(--amber)';
-    const hhColor  = (l7.hh7||0) >= 55 ? 'var(--green)' : (l7.hh7||0) >= 45 ? 'var(--teal)' : 'var(--t2)';
+  const hotContactHTML = hotContactPlays.length ? hotContactPlays.map(({r, barrel, hh, ev, recentSLG}) => {
+    const brlColor = barrel >= 18 ? 'var(--green)' : barrel >= 12 ? 'var(--teal)' : 'var(--amber)';
+    const hhColor  = hh >= 55 ? 'var(--green)' : hh >= 45 ? 'var(--teal)' : 'var(--t2)';
+    const slgColor = recentSLG !== null ? (recentSLG >= 0.600 ? 'var(--green)' : recentSLG >= 0.450 ? 'var(--teal)' : 'var(--amber)') : 'var(--t3)';
     const pit = getPitcher(r.pitName) || {};
-    const hrBBE = pit.hrBBE ? (pit.hrBBE * 100).toFixed(1) + '%' : '—';
-    return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
-      +'<div style="flex:1">'
-      +'<div class="today-target-name">💥 '+r.name+'</div>'
-      +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+' · HR/BBE '+hrBBE+'</div>'
-      +'<div style="display:flex;gap:10px;margin-top:4px;font-size:10px;font-family:var(--mono)">'
-      +'<span>Brl <strong style="color:'+brlColor+'">'+(l7.barrel7?.toFixed(1)||'—')+'%</strong></span>'
-      +'<span>HH <strong style="color:'+hhColor+'">'+(l7.hh7?.toFixed(0)||'—')+'%</strong></span>'
-      +'<span style="color:var(--t3)">EV <strong style="color:var(--t2)">'+(l7.ev7?.toFixed(1)||'—')+'</strong></span>'
-      +'<span style="color:var(--t3)">L7 PA '+(l7.pa7||'—')+'</span>'
-      +'</div></div>'
-      +'<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+(r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)')+'">'+r.hrp.toFixed(1)+'%</div></div>'
-      +'</div>';
+    const hrBBE = pit.hrBBE ? 'HR/BBE '+(pit.hrBBE*100).toFixed(1)+'%' : 'HR/9 '+(pit.hr9||1.2).toFixed(2);
+    return '<div class="today-target" onclick="goToPlayer(this.dataset.name)" data-name="'+r.name+'">'+
+      '<div style="flex:1">'+
+      '<div class="today-target-name">'+r.name+(STREAK[r.name]?.flame?' '+STREAK[r.name].flame:'')+'</div>'+
+      '<div class="today-target-sub">'+r.team+' vs '+r.pitName+' · '+hrBBE+'</div>'+
+      '<div style="display:flex;gap:10px;margin-top:4px;font-size:10px;font-family:var(--mono)">'+
+      '<span>Brl <strong style="color:'+brlColor+'">'+barrel.toFixed(1)+'%</strong></span>'+
+      '<span>HH <strong style="color:'+hhColor+'">'+hh.toFixed(0)+'%</strong></span>'+
+      '<span>EV <strong style="color:var(--t2)">'+ev.toFixed(1)+'</strong></span>'+
+      (recentSLG !== null ? '<span>L10 SLG <strong style="color:'+slgColor+'">'+recentSLG.toFixed(3)+'</strong></span>' : '')+
+      '</div></div>'+
+      '<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+(r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)')+'">'+r.hrp.toFixed(1)+'%</div></div>'+
+      '</div>';
   }).join('')
-  : '<div style="font-size:12px;color:var(--t3);padding:8px 0">L7 data loads with Statcast</div>';
+  : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading contact data…</div>';
 
 
   // ── YESTERDAY'S RESULTS BANNER ───────────────────────────────
