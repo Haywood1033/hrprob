@@ -2761,14 +2761,22 @@ function getSignals(r) {
     }
   }
 
-  // ── SIGNAL 8: Hot Contact — L7 barrel% or hard hit% elite ──
+  // ── SIGNAL 8: Hot Contact — season barrel%/HH% OR recent hot SLG ──
   const l7data = BATTER_L7[r.name] || BATTER_L7[normName(r.name)];
-  const hotContactActive = !!(l7data && l7data.pa7 >= 5 &&
-    ((l7data.barrel7 !== null && l7data.barrel7 >= 15) ||
-     (l7data.hh7 !== null && l7data.hh7 >= 55)));
-  const hotContactLabel = l7data && hotContactActive
-    ? `Hot Contact · L7 Brl ${l7data.barrel7?.toFixed(1)||'—'}% · HH ${l7data.hh7?.toFixed(0)||'—'}%`
-    : 'Hot Contact (L7)';
+  const hcStreak = STREAK[r.name];
+  const hcGameLog = hcStreak?.gameLog || [];
+  const hcRecent = hcGameLog.slice(0,7);
+  const hcAB = hcRecent.reduce((s,g)=>s+(g.ab||0),0);
+  const hcTB = hcRecent.reduce((s,g)=>s+(g.tb||0),0);
+  const hcSLG = hcAB >= 8 ? hcTB/hcAB : null;
+  const hotContactActive = !!(
+    (batter.ba >= 12) ||                    // barrel% ≥12% (above avg)
+    (batter.hh >= 50) ||                    // hard hit% ≥50%
+    (hcSLG !== null && hcSLG >= 0.650)      // scorching recent SLG
+  );
+  const hotContactLabel = hotContactActive
+    ? `Hot Contact · Brl ${batter.ba?.toFixed(1)||'—'}% · HH ${batter.hh?.toFixed(0)||'—'}%${hcSLG?` · L10 SLG ${hcSLG.toFixed(3)}`:''}`
+    : 'Hot Contact';
 
   const signals = [
     { key:'park',       active:parkActive,         icon:'🏟', label:'Hitter Park',               dim:'opacity:0.2' },
