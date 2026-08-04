@@ -2806,6 +2806,12 @@ function getSignals(r) {
 // Locks signal badges at first page load to prevent mid-game changes
 const SIGNAL_LOCK = {};
 let _signalLockDate = null;
+let _renderTodayTimer = null;
+function renderTodayDebounced() {
+  if (curView !== 'today') return;
+  clearTimeout(_renderTodayTimer);
+  _renderTodayTimer = setTimeout(() => { if (curView === 'today') renderToday(); }, 400);
+}
 
 function lockSignals() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
@@ -2835,7 +2841,7 @@ function lockSignals() {
   _signalLockDate = today;
   for (const r of allRows) {
     const {signals, count, badge, ci} = getSignals(r);
-    SIGNAL_LOCK[r.name] = { signals: signals.map(s=>s.active), count, badge, ci };
+    SIGNAL_LOCK[r.name] = { signals: signals.map(s=>s.active), count, badge, ci, hrp: r.hrp };
   }
   // Save to DB — single source of truth for all devices
   try {
@@ -2854,10 +2860,9 @@ function lockSignals() {
 }
 
 function getSignalsLocked(r) {
-  if (!r?.name) return { signals:[], count:0, badge:null, ci:{} };
+  if (!r?.name) return { signals:[], count:0, badge:null, ci:{}, hrp:null };
   if (SIGNAL_LOCK[r.name]) {
     const locked = SIGNAL_LOCK[r.name];
-    // Only call getSignals if row is a real allRows entry (has hrp)
     const isRealRow = r.hrp !== undefined;
     const live = isRealRow ? getSignals(r) : null;
     return {
@@ -2865,9 +2870,10 @@ function getSignalsLocked(r) {
         const icons=['🏟','💨','🎯','🔥','🔒','🏏','⚔️','💥'];
         return {icon:icons[i]||'?',active:!!a,key:'sig'+i,label:'',dim:'opacity:0.2'};
       }),
-      count:   locked.count,  // always locked
-      badge:   locked.badge,  // always locked
-      ci:      live ? live.ci : (locked.ci||{}),
+      count:  locked.count,
+      badge:  locked.badge,
+      ci:     live ? live.ci : (locked.ci||{}),
+      hrp:    locked.hrp || r.hrp || null,  // locked hrp prevents post-HR boosts
     };
   }
   return getSignals(r);
