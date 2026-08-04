@@ -4872,7 +4872,7 @@ async function fetchLiveHRs() {
         const inning = game.linescore?.currentInning || 0;
         const inningHalf = game.linescore?.inningHalf || '';
 
-        gameMap[pk] = { status, homeTeam, awayTeam, inning, inningHalf };
+        gameMap[String(pk)] = { status, homeTeam, awayTeam, inning, inningHalf };
 
         if (status === 'Preview') continue;
 
@@ -4888,7 +4888,7 @@ async function fetchLiveHRs() {
             if (hrs === 0) continue;
             const fullName = p.person?.fullName || '';
             // Check if already tracked
-            const exists = _liveHRs.find(h => h.name === fullName && h.gamePk === pk);
+            const exists = _liveHRs.find(h => h.name === fullName && String(h.gamePk) === String(pk));
             if (!exists) {
               // Match against today's predictions
               const predicted = allRows.find(r =>
@@ -5026,7 +5026,7 @@ function renderLive() {
   const predRows = todayPreds.length ? todayPreds.slice(0,50).map(p => {
     const hit = hitNames.has(p.name);
     const r = allRows.find(row => row.name === p.name) || p;
-    const game = _liveGames[p.gamePk] || null;
+    const game = _liveGames[String(p.gamePk)] || null;
     const gameStatus = game?.status || 'Preview';
     const inProgress = gameStatus === 'Live';
     const final = gameStatus === 'Final';
