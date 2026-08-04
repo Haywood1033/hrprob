@@ -4858,10 +4858,10 @@ async function fetchLiveHRs() {
   try {
     const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
     const today = new Date(etStr).toLocaleDateString('en-CA');
-    const url = `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}&hydrate=linescore,boxscore,game(content(highlights))`;
-    const r = await fetch(url);
-    const d = await r.json();
-    const dates = d.dates || [];
+    // Step 1 — schedule with linescore only (boxscore hydrate broken in schedule endpoint)
+    const schedR = await fetch(`https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${today}&hydrate=linescore`);
+    const schedD = await schedR.json();
+    const dates  = schedD.dates || [];
     if (!dates.length) return;
 
     const newHRs = [];
@@ -4869,62 +4869,42 @@ async function fetchLiveHRs() {
 
     for (const date of dates) {
       for (const game of (date.games || [])) {
-        const pk = game.gamePk;
-        const status = game.status?.abstractGameState || 'Preview';
+        const pk       = game.gamePk;
+        const status   = game.status?.abstractGameState || 'Preview';
         const homeTeam = game.teams?.home?.team?.name || '';
         const awayTeam = game.teams?.away?.team?.name || '';
-        const inning = game.linescore?.currentInning || 0;
+        const inning     = game.linescore?.currentInning || 0;
         const inningHalf = game.linescore?.inningHalf || '';
-
         gameMap[String(pk)] = { status, homeTeam, awayTeam, inning, inningHalf };
-
         if (status === 'Preview') continue;
 
-        // Extract HR plays from boxscore
-        const boxscore = game.boxscore || {};
-        for (const side of ['home','away']) {
-          const batters = boxscore.teams?.[side]?.batters || [];
-          const players = boxscore.teams?.[side]?.players || {};
-          for (const id of batters) {
-            const p = players[`ID${id}`];
-            if (!p) continue;
-            const hrs = p.stats?.batting?.homeRuns || 0;
-            if (hrs === 0) continue;
-            const fullName = p.person?.fullName || '';
-            // Check if already tracked
-            const exists = _liveHRs.find(h => h.name === fullName && String(h.gamePk) === String(pk));
-            if (!exists) {
-              // Match against today's predictions
-              const predicted = allRows.find(r =>
-                r.name === fullName ||
-                normName(r.name) === normName(fullName)
-              );
-              const {count, badge, signals} = predicted ? getSignalsLocked(predicted) : {count:0,badge:null,signals:[]};
-              newHRs.push({
-                name: fullName,
-                team: side === 'home' ? homeTeam : awayTeam,
-                gamePk: pk,
-                homeTeam, awayTeam,
-                hrs,
-                predicted: !!predicted,
-                hrp: predicted?.hrp || null,
-                count, badge, signals,
-                addedAt: Date.now(),
-              });
+        // Step 2 — fetch boxscore per game separately
+        try {
+          const bsR = await fetch(`https://statsapi.mlb.com/api/v1/game/${pk}/boxscore`);
+          const bs  = await bsR.json();
+          for (const side of ['home','away']) {
+            const players = bs.teams?.[side]?.players || {};
+            for (const p of Object.values(players)) {
+              const hrs = p.stats?.batting?.homeRuns || 0;
+              if (hrs === 0) continue;
+              const fullName = p.person?.fullName || '';
+              const exists = _liveHRs.find(h => h.name === fullName && String(h.gamePk) === String(pk));
+              if (!exists) {
+                const predicted = allRows.find(r => r.name === fullName || normName(r.name) === normName(fullName));
+                const {count, badge, signals} = predicted ? getSignalsLocked(predicted) : {count:0,badge:null,signals:[]};
+                newHRs.push({ name:fullName, team:side==='home'?homeTeam:awayTeam, gamePk:pk, homeTeam, awayTeam, hrs, predicted:!!predicted, hrp:predicted?.hrp||null, count, badge, signals, addedAt:Date.now() });
+              }
             }
           }
-        }
+        } catch(e2) { console.warn(`Boxscore ${pk}:`, e2.message); }
       }
     }
 
-    // Merge new HRs — add any not already tracked
     for (const hr of newHRs) {
-      const exists = _liveHRs.find(h => h.name === hr.name && h.gamePk === hr.gamePk);
-      if (!exists) _liveHRs.push(hr);
+      if (!_liveHRs.find(h => h.name===hr.name && String(h.gamePk)===String(hr.gamePk))) _liveHRs.push(hr);
     }
     _liveGames = gameMap;
     _liveLastPoll = new Date();
-
     if (curView === 'live') renderLive();
   } catch(e) {
     console.warn('Live HR fetch failed:', e.message);
