@@ -4955,6 +4955,19 @@ function renderLive() {
   const todayPreds = [...seenLive.values()].sort((a,b) => b.hrp - a.hrp);
 
   // Running totals
+  // Re-evaluate predicted flag at render time since allRows may have loaded after fetch
+  _liveHRs.forEach(hr => {
+    if (!hr.predicted) {
+      const match = allRows.find(r => r.name === hr.name || normName(r.name) === normName(hr.name));
+      if (match) {
+        hr.predicted = true;
+        hr.hrp = match.hrp;
+        const {count, badge, signals} = getSignalsLocked(match);
+        hr.count = count; hr.badge = badge; hr.signals = signals;
+      }
+    }
+  });
+
   const hitNames = new Set(_liveHRs.filter(h=>h.predicted).map(h=>h.name));
   const predHits   = todayPreds.filter(p => hitNames.has(p.name)).length;
   const signalPreds = todayPreds.filter(p => {
