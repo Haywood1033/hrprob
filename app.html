@@ -2854,16 +2854,20 @@ function lockSignals() {
 }
 
 function getSignalsLocked(r) {
-  // Only lock badge and count — prevents mid-game tier/ranking changes
-  // All individual signals stay fully live (streak, weather, pitcher, pull)
+  if (!r?.name) return { signals:[], count:0, badge:null, ci:{} };
   if (SIGNAL_LOCK[r.name]) {
     const locked = SIGNAL_LOCK[r.name];
-    const live   = getSignals(r);
+    // Only call getSignals if row is a real allRows entry (has hrp)
+    const isRealRow = r.hrp !== undefined;
+    const live = isRealRow ? getSignals(r) : null;
     return {
-      signals: live.signals, // fully live
-      count:   locked.count, // locked — prevents mid-game ranking changes
-      badge:   locked.badge, // locked — prevents mid-game tier jumps
-      ci:      live.ci,
+      signals: live ? live.signals : (locked.signals||[]).map((a,i)=>{
+        const icons=['🏟','💨','🎯','🔥','🔒','🏏','⚔️','💥'];
+        return {icon:icons[i]||'?',active:!!a,key:'sig'+i,label:'',dim:'opacity:0.2'};
+      }),
+      count:   locked.count,  // always locked
+      badge:   locked.badge,  // always locked
+      ci:      live ? live.ci : (locked.ci||{}),
     };
   }
   return getSignals(r);
