@@ -7527,8 +7527,18 @@ async function init(){
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
       // Second rebuild after short delay — ensures all BATTER data is fully populated
-      // This catches accented name players whose data may have been missed on first rebuild
       setTimeout(() => { rebuild(); renderAll(); }, 500);
+      // If lock already exists but was built without pitch data, rebuild it
+      setTimeout(() => {
+        if (Object.keys(SIGNAL_LOCK).length > 0 && Object.keys(PITCHER_ARSENAL).length > 0) {
+          const maxCount = Math.max(...Object.values(SIGNAL_LOCK).map(v=>v.count||0));
+          if (maxCount < 5) {
+            console.log('Lock rebuilt after Statcast — pitch data now available');
+            Object.keys(SIGNAL_LOCK).forEach(k=>delete SIGNAL_LOCK[k]);
+            lockSignals();
+          }
+        }
+      }, 2000);
       // lockSignals fires after splits+streaks load (not here) — ensures all signals accurate
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
@@ -7553,9 +7563,11 @@ async function init(){
         renderForecast(true); // repopulate F1_CACHE silently
         // Pre-fetch H2H for all matchups now that allRows is ready
         setTimeout(prefetchAllH2H, 500);
-        // Lock signals NOW — all data loaded (streaks, splits, park splits)
-        // This ensures park boost, pitcher target, and streak signals are all accurate
-        lockSignals();
+        // Delay lock to allow Statcast pitch/L7 data to finish loading
+        // Statcast runs in parallel — give it 3s to populate PITCHER_ARSENAL etc.
+        setTimeout(() => {
+          lockSignals();
+        }, 3000);
         // Only re-render the active view, not everything
         if(true) renderTodayDebounced();
         else if (curView === 'players') renderPlayers();
