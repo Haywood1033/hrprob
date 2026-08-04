@@ -4947,12 +4947,18 @@ function renderLive() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const todayET = new Date(etStr).toLocaleDateString('en-CA');
 
-  // Dedupe allRows by name, use locked hrp
+  // Only show meaningful predictions — 8%+ hrp OR 4+ signals
+  // Filters out the full slate noise, focuses on our targeted plays
   const seenLive = new Map();
   for (const r of allRows) {
     if (!seenLive.has(r.name) || r.hrp > seenLive.get(r.name).hrp) seenLive.set(r.name, r);
   }
-  const todayPreds = [...seenLive.values()].sort((a,b) => b.hrp - a.hrp);
+  const allPreds   = [...seenLive.values()].sort((a,b) => b.hrp - a.hrp);
+  const todayPreds = allPreds.filter(p => {
+    const {count} = getSignalsLocked(p);
+    const lockedHrp = getSignalsLocked(p).hrp || p.hrp;
+    return lockedHrp >= 8 || count >= 4;
+  });
 
   // Running totals
   // Re-evaluate predicted flag at render time since allRows may have loaded after fetch
@@ -4969,17 +4975,13 @@ function renderLive() {
   });
 
   const hitNames = new Set(_liveHRs.filter(h=>h.predicted).map(h=>h.name));
-  const predHits   = todayPreds.filter(p => hitNames.has(p.name)).length;
-  const signalPreds = todayPreds.filter(p => {
-    const r = allRows.find(r=>r.name===p.name);
-    return r && getSignalsLocked(r).count >= 4;
-  });
-  const signalHits = signalPreds.filter(p => hitNames.has(p.name)).length;
-  const elitePreds = todayPreds.filter(p => {
-    const r = allRows.find(r=>r.name===p.name);
-    return r && getSignalsLocked(r).count >= 6;
-  });
-  const eliteHits = elitePreds.filter(p => hitNames.has(p.name)).length;
+  const predHits    = todayPreds.filter(p => hitNames.has(p.name)).length;
+  const signalPreds = todayPreds.filter(p => getSignalsLocked(p).count >= 4);
+  const signalHits  = signalPreds.filter(p => hitNames.has(p.name)).length;
+  const elitePreds  = todayPreds.filter(p => getSignalsLocked(p).count >= 6);
+  const eliteHits   = elitePreds.filter(p => hitNames.has(p.name)).length;
+  // Non-predicted HRs — hit but below our 8% threshold
+  const nonPredHRs  = _liveHRs.filter(h => !h.predicted || !todayPreds.find(p=>p.name===h.name));
 
   // Last poll time
   const pollStr = _liveLastPoll
@@ -4987,45 +4989,55 @@ function renderLive() {
     : 'Not yet polled';
 
   // Scorecard header
-  const scorecard = `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px">
-    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:14px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">All predictions</div>
-      <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${predHits>0?'var(--green)':'var(--t2)'}">${predHits}/${todayPreds.length}</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">${todayPreds.length?((predHits/todayPreds.length)*100).toFixed(1)+'% today':'No predictions'}</div>
-    </div>
-    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:14px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Signal plays</div>
-      <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${signalHits>0?'var(--teal)':'var(--t2)'}">${signalHits}/${signalPreds.length}</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">4+ signals</div>
-    </div>
-    <div style="background:var(--bg2);border:0.5px solid rgba(245,158,11,.2);border-radius:10px;padding:14px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Elite plays</div>
-      <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${eliteHits>0?'var(--amber)':'var(--t2)'}">${eliteHits}/${elitePreds.length}</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">6+ signals</div>
+  const scorecard = `<div style="margin-bottom:10px">
+    <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:8px">Tracking ${todayPreds.length} targeted plays (8%+ probability or 4+ signals) · ${allPreds.length - todayPreds.length} low-probability plays excluded</div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+      <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Targeted plays</div>
+        <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${predHits>0?'var(--green)':'var(--t2)'}">${predHits}/${todayPreds.length}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">${todayPreds.length?((predHits/todayPreds.length)*100).toFixed(1)+'% hit rate':''}</div>
+      </div>
+      <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Signal plays</div>
+        <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${signalHits>0?'var(--teal)':'var(--t2)'}">${signalHits}/${signalPreds.length}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">4+ signals</div>
+      </div>
+      <div style="background:var(--bg2);border:0.5px solid rgba(245,158,11,.2);border-radius:10px;padding:14px;text-align:center">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Elite plays</div>
+        <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${eliteHits>0?'var(--amber)':'var(--t2)'}">${eliteHits}/${elitePreds.length}</div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">6+ signals</div>
+      </div>
     </div>
   </div>`;
 
-  // HR Feed
+  // HR Feed — three tiers
   const sortedHRs = [..._liveHRs].sort((a,b) => b.addedAt - a.addedAt);
   const feedItems = sortedHRs.length ? sortedHRs.map(hr => {
-    const bg = hr.predicted ? 'rgba(74,222,128,0.05)' : 'var(--bg2)';
-    const border = hr.predicted ? 'rgba(74,222,128,0.25)' : 'rgba(255,255,255,0.11)';
+    const inTargeted = todayPreds.find(p=>p.name===hr.name);
+    const isSignal   = inTargeted && getSignalsLocked(inTargeted).count >= 4;
+    const bg     = isSignal ? 'rgba(74,222,128,0.05)' : inTargeted ? 'rgba(96,165,250,0.04)' : 'var(--bg2)';
+    const border = isSignal ? 'rgba(74,222,128,0.25)' : inTargeted ? 'rgba(96,165,250,0.2)' : 'rgba(255,255,255,0.08)';
+    const badge  = isSignal
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:rgba(74,222,128,0.15);color:var(--green);border:0.5px solid rgba(74,222,128,0.3)">✓ Signal Play</span>`
+      : inTargeted
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:rgba(96,165,250,0.1);color:var(--blue);border:0.5px solid rgba(96,165,250,0.2)">✓ Targeted</span>`
+      : `<span style="font-size:8px;font-family:var(--mono);color:var(--t3)">Low probability play</span>`;
     return `<div style="background:${bg};border:0.5px solid ${border};border-radius:10px;padding:14px 16px;margin-bottom:8px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${hr.predicted?'10px':'0'}">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${inTargeted?'10px':'0'}">
         <div>
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
             <span style="font-size:16px">🚀</span>
             <span style="font-size:14px;font-weight:500;color:var(--t1)">${hr.name}</span>
-            ${hr.predicted ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:rgba(74,222,128,0.15);color:var(--green);border:0.5px solid rgba(74,222,128,0.3)">✓ Predicted</span>` : '<span style="font-size:8px;font-family:var(--mono);color:var(--t3)">Not in predictions</span>'}
+            ${badge}
           </div>
           <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${hr.awayTeam} @ ${hr.homeTeam} · ${hr.hrs} HR${hr.hrs>1?'s':''} today</div>
         </div>
-        ${hr.predicted && hr.hrp ? `<div style="text-align:right"><div style="font-size:18px;font-weight:500;font-family:var(--mono);color:var(--green)">${hr.hrp.toFixed(1)}%</div><div style="font-size:9px;font-family:var(--mono);color:var(--t3)">predicted</div></div>` : ''}
+        ${inTargeted && hr.hrp ? `<div style="text-align:right"><div style="font-size:18px;font-weight:500;font-family:var(--mono);color:${isSignal?'var(--green)':'var(--blue)'}">${hr.hrp.toFixed(1)}%</div><div style="font-size:9px;font-family:var(--mono);color:var(--t3)">predicted</div></div>` : ''}
       </div>
-      ${hr.predicted && hr.count > 0 ? `<div style="display:flex;align-items:center;gap:5px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.06)">
+      ${isSignal && hr.signals?.length ? `<div style="display:flex;align-items:center;gap:5px;padding-top:8px;border-top:0.5px solid rgba(255,255,255,0.06)">
         ${hr.signals.map(s => `<span style="font-size:13px;opacity:${s.active?1:0.2}">${s.icon}</span>`).join('')}
         <span style="font-size:9px;font-family:var(--mono);color:var(--t2);margin-left:4px">${hr.count} signals</span>
-        ${hr.badge ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${hr.badge.bg};color:${hr.badge.color};border:0.5px solid ${hr.badge.bd};margin-left:auto">${hr.badge.label.replace(' Play','')}</span>` : ''}
+        ${hr.badge ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${hr.badge.bg};color:${hr.badge.color};margin-left:auto">${hr.badge.label.replace(' Play','')}</span>` : ''}
       </div>` : ''}
     </div>`;
   }).join('') : `<div style="text-align:center;padding:32px;color:var(--t3);font-family:var(--mono);font-size:12px">No home runs recorded yet today</div>`;
