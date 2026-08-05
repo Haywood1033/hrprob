@@ -2838,6 +2838,12 @@ function lockSignals() {
       return;
     }
     console.log('Signal lock: post-1pm but no lock exists, building once from current data');
+    // Double-check DB restore hasn't happened yet — wait briefly if history not loaded
+    if (!historyLoaded) {
+      console.log('Signal lock: waiting for history to load before building...');
+      setTimeout(lockSignals, 2000);
+      return;
+    }
   }
 
   // Build fresh lock from current allRows (pre-game state)
