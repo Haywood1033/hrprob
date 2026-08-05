@@ -1731,6 +1731,7 @@ async function saveToHistory() {
   }
 
   // Save all unique players with confirmed lineup spots (or top 150 if no confirmed)
+  const seen = new Map();
   for (const r of allRows) {
     if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
   }
