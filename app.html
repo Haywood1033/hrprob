@@ -1723,8 +1723,8 @@ async function saveToHistory() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
-  // Don't overwrite if today's predictions already saved — locks pre-game probabilities
-  const alreadySaved = historyRecords.find(r => r.date === today);
+  // Don't overwrite if today's predictions already saved with actual data
+  const alreadySaved = historyRecords.find(r => r.date === today && r.predictions?.length > 0);
   if (alreadySaved) {
     console.log('saveToHistory: predictions already locked for', today, '— skipping');
     return;
