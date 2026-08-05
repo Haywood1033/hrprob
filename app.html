@@ -94,8 +94,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge,#vlive{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on,#vlive.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge,#vlive,#vparks{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on,#vlive.on,#vparks.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -480,6 +480,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('edge',this)">⚔️ Edge</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
+  <div class="tab" onclick="setView('parks',this)">🏟 Parks</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
 <div class="fbar" id="fbar">
@@ -512,6 +513,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vpulse" class="view"><div id="pulse-grid"></div></div>
 <div id="vderby" class="view"><div id="derby-grid"></div></div>
 <div id="vlive" class="view"><div id="live-grid" style="padding:14px 20px"></div></div>
+<div id="vparks" class="view"><div id="parks-grid" style="padding:14px 20px"></div></div>
 <div id="vedge" class="view"><div id="edge-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
@@ -4942,6 +4944,150 @@ function startLivePolling() {
   }, 3 * 60 * 1000); // every 3 minutes
 }
 
+// ── PARKS & WEATHER TAB ──────────────────────────────────────
+function calcHRWeather(team, wx, park) {
+  if (!wx || wx.dome) return null;
+  const tempAdj  = ((wx.t || 72) - 72) * 0.18;
+  const humAdj   = wx.hum ? ((wx.hum - 50) * 0.008) : 0;
+  const presAdj  = wx.pres ? ((1013 - wx.pres) * 0.05) : 0;
+  const orient   = park?.orient;
+  let windCarry  = 0;
+  if (orient !== undefined && wx.w > 0) {
+    const diff = ((wx.d - orient) % 360 + 360) % 360;
+    windCarry = Math.cos((diff * Math.PI) / 180) * wx.w * 0.45;
+  }
+  const parkBoost = park?.f ? (park.f - 1.0) * 100 : 0;
+  const score = parkBoost + tempAdj + humAdj + presAdj + windCarry;
+  return {
+    score:     +score.toFixed(1),
+    parkBoost: +parkBoost.toFixed(1),
+    tempAdj:   +tempAdj.toFixed(1),
+    presAdj:   +presAdj.toFixed(1),
+    windCarry: +windCarry.toFixed(1),
+    humAdj:    +humAdj.toFixed(1),
+  };
+}
+
+function renderParks() {
+  const el = document.getElementById('parks-grid');
+  if (!el) return;
+  if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
+
+  const parkData = games.map(g => {
+    const wx   = WX[g.home] || {};
+    const park = getPark(g.home) || {};
+    const hrw  = calcHRWeather(g.home, wx, park);
+    const gamePlayers = allRows.filter(r => String(r.gamePk) === String(g.pk));
+    const top3 = gamePlayers
+      .sort((a,b) => (getSignalsLocked(b).hrp||b.hrp) - (getSignalsLocked(a).hrp||a.hrp))
+      .slice(0, 3);
+    return { g, wx, park, hrw, top3 };
+  })
+  .filter(d => !d.wx.dome)
+  .sort((a,b) => (b.hrw?.score||0) - (a.hrw?.score||0));
+
+  const scoreColor = s => s >= 15?'var(--green)':s >= 5?'var(--teal)':s >= 0?'var(--t2)':s >= -5?'var(--amber)':'var(--red)';
+
+  const windBar = (carry, speed) => {
+    const isOut = carry > 1.5, isIn = carry < -1.5;
+    const color = isOut?'var(--green)':isIn?'var(--red)':'rgba(255,255,255,0.25)';
+    const tag   = isOut?'WINDS OUT':isIn?'WINDS IN':'CROSSWIND';
+    const pct   = Math.min(48, Math.abs(carry)/8*48);
+    return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0">
+      <div style="background:var(--bg3);border-radius:4px;height:6px;flex:1;overflow:hidden;position:relative">
+        <div style="position:absolute;left:50%;width:1px;height:6px;background:rgba(255,255,255,0.2)"></div>
+        ${isOut?`<div style="position:absolute;left:50%;width:${pct}%;height:6px;background:${color};border-radius:0 2px 2px 0"></div>`:''}
+        ${isIn ?`<div style="position:absolute;right:50%;width:${pct}%;height:6px;background:${color};border-radius:2px 0 0 2px"></div>`:''}
+      </div>
+      <span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${isOut?'rgba(74,222,128,0.12)':isIn?'rgba(248,113,113,0.12)':'rgba(255,255,255,0.06)'};color:${color};white-space:nowrap">${tag}</span>
+      <span style="font-size:10px;font-family:var(--mono);color:var(--t3);white-space:nowrap">${speed} mph · ${carry>0?'+':''}${carry.toFixed(1)}% carry</span>
+    </div>`;
+  };
+
+  const cards = parkData.map(({g, wx, park, hrw, top3}) => {
+    const score = hrw?.score || 0;
+    const borderColor = score>=15?'rgba(74,222,128,0.3)':score>=5?'rgba(74,222,128,0.15)':score<=-5?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.10)';
+
+    const top3HTML = top3.length ? top3.map((r,i) => {
+      const {badge, count} = getSignalsLocked(r);
+      const lockedHrp = getSignalsLocked(r).hrp || r.hrp || 0;
+      const hrpColor = lockedHrp>=20?'var(--green)':lockedHrp>=15?'var(--teal)':lockedHrp>=10?'var(--amber)':'var(--t2)';
+      const streak = STREAK[r.name];
+      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;${i<top3.length-1?'border-bottom:0.5px solid rgba(255,255,255,0.06)':''}">
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);width:14px">${i+1}</div>
+        <div style="flex:1">
+          <div style="display:flex;align-items:center;gap:5px">
+            <span style="font-size:12px;font-weight:500;color:var(--t1)">${r.name}</span>
+            <span>${streak?.flame||''}</span>
+            ${badge?`<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
+          </div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · Bat ${r.order} · ${count} signals</div>
+        </div>
+        <div style="font-size:14px;font-weight:500;font-family:var(--mono);color:${hrpColor}">${lockedHrp.toFixed(1)}%</div>
+      </div>`;
+    }).join('') : `<div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:8px 0">Lineups loading…</div>`;
+
+    return `<div style="background:var(--bg2);border:0.5px solid ${borderColor};border-radius:12px;padding:16px;margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:14px;font-weight:500;color:var(--t1);margin-bottom:2px">${park.name||g.home}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.away} @ ${g.home} · ${g.time}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${park.city||''} · ${park.elev?park.elev.toLocaleString()+' ft':''} · ${park.roof==='open'?'Open air':park.roof==='retractable'?'Retractable':'Dome'}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">HR WEATHER</div>
+          <div style="font-size:30px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1">${score>0?'+':''}${score}%</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">${wx.s||''}</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px">
+        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">TEMP</div>
+          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.t||'—'}°</div>
+          <div style="font-size:8px;font-family:var(--mono);color:${(hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':'var(--t3)'}">${hrw?.tempAdj>0?'+':''}${hrw?.tempAdj||0}%</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">HUMIDITY</div>
+          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.hum!=null?wx.hum+'%':'—'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${hrw?.humAdj>0?'+':''}${hrw?.humAdj||0}%</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">PRESSURE</div>
+          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.pres||'—'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:${(hrw?.presAdj||0)>3?'var(--green)':'var(--t3)'}">hPa · ${hrw?.presAdj>0?'+':''}${hrw?.presAdj||0}%</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">PARK</div>
+          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:${(park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'var(--t2)'}">${park.f?(hrw?.parkBoost>0?'+':'')+hrw?.parkBoost+'%':'—'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">factor ${park.f||1.00}</div>
+        </div>
+      </div>
+
+      ${windBar(hrw?.windCarry||0, wx.w||0)}
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px;font-size:9px;font-family:var(--mono);color:var(--t3)">
+        <span>Park <strong style="color:var(--t2)">${hrw?.parkBoost>=0?'+':''}${hrw?.parkBoost||0}%</strong></span>
+        <span>Temp <strong style="color:var(--t2)">${hrw?.tempAdj>=0?'+':''}${hrw?.tempAdj||0}%</strong></span>
+        <span>Wind <strong style="color:var(--t2)">${hrw?.windCarry>=0?'+':''}${hrw?.windCarry||0}%</strong></span>
+        <span>Pressure <strong style="color:var(--t2)">${hrw?.presAdj>=0?'+':''}${hrw?.presAdj||0}%</strong></span>
+      </div>
+
+      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:10px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">🎯 Top Targets Tonight</div>
+        ${top3HTML}
+      </div>
+    </div>`;
+  }).join('');
+
+  const domeCount = games.filter(g=>WX[g.home]?.dome).length;
+  el.innerHTML = `<div style="padding:4px 0">
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:14px">HR Weather = park factor + temp + barometric pressure + wind carry · sorted best conditions first${domeCount?` · ${domeCount} dome game${domeCount>1?'s':''} excluded`:''}
+    </div>
+    ${cards||'<div class="empty"><p>Weather data loading…</p></div>'}
+  </div>`;
+}
+
 function renderLive() {
   const el = document.getElementById('live-grid');
   if (!el) return;
@@ -7151,6 +7297,7 @@ function renderAll(){
   else if(curView==='derby')   renderDerby();
   else if(curView==='edge')    renderEdge();
   else if(curView==='live')    renderLive();
+  else if(curView==='parks')   renderParks();
   else renderTargets();
 }
 
@@ -7158,7 +7305,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby','live'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby','live','parks'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
