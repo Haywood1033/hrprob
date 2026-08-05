@@ -5956,7 +5956,7 @@ function renderToday() {
 
   const bestHTML = !best ? '' : (()=>{
     const {signals,badge,ci}=getSignalsLocked(best);
-    const lockedHrp = getSignalsLocked(best).hrp || lockedHrp;
+    const lockedHrp = getSignalsLocked(best).hrp || best.hrp;
     const streak=STREAK[best.name];const ps=PARK_SPLITS[best.name];const pit=best.pit||{};
     const park=getPark(best.game?.home||best.team)||{};
     const hc=lockedHrp>=15?'var(--green)':lockedHrp>=10?'var(--teal)':'var(--amber)';
