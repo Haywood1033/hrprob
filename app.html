@@ -1222,7 +1222,7 @@ async function loadStatcast(){
   setStatus('live',`${games.length} games · Statcast live (${nb} batters)`);
   _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
   // lockSignals fires after streaks load (not here) to ensure streak signal is correct
-  rebuildDebounced();
+  rebuild(); renderAll();
   // Load hot streak data for top 40 players
   setTimeout(loadStreakData, 1500); // load streaks after rows are built
 }
@@ -2917,12 +2917,6 @@ function getBatSide(playerName, lineupBatSide, bsFromStatcast) {
   if (KNOWN_BAT_SIDE[playerName]) return KNOWN_BAT_SIDE[playerName];
   return lineupBatSide || 'R';
 }
-let _rebuildTimer = null;
-function rebuildDebounced() {
-  clearTimeout(_rebuildTimer);
-  _rebuildTimer = setTimeout(() => { rebuildDebounced(); }, 600);
-}
-
 function rebuild(){
   allRows=[];
   // Invalidate F1_CACHE when game data changes (lineup confirmations, pitcher updates)
@@ -3129,7 +3123,7 @@ async function prefetchAllH2H() {
   
   console.log(`H2H prefetch complete: ${fetched} matchups cached`);
   // Rebuild rows with H2H now available
-  rebuildDebounced();
+  rebuild(); renderAll();
   if(true) renderTodayDebounced();
   else if (curView === 'players') renderPlayers();
 }
@@ -3289,7 +3283,7 @@ async function loadStreakData() {
       console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       _dataReady.streaks = true;
       if (_dataReady.splits) { const _b=document.getElementById('tab-loading-bar'); if(_b) _b.style.display='none'; }
-      rebuildDebounced();
+      rebuild(); renderAll();
     }
   } catch(e) {
     console.warn('Streak error:', e.message);
@@ -3449,7 +3443,7 @@ async function loadSplitsData() {
       if (_dataReady.streaks) { const _b=document.getElementById('tab-loading-bar'); if(_b) _b.style.display='none'; }
       const _bar2=document.getElementById('tab-loading-bar');if(_bar2&&_dataReady.streaks)_bar2.style.display='none';
     }
-    rebuildDebounced();
+    rebuild(); renderAll();
     // Correct pitcher hands in all games now that PITCHER_SPLITS is loaded
     for (const g of games) {
       const apSplits = PITCHER_SPLITS[g.ap?.name] || PITCHER_SPLITS[normName(g.ap?.name)];
@@ -7243,7 +7237,7 @@ function setStatus(s,msg){document.getElementById('sdot').className='dot '+(s===
 async function doRefresh(){
   setStatus('loading','Refreshing…');
   await Promise.allSettled([loadLineups(),loadWeather()]);
-  rebuildDebounced();
+  rebuild(); renderAll();
   const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
   setStatus(conf>0?'live':'loading',`${games.length} games · ${conf} lineups · ${statReady?'Statcast live':'Statcast loading'}`);
   _loadState.slate = true; updateLoadingStep('slate','done'); updateLoadingStep('weather','done'); checkAllReady(); dismissOverlay();
@@ -7444,9 +7438,9 @@ async function init(){
 
   // ── Browser fallbacks (only if API slate didn't load) ──────
   if (!apiSlateLoaded) {
-    loadWeather().then(()=>{rebuildDebounced();}).catch(()=>{});
+    loadWeather().then(()=>{rebuild(); renderAll();}).catch(()=>{});
     loadLineups().then(n=>{
-      if(n>0){rebuildDebounced();}
+      if(n>0){rebuild(); renderAll();}
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('loading',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast loading…`);
     }).catch(()=>{});
@@ -7460,7 +7454,7 @@ async function init(){
       console.warn('Statcast timed out');
       setStatus('live',`${games.length} games · ${statReady?'Statcast live':'ERA model only'}`);
       _loadState.statcast = true; dismissOverlay();
-      rebuildDebounced();
+      rebuild(); renderAll();
     }
   },35000);
 
@@ -7549,12 +7543,12 @@ async function init(){
   };
 
   statcastSource()
-    .then(()=>{ clearTimeout(statTimer); statReady=true; rebuildDebounced();
+    .then(()=>{ clearTimeout(statTimer); statReady=true; rebuild(); renderAll();
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
       setStatus('live',`${games.length} games · ${conf>0?conf+' lineups · ':''}Statcast live`);
       _loadState.statcast = true; updateLoadingStep('statcast','done'); checkAllReady(); dismissOverlay();
       // Second rebuild after short delay — ensures all BATTER data is fully populated
-      setTimeout(() => { rebuildDebounced(); }, 500);
+      setTimeout(() => { rebuild(); renderAll(); }, 500);
       // lockSignals fires after splits+streaks load (not here) — ensures all signals accurate
       // Fire streaks and splits in parallel — both take 30-60s, no need to wait
       setTimeout(saveToHistory, 8000);
@@ -7563,7 +7557,7 @@ async function init(){
         loadSplitsData(),
         loadBullpenData(),
       ]).then(() => {
-        rebuildDebounced();
+        rebuild(); renderAll();
         // Silent re-render — update current view without full flash
         // Correct pitcher hands after splits load
         for (const g of games) {
@@ -7600,7 +7594,7 @@ async function init(){
         else if (curView === 'targets') renderTargets();
       });
     })
-    .catch(e=>{ clearTimeout(statTimer); console.error('Statcast error:',e); if(!statReady){statReady=true;rebuildDebounced();} });
+    .catch(e=>{ clearTimeout(statTimer); console.error('Statcast error:',e); if(!statReady){statReady=true;rebuild(); renderAll();} });
 
   // ── Auto-refresh every 5 min ────────────────────────────────
   setInterval(async ()=>{
@@ -7615,10 +7609,10 @@ async function init(){
             const lu = players.map((p,i)=>({name:p.name||p.fullName,battingOrder:p.battingOrder||(i+1),position:p.position||'?',batSide:p.batSide||'R',source:'live'}));
             if (g.away===team) g.awayLineup=lu; else g.homeLineup=lu;
           }
-          rebuildDebounced();
+          rebuild(); renderAll();
         }
-      } else { loadLineups().then(n=>{if(n>0){rebuildDebounced();}}); }
-    } catch(e) { loadLineups().then(n=>{if(n>0){rebuildDebounced();}}); }
+      } else { loadLineups().then(n=>{if(n>0){rebuild(); renderAll();}}); }
+    } catch(e) { loadLineups().then(n=>{if(n>0){rebuild(); renderAll();}}); }
   }, 5*60*1000);
 }
 
