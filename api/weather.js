@@ -95,7 +95,7 @@ async function fetchAllWeather(gameDate, gameTeams = [], venueCoords = {}, gameT
   // Use timezone=auto so each city gets correct local time
   const lats = outdoor.map(([, info]) => info.lat).join(',');
   const lons = outdoor.map(([, info]) => info.lon).join(',');
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=2`;
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lats}&longitude=${lons}&hourly=temperature_2m,wind_speed_10m,wind_direction_10m,weather_code,surface_pressure,relative_humidity_2m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto&forecast_days=2`;
 
   try {
     const r = await fetch(url, { cache: 'no-store' });
@@ -149,7 +149,9 @@ async function fetchAllWeather(gameDate, gameTeams = [], venueCoords = {}, gameT
       const w    = Math.round(hourly.wind_speed_10m[hi]);
       const wdir = Math.round(hourly.wind_direction_10m[hi]);
       const code = hourly.weather_code[hi];
-      results[team] = { t, w, d: wdir, c: CARDS[Math.round(wdir/22.5)%16], l: windLabel(wdir, team), s: weatherCode(code), dome: false, src: 'live', hour: hi };
+      const pres = hourly.surface_pressure ? Math.round(hourly.surface_pressure[hi]) : null;
+      const hum  = hourly.relative_humidity_2m ? Math.round(hourly.relative_humidity_2m[hi]) : null;
+      results[team] = { t, w, d: wdir, c: CARDS[Math.round(wdir/22.5)%16], l: windLabel(wdir, team), s: weatherCode(code), dome: false, src: 'live', hour: hi, pres, hum };
     });
 
     console.log(`Weather batch: ${responses.length} locations fetched, ${Object.keys(results).filter(k=>!results[k].dome).length} outdoor parks`);
