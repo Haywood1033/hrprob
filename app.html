@@ -5852,7 +5852,8 @@ function renderToday() {
 
   // Best play composite score
   const scorePlayer = (r) => {
-    const {signals, count, ci} = getSignalsLocked(r);
+    const {signals, count, ci, hrp: lockedHrp} = getSignalsLocked(r);
+    const hrp = lockedHrp || r.hrp; // use locked hrp, fall back to live
     // Probability is the primary factor, signals are multipliers not additive dominators
     // A 7% player with 4 signals should NOT beat a 20% player with 2 signals
     const streakSignalLocked = signals[3]?.active ?? false;
@@ -5860,11 +5861,11 @@ function renderToday() {
     const streakBonus = streakSignalLocked ? (streakFlame === '🔥🔥' ? 3 : 1.5) : 0;
     const ps = PARK_SPLITS[r.name];
     // Probability weighted heavily (×3), signals as modest boost
-    return r.hrp * 3
-      + count * 5          // was 20 — signals add edge not override probability
-      + streakBonus        // was 12/6
-      + (ps?.flag==='boost' ? 2 : 0)  // was 8
-      + (ci.tier==='high' ? 2 : ci.tier==='mid' ? 1 : 0); // was 6/3
+    return hrp * 3
+      + count * 5
+      + streakBonus
+      + (ps?.flag==='boost' ? 2 : 0)
+      + (ci.tier==='high' ? 2 : ci.tier==='mid' ? 1 : 0);
   };
   const best = [...players].sort((a,b)=>scorePlayer(b)-scorePlayer(a))[0];
 
@@ -5955,16 +5956,17 @@ function renderToday() {
 
   const bestHTML = !best ? '' : (()=>{
     const {signals,badge,ci}=getSignalsLocked(best);
+    const lockedHrp = getSignalsLocked(best).hrp || lockedHrp;
     const streak=STREAK[best.name];const ps=PARK_SPLITS[best.name];const pit=best.pit||{};
     const park=getPark(best.game?.home||best.team)||{};
-    const hc=best.hrp>=15?'var(--green)':best.hrp>=10?'var(--teal)':'var(--amber)';
+    const hc=lockedHrp>=15?'var(--green)':lockedHrp>=10?'var(--teal)':'var(--amber)';
     const reasons=[];
     if(signals.find(s=>s.key==='streak')?.active)reasons.push(streak?.flame==='\uD83D\uDD25\uD83D\uDD25'?'Scorching hot (\uD83D\uDD25\uD83D\uDD25)':'Hot streak (\uD83D\uDD25)');
     if(signals.find(s=>s.key==='pitcher')?.active)reasons.push('Weak pitcher — xERA '+(pit.xera||pit.era||4.5).toFixed(2));
     if(signals.find(s=>s.key==='park')?.active)reasons.push(ps?.flag==='boost'?'Career park boost at '+park.name:'Hitter park (PF '+(park.f||1).toFixed(2)+')');
     if(signals.find(s=>s.key==='weather')?.active)reasons.push('Wind blowing out');
     if(signals.find(s=>s.key==='conf')?.active)reasons.push(ci.label+' confidence sample');
-    return '<div class="today-section" style="margin-bottom:12px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-color:'+(badge?.bd||'var(--bd)')+'"><div class="today-section-hdr" style="border-bottom-color:'+(badge?.bd||'var(--bd)')+'"><span>\u26A1 Best Play Today</span><span style="color:var(--t3);font-size:9px">Composite signal + probability score</span></div><div class="today-section-body"><div style="display:flex;gap:16px;align-items:flex-start" onclick="goToPlayer(\''+best.name.replace(/'/g,"\\'")+'\')" style="cursor:pointer"><div style="flex:1"><div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:2px">'+best.name+'</div><div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">'+best.team+' vs '+best.pitName+' · '+best.time+'</div><div style="margin-bottom:10px">'+signalPanel(best,false)+'</div><div style="display:flex;flex-direction:column;gap:4px">'+reasons.map(r=>'<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">· '+r+'</div>').join('')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:36px;font-weight:700;font-family:var(--mono);color:'+hc+';line-height:1">'+best.hrp.toFixed(1)+'%</div><div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>'+(badge?'<div style="margin-top:8px"><span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:4px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')+'<div style="margin-top:8px">'+ciBadge(best.hrp,getBatter(best.name)?.pa||0)+'</div></div></div></div></div>';
+    return '<div class="today-section" style="margin-bottom:12px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-color:'+(badge?.bd||'var(--bd)')+'"><div class="today-section-hdr" style="border-bottom-color:'+(badge?.bd||'var(--bd)')+'"><span>\u26A1 Best Play Today</span><span style="color:var(--t3);font-size:9px">Composite signal + probability score</span></div><div class="today-section-body"><div style="display:flex;gap:16px;align-items:flex-start" onclick="goToPlayer(\''+best.name.replace(/'/g,"\\'")+'\')" style="cursor:pointer"><div style="flex:1"><div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:2px">'+best.name+'</div><div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">'+best.team+' vs '+best.pitName+' · '+best.time+'</div><div style="margin-bottom:10px">'+signalPanel(best,false)+'</div><div style="display:flex;flex-direction:column;gap:4px">'+reasons.map(r=>'<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">· '+r+'</div>').join('')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:36px;font-weight:700;font-family:var(--mono);color:'+hc+';line-height:1">'+lockedHrp.toFixed(1)+'%</div><div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>'+(badge?'<div style="margin-top:8px"><span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:4px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')+'<div style="margin-top:8px">'+ciBadge(lockedHrp,getBatter(best.name)?.pa||0)+'</div></div></div></div></div>';
   })();
 
   const fringeHTML = fringe.length ? '<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Hidden Edge</span><span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;max-width:100%">'+fringe.map(r=>{
