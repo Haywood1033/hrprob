@@ -77,9 +77,14 @@ module.exports = async function handler(req, res) {
         if (!date || !predictions?.length)
           return res.status(400).json({ error: 'Missing date or predictions' });
 
-        const existing = await query(`SELECT results_added, saved_at FROM daily_predictions WHERE date=$1`, [date]);
+        const existing = await query(`SELECT results_added, saved_at, predictions FROM daily_predictions WHERE date=$1`, [date]);
         if (existing.rows[0]) {
-          return res.status(200).json({ ok: true, date, skipped: true, reason: 'Already saved for ' + date });
+          // Only skip if predictions were actually saved (not just signal lock)
+          const existingPreds = existing.rows[0].predictions;
+          const hasPreds = existingPreds && Array.isArray(existingPreds) && existingPreds.length > 0;
+          if (hasPreds) {
+            return res.status(200).json({ ok: true, date, skipped: true, reason: 'Already saved for ' + date });
+          }
         }
 
         const preds    = JSON.stringify(predictions.map(p => ({ ...p, hit: null })));
@@ -89,7 +94,12 @@ module.exports = async function handler(req, res) {
         await query(`
           INSERT INTO daily_predictions (date, predictions, signal_lock, game_leans)
           VALUES ($1, $2::jsonb, $3::jsonb, $4::jsonb)
-          ON CONFLICT (date) DO NOTHING
+          ON CONFLICT (date) DO UPDATE SET
+            predictions = EXCLUDED.predictions,
+            game_leans  = COALESCE(EXCLUDED.game_leans, daily_predictions.game_leans),
+            saved_at    = NOW()
+          WHERE daily_predictions.predictions IS NULL 
+             OR jsonb_array_length(daily_predictions.predictions) = 0
         `, [date, preds, lockData, leansData]);
 
         return res.status(200).json({ ok: true, date, count: predictions.length });
