@@ -1122,11 +1122,16 @@ async function loadWeather(){
   await Promise.allSettled(outdoor.map(async t=>{
     const p=getPark(t);
     try{
-      const r=await safeFetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,windspeed_10m,winddirection_10m&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FNew_York&forecast_days=1`,8000);
+      const r=await safeFetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,windspeed_10m,winddirection_10m,surface_pressure,relative_humidity_2m,weather_code&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FNew_York&forecast_days=1`,8000);
       if(!r.ok)return;
       const d=await r.json();
       const i=Math.floor((d.hourly?.time?.length||24)/2);
-      WX[t]={t:d.hourly.temperature_2m[i],ws:d.hourly.windspeed_10m[i],wd:d.hourly.winddirection_10m[i]};
+      const pres = d.hourly.surface_pressure ? Math.round(d.hourly.surface_pressure[i]) : null;
+      const hum  = d.hourly.relative_humidity_2m ? Math.round(d.hourly.relative_humidity_2m[i]) : null;
+      const CARDS=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+      const wd = d.hourly.winddirection_10m[i];
+      const compass = CARDS[Math.round(wd/22.5)%16];
+      WX[t]={t:Math.round(d.hourly.temperature_2m[i]),ws:Math.round(d.hourly.windspeed_10m[i]),wd,dome:false,pres,hum,c:compass};
     }catch(e){}
   }));
 }
@@ -4952,9 +4957,11 @@ function calcHRWeather(team, wx, park) {
   const presAdj  = wx.pres ? ((1013 - wx.pres) * 0.05) : 0;
   const orient   = park?.orient;
   let windCarry  = 0;
-  if (orient !== undefined && wx.w > 0) {
-    const diff = ((wx.d - orient) % 360 + 360) % 360;
-    windCarry = Math.cos((diff * Math.PI) / 180) * wx.w * 0.45;
+  const windSpeed = wx.ws || wx.w || 0;
+  const windDir   = wx.wd || wx.d || 180;
+  if (orient !== undefined && windSpeed > 0) {
+    const diff = ((windDir - orient) % 360 + 360) % 360;
+    windCarry = Math.cos((diff * Math.PI) / 180) * windSpeed * 0.45;
   }
   const parkBoost = park?.f ? (park.f - 1.0) * 100 : 0;
   const score = parkBoost + tempAdj + humAdj + presAdj + windCarry;
@@ -5048,7 +5055,7 @@ function renderParks() {
         <div style="text-align:right;flex-shrink:0;margin-left:12px">
           <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px;letter-spacing:.06em">HR WEATHER</div>
           <div style="font-size:32px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1">${score>0?'+':''}${score}%</div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">${wx.s||''}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:3px">${wx.sky||wx.s||wx.l||''}</div>
         </div>
       </div>
 
@@ -5059,7 +5066,7 @@ function renderParks() {
         ${statCell('Park', park.f?(parkBoost>=0?'+':'')+parkBoost+'%':'--', park.f?park.f+'x':'--', (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'var(--t3)')}
       </div>
 
-      ${windBar(windCarry, wx.w||0, wx.c||'')}
+      ${windBar(windCarry, wx.ws||wx.w||0, wx.c||'')}
 
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
         ${[['Park',parkBoost],['Temp',tempAdj],['Wind',windCarry],['Pres',presAdj]].map(([l,v])=>`<span style="font-size:9px;font-family:var(--mono);padding:3px 8px;border-radius:20px;background:rgba(255,255,255,0.05);color:${v>0.5?'var(--green)':v<-0.5?'var(--red)':'var(--t3)'}">${l} ${v>=0?'+':''} ${v.toFixed(1)}%</span>`).join('')}
