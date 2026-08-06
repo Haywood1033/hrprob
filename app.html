@@ -480,7 +480,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('edge',this)">⚔️ Edge</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
-  <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather().then(()=>renderParks())">🏟 Parks</div>
+  <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>renderParks())">🏟 Parks</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
 <div class="fbar" id="fbar">
@@ -1114,10 +1114,12 @@ function safeFetch(url, ms=12000){
 }
 
 // ── WEATHER ──
-async function loadWeather(){
-  setStatus('loading','Loading weather…');
-  updateLoadingStep('statcast','active');
-  setLoadingStatus('Fetching Statcast data…');
+async function loadWeather(silent=false){
+  if (!silent) {
+    setStatus('loading','Loading weather…');
+    updateLoadingStep('statcast','active');
+    setLoadingStatus('Fetching Statcast data…');
+  }
   const outdoor=games.map(g=>g.home).filter(t=>{const p=getPark(t);return p&&p.lat&&p.roof!=='dome';});
   await Promise.allSettled(outdoor.map(async t=>{
     const p=getPark(t);
@@ -4983,7 +4985,7 @@ function renderParks() {
   if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading\u2026</h3></div>'; return; }
 
   const hasPres = Object.values(WX).some(w=>!w.dome && w.pres != null);
-  if (!hasPres) loadWeather().then(()=>renderParks());
+  if (!hasPres) loadWeather(true).then(()=>renderParks());
 
   const parkData = games.map(g => {
     const wx   = WX[g.home] || {};
@@ -7683,7 +7685,7 @@ async function init(){
 
   // ── Browser fallbacks (only if API slate didn't load) ──────
   if (!apiSlateLoaded) {
-    loadWeather().then(()=>{ rebuild(); renderAll(); if(curView==='parks') renderParks(); }).catch(()=>{});
+    loadWeather(true).then(()=>{ rebuild(); renderAll(); if(curView==='parks') renderParks(); }).catch(()=>{});
     loadLineups().then(n=>{
       if(n>0){rebuild(); renderAll();}
       const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
