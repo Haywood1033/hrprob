@@ -1837,6 +1837,7 @@ async function loadHistory() {
         Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
         Object.assign(SIGNAL_LOCK, todayRecord.signalLock);
         _signalLockDate = todayET;
+        _lockRestoredFromDB = true;
         console.log('Signal lock restored from DB:', Object.keys(SIGNAL_LOCK).length, 'players');
       } else {
         console.log('Signal lock already fresh — skipping DB restore');
@@ -2817,6 +2818,7 @@ function getSignals(r) {
 // Locks signal badges at first page load to prevent mid-game changes
 const SIGNAL_LOCK = {};
 let _signalLockDate = null;
+let _lockRestoredFromDB = false; // prevents slate from wiping DB-restored lock
 let _renderTodayTimer = null;
 function renderTodayDebounced() {
   if (curView !== 'today') return;
@@ -7563,10 +7565,15 @@ async function init(){
       if (slate.pitchers?.length) {
         // Sync date
         if (slate.date) {
-          // If date changed, clear signal lock so it rebuilds for new slate
-          if (SLATE.date && SLATE.date !== slate.date) {
+          // Only clear lock if date genuinely changed AND lock wasn't restored from DB
+          // _lockRestoredFromDB flag prevents wiping a good DB lock on first page load
+          if (SLATE.date && SLATE.date !== slate.date && !_lockRestoredFromDB) {
             console.log('New slate date detected — clearing signal lock for fresh build');
             Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
+            _signalLockDate = null;
+          } else if (SLATE.date && SLATE.date !== slate.date && _lockRestoredFromDB) {
+            console.log('Date changed but lock was DB-restored — keeping lock, will rebuild tomorrow');
+            _lockRestoredFromDB = false; // reset for genuine future date changes
           }
           SLATE.date = slate.date;
           document.getElementById('hdr-date').textContent =
