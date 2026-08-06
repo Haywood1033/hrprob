@@ -5056,18 +5056,19 @@ function renderParks() {
     const score = hrw?.score || 0;
     const carry = hrw?.windCarry||0;
     const speed = wx.ws||wx.w||0;
-    const wd = wx.wd||wx.d||0;
+    const wd    = wx.wd||wx.d||0;
+
     const allPlayers = allRows.filter(r=>String(r.gamePk)===String(g.pk))
       .sort((a,b)=>(getSignalsLocked(b).hrp||b.hrp||0)-(getSignalsLocked(a).hrp||a.hrp||0))
-      .slice(0,10);
+      .slice(0,12);
 
     const allTargetsHTML = allPlayers.map((r,i)=>{
       const {badge,count,hrp:lhrp}=getSignalsLocked(r);
       const lh=lhrp||r.hrp||0;
       const hc=lh>=20?'var(--green)':lh>=15?'var(--teal)':lh>=10?'var(--amber)':'rgba(255,255,255,0.6)';
       const streak=STREAK[r.name];
-      return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid rgba(255,255,255,0.07)">
-        <span style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.4);width:18px">${i+1}</span>
+      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid rgba(255,255,255,0.07)">
+        <span style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.4);width:20px">${i+1}</span>
         <div style="flex:1">
           <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92)">${r.name} ${streak?.flame||''}</div>
           <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:2px">${r.team} &middot; Bat ${r.order} &middot; ${count} signals${badge?` &middot; <span style="color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}</div>
@@ -5076,38 +5077,40 @@ function renderParks() {
       </div>`;
     }).join('');
 
-    const m = document.createElement('div');
-    m.id = 'park-modal';
-    m.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.85);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;overflow-y:auto';
-    m.onclick = e => { if(e.target===m) m.remove(); };
-    m.innerHTML = `<div style="background:#0d1220;border:0.5px solid rgba(255,255,255,0.12);border-radius:16px;padding:24px;max-width:600px;width:100%;max-height:90vh;overflow-y:auto">
+    el.innerHTML = `<div style="padding:4px 0">
+      <button onclick="renderParks()" style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.12);padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:20px">← Back to all parks</button>
+
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
         <div>
-          <div style="font-size:18px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:4px">${park.name||g.home}</div>
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5)">${g.away} @ ${g.home} &middot; ${g.time}</div>
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5)">${park.city||''} &middot; ${park.elev?(+park.elev).toLocaleString()+'ft':''} &middot; ${park.roof==='open'?'Open air':'Retractable'}</div>
+          <div style="font-size:22px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:4px">${park.name||g.home}</div>
+          <div style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.55)">${g.away} @ ${g.home} &middot; ${g.time}</div>
+          <div style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.45)">${park.city||''} &middot; ${park.elev?(+park.elev).toLocaleString()+'ft':''} &middot; ${park.roof==='open'?'Open air':'Retractable'}</div>
         </div>
-        <div style="display:flex;align-items:center;gap:16px">
-          <div style="text-align:right">
-            <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:2px">HR WEATHER</div>
-            <div style="font-size:36px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1">${score>0?'+':''}${score}%</div>
-          </div>
-          <button onclick="document.getElementById('park-modal').remove()" style="background:rgba(255,255,255,0.08);border:0.5px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.7);border-radius:6px;padding:6px 12px;cursor:pointer;font-size:13px">✕</button>
+        <div style="text-align:right">
+          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:4px;letter-spacing:.06em">HR WEATHER</div>
+          <div style="font-size:48px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-2px;line-height:1">${score>0?'+':''}${score}%</div>
+          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:4px">${wx.sky||wx.s||''}</div>
         </div>
       </div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:4px">
-        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--', (hrw?.tempAdj>=0?'+':'')+hrw?.tempAdj+'%', (hrw?.tempAdj||0)>2?'var(--green)':'rgba(255,255,255,0.45)')}
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--', (hrw?.tempAdj>=0?'+':'')+hrw?.tempAdj+'%', (hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':'rgba(255,255,255,0.45)')}
         ${statCell('Humidity', wx.hum!=null?wx.hum+'%':'--', (hrw?.humAdj>=0?'+':'')+hrw?.humAdj+'%', 'rgba(255,255,255,0.45)')}
         ${statCell('Pressure', wx.pres!=null?wx.pres:'--', 'hPa '+(hrw?.presAdj>=0?'+':'')+hrw?.presAdj+'%', (hrw?.presAdj||0)>3?'var(--green)':'rgba(255,255,255,0.45)')}
         ${statCell('Park', park.f?(hrw?.parkBoost>=0?'+':'')+hrw?.parkBoost+'%':'--', park.f?park.f+'x':'--', (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'rgba(255,255,255,0.45)')}
       </div>
+
       ${windRow(carry, speed, wd, wx.c||'')}
-      <div style="margin-top:16px">
-        <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">All targets at this park tonight</div>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
+        ${[['Park',hrw?.parkBoost||0],['Temp',hrw?.tempAdj||0],['Wind',carry],['Pres',hrw?.presAdj||0]].map(([l,v])=>`<span style="font-size:10px;font-family:var(--mono);padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.05);color:${v>0.5?'var(--green)':v<-0.5?'var(--red)':'rgba(255,255,255,0.5)'}">${l} ${v>=0?'+':''}${v.toFixed(1)}%</span>`).join('')}
+      </div>
+
+      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:16px">
+        <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">All targets at this park tonight</div>
         ${allTargetsHTML}
       </div>
     </div>`;
-    document.body.appendChild(m);
   };
   // _openParkModal already assigned above with window._parkData
 
