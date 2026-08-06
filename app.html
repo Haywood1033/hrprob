@@ -4981,11 +4981,7 @@ function renderParks() {
   if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading\u2026</h3></div>'; return; }
 
   const hasPres = Object.values(WX).some(w=>!w.dome && w.pres != null);
-  if (!hasPres) {
-    el.innerHTML = `<div style="padding:20px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-size:12px">Loading weather data\u2026 <button onclick="loadWeather().then(()=>renderParks())" style="margin-left:10px;background:rgba(74,222,128,0.1);border:0.5px solid rgba(74,222,128,0.25);color:var(--green);padding:4px 10px;border-radius:4px;cursor:pointer;font-family:var(--mono);font-size:11px">Refresh</button></div>`;
-    loadWeather().then(()=>renderParks());
-    return;
-  }
+  if (!hasPres) loadWeather().then(()=>renderParks());
 
   const parkData = games.map(g => {
     const wx   = WX[g.home] || {};
