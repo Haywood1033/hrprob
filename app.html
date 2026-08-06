@@ -5050,8 +5050,9 @@ function renderParks() {
     </div>`;
 
   // Full screen modal
-  const openParkModal = (idx) => {
-    const {g, wx, park, hrw, top3} = parkData[idx];
+  window._parkData = parkData;
+  window._openParkModal = (idx) => {
+    const {g, wx, park, hrw, top3} = window._parkData[idx];
     const score = hrw?.score || 0;
     const carry = hrw?.windCarry||0;
     const speed = wx.ws||wx.w||0;
@@ -5108,7 +5109,7 @@ function renderParks() {
     </div>`;
     document.body.appendChild(m);
   };
-  window._openParkModal = openParkModal;
+  // _openParkModal already assigned above with window._parkData
 
   const cards = parkData.map(({g, wx, park, hrw, top3}, idx) => {
     const score = hrw?.score || 0;
