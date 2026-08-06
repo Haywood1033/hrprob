@@ -4979,102 +4979,102 @@ function renderParks() {
     const hrw  = calcHRWeather(g.home, wx, park);
     const gamePlayers = allRows.filter(r => String(r.gamePk) === String(g.pk));
     const top3 = gamePlayers
-      .sort((a,b) => (getSignalsLocked(b).hrp||b.hrp) - (getSignalsLocked(a).hrp||a.hrp))
+      .sort((a,b) => (getSignalsLocked(b).hrp||b.hrp||0) - (getSignalsLocked(a).hrp||a.hrp||0))
       .slice(0, 3);
     return { g, wx, park, hrw, top3 };
   })
   .filter(d => !d.wx.dome)
   .sort((a,b) => (b.hrw?.score||0) - (a.hrw?.score||0));
 
-  const scoreColor = s => s >= 15?'var(--green)':s >= 5?'var(--teal)':s >= 0?'var(--t2)':s >= -5?'var(--amber)':'var(--red)';
+  const scoreColor = s => s>=15?'var(--green)':s>=5?'var(--teal)':s>=0?'var(--t2)':s>=-5?'var(--amber)':'var(--red)';
 
   const windBar = (carry, speed) => {
     const isOut = carry > 1.5, isIn = carry < -1.5;
-    const color = isOut?'var(--green)':isIn?'var(--red)':'rgba(255,255,255,0.25)';
-    const tag   = isOut?'WINDS OUT':isIn?'WINDS IN':'CROSSWIND';
-    const pct   = Math.min(48, Math.abs(carry)/8*48);
-    return `<div style="display:flex;align-items:center;gap:10px;margin:8px 0">
-      <div style="background:var(--bg3);border-radius:4px;height:6px;flex:1;overflow:hidden;position:relative">
-        <div style="position:absolute;left:50%;width:1px;height:6px;background:rgba(255,255,255,0.2)"></div>
-        ${isOut?`<div style="position:absolute;left:50%;width:${pct}%;height:6px;background:${color};border-radius:0 2px 2px 0"></div>`:''}
-        ${isIn ?`<div style="position:absolute;right:50%;width:${pct}%;height:6px;background:${color};border-radius:2px 0 0 2px"></div>`:''}
+    const color = isOut?'var(--green)':isIn?'var(--red)':'rgba(255,255,255,0.20)';
+    const tag   = isOut?'OUT':isIn?'IN':'CROSS';
+    const pct   = Math.min(46, Math.abs(carry)/10*46);
+    return `<div style="margin:10px 0 6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
+        <span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${speed} MPH WIND</span>
+        <span style="font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:${isOut?'rgba(74,222,128,0.12)':isIn?'rgba(248,113,113,0.12)':'rgba(255,255,255,0.06)'};color:${color}">${tag} · ${carry>=0?'+':''}${carry.toFixed(1)}% carry</span>
       </div>
-      <span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${isOut?'rgba(74,222,128,0.12)':isIn?'rgba(248,113,113,0.12)':'rgba(255,255,255,0.06)'};color:${color};white-space:nowrap">${tag}</span>
-      <span style="font-size:10px;font-family:var(--mono);color:var(--t3);white-space:nowrap">${speed} mph · ${carry>0?'+':''}${carry.toFixed(1)}% carry</span>
+      <div style="background:rgba(255,255,255,0.06);border-radius:4px;height:5px;position:relative;overflow:hidden">
+        <div style="position:absolute;left:50%;width:1px;height:5px;background:rgba(255,255,255,0.15)"></div>
+        ${isOut?`<div style="position:absolute;left:50%;width:${pct}%;height:5px;background:var(--green);border-radius:0 2px 2px 0"></div>`:''}
+        ${isIn ?`<div style="position:absolute;right:50%;width:${pct}%;height:5px;background:var(--red);border-radius:2px 0 0 2px"></div>`:''}
+      </div>
     </div>`;
   };
 
   const cards = parkData.map(({g, wx, park, hrw, top3}) => {
     const score = hrw?.score || 0;
-    const borderColor = score>=15?'rgba(74,222,128,0.3)':score>=5?'rgba(74,222,128,0.15)':score<=-5?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.10)';
+    const borderColor = score>=15?'rgba(74,222,128,0.3)':score>=5?'rgba(74,222,128,0.12)':score<=-5?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.09)';
 
     const top3HTML = top3.length ? top3.map((r,i) => {
-      const {badge, count} = getSignalsLocked(r);
-      const lockedHrp = getSignalsLocked(r).hrp || r.hrp || 0;
+      const {badge, count, hrp: lhrp} = getSignalsLocked(r);
+      const lockedHrp = lhrp || r.hrp || 0;
       const hrpColor = lockedHrp>=20?'var(--green)':lockedHrp>=15?'var(--teal)':lockedHrp>=10?'var(--amber)':'var(--t2)';
       const streak = STREAK[r.name];
-      return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;${i<top3.length-1?'border-bottom:0.5px solid rgba(255,255,255,0.06)':''}">
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);width:14px">${i+1}</div>
-        <div style="flex:1">
-          <div style="display:flex;align-items:center;gap:5px">
-            <span style="font-size:12px;font-weight:500;color:var(--t1)">${r.name}</span>
-            <span>${streak?.flame||''}</span>
-            ${badge?`<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>`:''}
-          </div>
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · Bat ${r.order} · ${count} signals</div>
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;${i<top3.length-1?'border-bottom:0.5px solid rgba(255,255,255,0.05)':''}">
+        <span style="font-size:10px;font-family:var(--mono);color:var(--t3);width:12px;flex-shrink:0">${i+1}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;color:var(--t1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name} ${streak?.flame||''}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${r.team} · ${count} sig${badge?` · <span style="color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}</div>
         </div>
-        <div style="font-size:14px;font-weight:500;font-family:var(--mono);color:${hrpColor}">${lockedHrp.toFixed(1)}%</div>
+        <div style="font-size:13px;font-weight:500;font-family:var(--mono);color:${hrpColor};flex-shrink:0">${lockedHrp.toFixed(1)}%</div>
       </div>`;
-    }).join('') : `<div style="font-size:11px;font-family:var(--mono);color:var(--t3);padding:8px 0">Lineups loading…</div>`;
+    }).join('') : `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);padding:8px 0">Lineups loading…</div>`;
 
-    return `<div style="background:var(--bg2);border:0.5px solid ${borderColor};border-radius:12px;padding:16px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-        <div>
-          <div style="font-size:14px;font-weight:500;color:var(--t1);margin-bottom:2px">${park.name||g.home}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${g.away} @ ${g.home} · ${g.time}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${park.city||''} · ${park.elev?park.elev.toLocaleString()+' ft':''} · ${park.roof==='open'?'Open air':park.roof==='retractable'?'Retractable':'Dome'}</div>
+    return `<div style="background:var(--bg2);border:0.5px solid ${borderColor};border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:0">
+      <!-- Header row -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
+        <div style="flex:1;min-width:0">
+          <div style="font-size:14px;font-weight:500;color:var(--t1);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${park.name||g.home}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${g.away} @ ${g.home}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${g.time} · ${park.city||''} · ${park.elev?(+park.elev).toLocaleString()+'ft':''} · ${park.roof==='open'?'Open air':park.roof==='retractable'?'Retractable':'Dome'}</div>
         </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:12px">
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">HR WEATHER</div>
-          <div style="font-size:30px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1">${score>0?'+':''}${score}%</div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">${wx.s||''}</div>
+        <div style="text-align:right;flex-shrink:0;margin-left:10px">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:1px">HR WEATHER</div>
+          <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1">${score>0?'+':''}${score}%</div>
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:1px">${wx.s||''}</div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px">
-        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">TEMP</div>
-          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.t||'—'}°</div>
-          <div style="font-size:8px;font-family:var(--mono);color:${(hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':'var(--t3)'}">${hrw?.tempAdj>0?'+':''}${hrw?.tempAdj||0}%</div>
+      <!-- 4 stat cells -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:4px">
+        <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 6px;text-align:center">
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">TEMP</div>
+          <div style="font-size:15px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.t!=null?wx.t+'°':'--'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:${(hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':'var(--t3)'}">${hrw?.tempAdj>=0?'+':''}${hrw?.tempAdj||0}%</div>
         </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">HUMIDITY</div>
-          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.hum!=null?wx.hum+'%':'—'}</div>
-          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${hrw?.humAdj>0?'+':''}${hrw?.humAdj||0}%</div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 6px;text-align:center">
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">HUMIDITY</div>
+          <div style="font-size:15px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.hum!=null?wx.hum+'%':'--'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${hrw?.humAdj>=0?'+':''}${hrw?.humAdj||0}%</div>
         </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">PRESSURE</div>
-          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.pres||'—'}</div>
-          <div style="font-size:8px;font-family:var(--mono);color:${(hrw?.presAdj||0)>3?'var(--green)':'var(--t3)'}">hPa · ${hrw?.presAdj>0?'+':''}${hrw?.presAdj||0}%</div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 6px;text-align:center">
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">PRESSURE</div>
+          <div style="font-size:15px;font-weight:500;font-family:var(--mono);color:var(--t1)">${wx.pres!=null?wx.pres:'--'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:${(hrw?.presAdj||0)>3?'var(--green)':'var(--t3)'}">hPa ${hrw?.presAdj>=0?'+':''}${hrw?.presAdj||0}%</div>
         </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:8px;text-align:center">
-          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:3px">PARK</div>
-          <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:${(park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'var(--t2)'}">${park.f?(hrw?.parkBoost>0?'+':'')+hrw?.parkBoost+'%':'—'}</div>
-          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">factor ${park.f||1.00}</div>
+        <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 6px;text-align:center">
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-bottom:2px">PARK</div>
+          <div style="font-size:15px;font-weight:500;font-family:var(--mono);color:${(park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'var(--t2)'}">${park.f?(hrw?.parkBoost>=0?'+':'')+hrw?.parkBoost+'%':'--'}</div>
+          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${park.f||1.00}x</div>
         </div>
       </div>
 
+      <!-- Wind bar -->
       ${windBar(hrw?.windCarry||0, wx.w||0)}
 
-      <div style="display:flex;gap:10px;flex-wrap:wrap;margin:6px 0 12px;font-size:9px;font-family:var(--mono);color:var(--t3)">
-        <span>Park <strong style="color:var(--t2)">${hrw?.parkBoost>=0?'+':''}${hrw?.parkBoost||0}%</strong></span>
-        <span>Temp <strong style="color:var(--t2)">${hrw?.tempAdj>=0?'+':''}${hrw?.tempAdj||0}%</strong></span>
-        <span>Wind <strong style="color:var(--t2)">${hrw?.windCarry>=0?'+':''}${hrw?.windCarry||0}%</strong></span>
-        <span>Pressure <strong style="color:var(--t2)">${hrw?.presAdj>=0?'+':''}${hrw?.presAdj||0}%</strong></span>
+      <!-- Score breakdown pill row -->
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        ${[['Park',hrw?.parkBoost||0],['Temp',hrw?.tempAdj||0],['Wind',hrw?.windCarry||0],['Pres',hrw?.presAdj||0]].map(([lbl,val])=>`<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:20px;background:rgba(255,255,255,0.05);color:${val>0?'var(--green)':val<0?'var(--red)':'var(--t3)'}">${lbl} ${val>=0?'+':''}${val}%</span>`).join('')}
       </div>
 
-      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:10px">
-        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">🎯 Top Targets Tonight</div>
+      <!-- Top targets -->
+      <div style="border-top:0.5px solid rgba(255,255,255,0.07);padding-top:10px">
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Top targets</div>
         ${top3HTML}
       </div>
     </div>`;
@@ -5082,9 +5082,10 @@ function renderParks() {
 
   const domeCount = games.filter(g=>WX[g.home]?.dome).length;
   el.innerHTML = `<div style="padding:4px 0">
-    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:14px">HR Weather = park factor + temp + barometric pressure + wind carry · sorted best conditions first${domeCount?` · ${domeCount} dome game${domeCount>1?'s':''} excluded`:''}
+    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:14px">HR Weather = park factor + temp + pressure + wind carry · best conditions first${domeCount?' · '+domeCount+' dome'+(domeCount>1?'s':'')+' excluded':''}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
+      ${cards||'<div class="empty"><p>Weather data loading…</p></div>'}
     </div>
-    ${cards||'<div class="empty"><p>Weather data loading…</p></div>'}
   </div>`;
 }
 
