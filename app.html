@@ -996,6 +996,16 @@ function hrProb(b,park,wx,pit,order){
     else if (whiff_pct <= 18) p += (LG_WHIFF - whiff_pct) * 0.0010; // low whiff = bonus (consistent contact)
   }
 
+  // ── LAUNCH ANGLE ─────────────────────────────────────────────
+  // HR corridor: 20-35° optimal. Below 15° = too flat, above 40° = pop-ups
+  const la = b.la || null;
+  if (la !== null) {
+    if      (la >= 24 && la <= 32) p += 0.008;   // ideal HR corridor
+    else if (la >= 20 && la <= 35) p += 0.004;   // good range
+    else if (la < 15)              p -= (15 - la) * 0.003; // too flat
+    else if (la > 38)              p -= (la - 38) * 0.002; // too steep/pop-ups
+  }
+
   // ── SWEET SPOT % ─────────────────────────────────────────────
   // Launch angle 8-32° — high rate = more balls hit with HR trajectory
   const ss_pct = b.sweet_spot_pct || null;
@@ -2775,7 +2785,7 @@ function getSignals(r) {
     }
   }
 
-  // ── SIGNAL 8: Hot Contact — season barrel%/HH% OR recent hot SLG ──
+  // ── SIGNAL 8: Hot Contact + Launch Angle modifier ────────────
   const l7data = BATTER_L7[r.name] || BATTER_L7[normName(r.name)];
   const hcStreak = STREAK[r.name];
   const hcGameLog = hcStreak?.gameLog || [];
@@ -2783,13 +2793,23 @@ function getSignals(r) {
   const hcAB = hcRecent.reduce((s,g)=>s+(g.ab||0),0);
   const hcTB = hcRecent.reduce((s,g)=>s+(g.tb||0),0);
   const hcSLG = hcAB >= 8 ? hcTB/hcAB : null;
-  const hotContactActive = !!(
-    (batter.ba >= 12) ||                    // barrel% ≥12% (above avg)
+
+  // Launch angle modifier — HR corridor is 20-35°
+  // Confirms ball gets in the air, not just hard contact on the ground
+  const laValue  = batter.la || null;
+  const laInCorr = laValue !== null && laValue >= 20 && laValue <= 35;
+  const laOk     = laValue === null || laInCorr; // no data = don't penalize
+
+  const hotContactBase = !!(
+    (batter.ba >= 12) ||                    // barrel% ≥12%
     (batter.hh >= 50) ||                    // hard hit% ≥50%
     (hcSLG !== null && hcSLG >= 0.650)      // scorching recent SLG
   );
+  const hotContactActive = hotContactBase && laOk;
+
+  const laStr = laValue !== null ? ` · LA ${laValue.toFixed(1)}°` : '';
   const hotContactLabel = hotContactActive
-    ? `Hot Contact · Brl ${batter.ba?.toFixed(1)||'—'}% · HH ${batter.hh?.toFixed(0)||'—'}%${hcSLG?` · L10 SLG ${hcSLG.toFixed(3)}`:''}`
+    ? `Hot Contact · Brl ${batter.ba?.toFixed(1)||'—'}% · HH ${batter.hh?.toFixed(0)||'—'}%${hcSLG?` · L10 SLG ${hcSLG.toFixed(3)}`:''}${laStr}`
     : 'Hot Contact';
 
   const signals = [
@@ -7714,7 +7734,7 @@ async function init(){
         if (d.batters) {
           for (const [name,s] of Object.entries(d.batters)) {
             if ((s.ev||0)>0) {
-              const _bd={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,whiff_pct:s.whiff_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,ev50:s.ev50||null};
+              const _bd={ev:+s.ev.toFixed(1),ba:+(s.ba||0).toFixed(1),hh:+(s.hh||0).toFixed(1),xw:+(s.xw||0.310).toFixed(3),iso:+(s.iso||0.150).toFixed(3),pa:s.pa||0,bats:BATTER[name]?.bats||'R',k_pct:s.k_pct||null,bb_pct:s.bb_pct||null,whiff_pct:s.whiff_pct||null,pull_pct:s.pull_pct||null,fb_pct:s.fb_pct||null,gb_pct:s.gb_pct||null,sweet_spot_pct:s.sweet_spot_pct||null,la:s.la||null,ev50:s.ev50||null};
               BATTER[name] = _bd;
               const _nfc = name.normalize('NFC');
               const _nn  = name.normalize('NFD').replace(/[\u0300-\u036f]/g,'');
