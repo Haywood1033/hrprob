@@ -33,7 +33,7 @@ module.exports = async function handler(req, res) {
     await query(`ALTER TABLE daily_predictions ADD COLUMN IF NOT EXISTS game_leans JSONB`);
 
     if (req.method === 'GET') {
-      const { rows } = await query(`SELECT * FROM daily_predictions ORDER BY date DESC LIMIT 30`);
+      const { rows } = await query(`SELECT * FROM daily_predictions ORDER BY date DESC LIMIT 200`);
       return res.status(200).json({
         records: rows.map(r => ({
           date: r.date, predictions: r.predictions,
