@@ -2569,7 +2569,7 @@ function renderHistory() {
   html += `<div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin:16px 0 10px">Daily Log</div>`;
   const etNow = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etNow).toLocaleDateString('en-CA');
-  const logDays = [...historyRecords].filter(r=>r.date<today).reverse().slice(0,30);
+  const logDays = [...historyRecords].filter(r=>r.date<today).reverse();
 
   for (const day of logDays) {
     const tracked = day.predictions?.filter(p=>p.hit!==null&&p.hit!==undefined)||[];
