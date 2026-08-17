@@ -7307,46 +7307,163 @@ function expandTarget(i) {
 }
 
 function renderTargets(){
-  // Deduplicate by player name — keep only each player's highest HR% matchup
-  // This prevents the same player appearing multiple times from projected lineups
+  const el = document.getElementById('tgrid');
+  if (!el) return;
+
+  // Best Plays ranking — same scorePlayer logic, dedupe by name
   const seen = new Map();
-  for(const r of allRows){
-    const existing = seen.get(r.name);
-    if(!existing || r.hrp > existing.hrp) seen.set(r.name, r);
+  for (const r of allRows) {
+    const score = scorePlayer(r);
+    if (!seen.has(r.name) || score > scorePlayer(seen.get(r.name))) seen.set(r.name, r);
   }
-  const top = [...seen.values()].sort((a,b)=>b.hrp-a.hrp).slice(0,24);
-  document.getElementById('tgrid').innerHTML=top.length?top.map((r,i)=>{
-    const tags=[];
-    if(r.barrel>=15) tags.push({c:'hot',  t:'🔥 Elite Barrel'});
-    if(r.ev>=93)     tags.push({c:'hot',  t:`⚡ EV ${r.ev.toFixed(1)}`});
-    if((r.park?.f||1)>=1.05) tags.push({c:'park', t:'📈 Hitter Park'});
-    if((r.pit?.xera||r.pit?.era||4.5)>=5.0) tags.push({c:'pit', t:'🎯 Weak Pitcher'});
-    const src = r.source==='live'||r.source==='confirmed'
-      ? '<span class="sb slive" style="font-size:9px">✓ Live</span>'
-      : '<span class="sb sproj" style="font-size:9px">~ Proj</span>';
-    // EV edge badge
-    const evBadge = r.bookOdds
-      ? (r.evEdge > 2
-          ? `<span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:2px 8px;border-radius:3px;background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)">+EV +${r.evEdge}%</span>`
-          : r.evEdge < -2
-          ? `<span style="font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">-EV ${r.evEdge}%</span>`
-          : `<span style="font-size:10px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:var(--bg3);color:var(--t3);border:1px solid var(--bd)">FAIR</span>`)
-      : '';
-    return `<div class="tcard ${i<3?'t3':''}" id="tc-${i}" onclick="expandTarget(${i})" style="cursor:pointer">
-      <div class="trk">${i+1}</div>
-      <div class="tn">${r.name} ${src} <span style="font-size:13px">${STREAK[r.name]?.flame||''}</span></div>
-      <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
-      <div style="display:flex;align-items:baseline;gap:10px;margin:4px 0">
-        <div class="tprob">${r.hrp.toFixed(1)}<span>%</span></div>
-        ${evBadge}
+  const ranked = [...seen.values()]
+    .filter(r => {
+      const {count} = getSignalsLocked(r);
+      const lhrp = getSignalsLocked(r).hrp || r.hrp || 0;
+      return count >= 3 || lhrp >= 10;
+    })
+    .sort((a,b) => scorePlayer(b) - scorePlayer(a))
+    .slice(0, 40);
+
+  if (!ranked.length) {
+    el.innerHTML = '<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.4);font-family:monospace;font-size:13px">Loading…</div>';
+    return;
+  }
+
+  // Color helpers — batter (high = good)
+  const hrpClr  = p => p>=20?'var(--green)':p>=15?'var(--teal)':p>=10?'var(--amber)':'rgba(255,255,255,0.6)';
+  const brlClr  = v => v>=18?'var(--green)':v>=12?'var(--teal)':v>=8?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.45)';
+  const hhBClr  = v => v>=55?'var(--green)':v>=45?'var(--teal)':'rgba(255,255,255,0.55)';
+  const evClr   = v => v>=94?'var(--green)':v>=91?'var(--teal)':'rgba(255,255,255,0.55)';
+  const laClr   = v => v!=null&&v>=22&&v<=32?'var(--green)':v!=null&&v>=18&&v<=36?'var(--teal)':'rgba(255,255,255,0.55)';
+  // Pitcher (high = bad — red means vulnerable)
+  const xeraClr = v => v>=5.00?'var(--red)':v>=4.50?'var(--amber)':v<4.00?'var(--green)':'rgba(255,255,255,0.55)';
+  const hr9Clr  = v => v>=1.50?'var(--red)':v>=1.20?'var(--amber)':v<1.00?'var(--green)':'rgba(255,255,255,0.55)';
+  const hhPClr  = v => v>=50?'var(--red)':v>=43?'var(--amber)':'rgba(255,255,255,0.55)';
+  const whiffClr= v => v>=30?'var(--green)':v>=24?'var(--teal)':'rgba(255,255,255,0.55)';
+
+  const cv = (v, clr, dec=1) =>
+    `<td style="font-size:11px;font-family:var(--mono);text-align:right;padding:0 6px;color:${clr};white-space:nowrap">${v!=null?typeof v==='number'?v.toFixed(dec):v:'—'}</td>`;
+
+  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const dateStr = new Date(etStr).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+
+  const rows = ranked.map((r, i) => {
+    const {signals, count, badge, hrp: lhrp} = getSignalsLocked(r);
+    const lockedHrp = lhrp || r.hrp || 0;
+    const streak = STREAK[r.name];
+    const b = getBatter(r.name) || {};
+    const pit = getPitcher(r.pitName) || {};
+    const park = getPark(r.game?.home || r.team) || {};
+
+    const borderLeft = badge?.label?.includes('Elite') ? '2px solid var(--amber)'
+      : badge?.label?.includes('All') ? '2px solid var(--blue)'
+      : badge?.label?.includes('Value') ? '2px solid var(--purple)'
+      : '2px solid transparent';
+
+    const handTag = `<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.6);white-space:nowrap">${r.team} ${b.bats||'R'} vs ${r.pitHand||'R'}</span>`;
+    const parkTag = (park.f||1)>=1.05
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:rgba(74,222,128,0.12);color:var(--green)">Park+</span>`
+      : (park.f||1)<=0.95
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:rgba(248,113,113,0.12);color:var(--red)">Park−</span>` : '';
+    const hotTag = streak?.flame ? `<span style="font-size:9px">${streak.flame}</span>` : '';
+
+    const sigIcons = signals.map(s=>`<span style="opacity:${s.active?1:0.12};font-size:10px">${s.icon}</span>`).join('');
+
+    const badgePill = badge
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:2px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};white-space:nowrap">${badge.label.replace(' Play','')}</span>`
+      : `<span style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.3)">${count}s</span>`;
+
+    return `<tr style="border-left:${borderLeft};cursor:pointer" onclick="goToPlayer(this.dataset.name)" data-name="${r.name.replace(/"/g,'&quot;')}" onmouseover="this.style.background='rgba(255,255,255,0.03)'" onmouseout="this.style.background=''">
+      <td style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.35);padding:8px 6px 8px 14px;text-align:center;white-space:nowrap">${i+1}</td>
+      <td style="padding:8px 12px 8px 6px;min-width:160px;max-width:180px">
+        <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name} ${hotTag}</div>
+        <div style="display:flex;gap:3px;margin-top:2px;flex-wrap:wrap">${handTag}${parkTag}</div>
+      </td>
+      ${cv(lockedHrp, hrpClr(lockedHrp))}
+      ${cv(b.ba, brlClr(b.ba||0))}
+      ${cv(b.hh, hhBClr(b.hh||0), 0)}
+      ${cv(b.ev, evClr(b.ev||0))}
+      ${cv(b.la, laClr(b.la), 0)}
+      <td style="padding:0 6px;border-left:0.5px solid rgba(255,255,255,0.08)"></td>
+      ${cv(pit.xera, xeraClr(pit.xera||4.5), 2)}
+      ${cv(pit.hr9, hr9Clr(pit.hr9||1.2), 2)}
+      ${cv(pit.hh, hhPClr(pit.hh||38), 0)}
+      ${cv(pit.whiff, whiffClr(pit.whiff||22), 0)}
+      <td style="padding:0 6px 0 8px">
+        <div style="display:flex;gap:1px;justify-content:center">${sigIcons}</div>
+      </td>
+      <td style="padding:0 14px 0 4px;text-align:right">${badgePill}</td>
+    </tr>`;
+  }).join('');
+
+  el.style.padding = '0';
+  el.style.overflowX = 'auto';
+
+  el.innerHTML = `
+  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10">
+    <div>
+      <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92)">🎯 Best Plays · Cheat Sheet</div>
+      <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:2px;display:flex;align-items:center;gap:6px">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span>
+        ${dateStr} · ${games.length} games · ${ranked.length} signal plays · ranked by conviction score
       </div>
-      <div style="margin-bottom:4px">${ciBadge(r.hrp, getBatter(r.name)?.pa||0, true)}</div>
-      ${r.bookOdds?`<div style="font-family:var(--mono);font-size:11px;color:var(--t3)">${r.bookOdds>0?'+':''}${r.bookOdds} · implies ${(oddsToImplied(r.bookOdds)*100).toFixed(1)}%</div>`:''}
-      ${r.ou?`<div style="font-family:var(--mono);font-size:10px;color:var(--amber)">O/U ${r.ou}</div>`:''}
-      <div class="ttags" style="margin-top:4px">${tags.map(t=>`<span class="tag ${t.c}">${t.t}</span>`).join('')}</div>
-      <div id="texp-${i}" style="display:none"></div>
-    </div>`;
-  }).join(''):'<div class="empty"><h3>Loading…</h3></div>';
+    </div>
+    <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.3)">research only</div>
+  </div>
+
+  <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+    <colgroup>
+      <col style="width:32px">
+      <col style="width:185px">
+      <col style="width:52px">
+      <col style="width:48px">
+      <col style="width:48px">
+      <col style="width:50px">
+      <col style="width:44px">
+      <col style="width:8px">
+      <col style="width:52px">
+      <col style="width:48px">
+      <col style="width:44px">
+      <col style="width:48px">
+      <col style="width:88px">
+      <col style="width:70px">
+    </colgroup>
+    <thead>
+      <tr style="background:var(--bg3);border-bottom:0.5px solid rgba(255,255,255,0.10)">
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px 6px 6px 14px;text-align:center">#</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:left">Player</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">HR%</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">Brl%</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">HH%</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">EV</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">LA°</th>
+        <th style="border-left:0.5px solid rgba(255,255,255,0.08)"></th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.35);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">xERA</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.35);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">HR/9</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.35);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">HH%</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.35);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:right">Whiff</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px;text-align:center">Signals</th>
+        <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);font-weight:400;text-transform:uppercase;letter-spacing:.06em;padding:6px 14px 6px 4px;text-align:right">Badge</th>
+      </tr>
+      <tr style="background:var(--bg3);border-bottom:0.5px solid rgba(255,255,255,0.06)">
+        <th colspan="2"></th>
+        <th colspan="5" style="font-size:7px;font-family:var(--mono);color:rgba(255,255,255,0.3);font-weight:400;text-align:center;padding:2px 0">← batter</th>
+        <th style="border-left:0.5px solid rgba(255,255,255,0.08)"></th>
+        <th colspan="4" style="font-size:7px;font-family:var(--mono);color:rgba(255,255,255,0.3);font-weight:400;text-align:center;padding:2px 0">pitcher vulnerability →</th>
+        <th colspan="2"></th>
+      </tr>
+    </thead>
+    <tbody>
+      ${rows}
+    </tbody>
+  </table>
+
+  <div style="padding:10px 16px;font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);border-top:0.5px solid rgba(255,255,255,0.06);display:flex;gap:16px;flex-wrap:wrap">
+    <span>Batter: Green = elite · Teal = above avg</span>
+    <span>Pitcher: Red = vulnerable · Amber = weak · Green = dominant</span>
+    <span>Border: Amber = Elite · Blue = All-Star · Purple = Value</span>
+  </div>`;
 }
 
 
