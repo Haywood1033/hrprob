@@ -517,7 +517,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vedge" class="view"><div id="edge-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
-<div id="vtargets" class="view"><div class="tgrid" id="tgrid"></div></div>
+<div id="vtargets" class="view"><div id="tgrid" style="display:block;padding:0;width:100%;overflow-x:auto"></div></div>
 <div id="vparlay" class="view"><div class="pgrid" id="pgrid"></div></div>
 <div id="vtomorrow" class="view"><div id="tomorrow-grid"></div></div>
 <div id="vforecast" class="view"><div class="fcast-grid" id="fcast-grid"></div></div>
@@ -7332,12 +7332,12 @@ function renderTargets(){
   }
   const ranked = [...seen.values()]
     .filter(r => {
-      const {count} = getSignalsLocked(r);
-      const lhrp = getSignalsLocked(r).hrp || r.hrp || 0;
-      return count >= 3 || lhrp >= 10;
+      const {count, badge, hrp: lhrp} = getSignalsLocked(r);
+      const hrp = lhrp || r.hrp || 0;
+      return count >= 4 || badge?.label?.includes('Elite') || badge?.label?.includes('All-Star');
     })
     .sort((a,b) => scorePlayer(b) - scorePlayer(a))
-    .slice(0, 40);
+    .slice(0, 25);
 
   if (!ranked.length) {
     el.innerHTML = '<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.4);font-family:monospace;font-size:13px">Loading…</div>';
@@ -7411,22 +7411,22 @@ function renderTargets(){
     </tr>`;
   }).join('');
 
-  el.style.padding = '0';
-  el.style.overflowX = 'auto';
+  el.style.cssText = 'display:block;padding:0;width:100%;overflow-x:auto';
 
   el.innerHTML = `
-  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:12px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10">
+  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
     <div>
       <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92)">🎯 Best Plays · Cheat Sheet</div>
       <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:2px;display:flex;align-items:center;gap:6px">
         <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span>
-        ${dateStr} · ${games.length} games · ${ranked.length} signal plays · ranked by conviction score
+        ${dateStr} · ${games.length} games · ${ranked.length} signal plays · 4+ signals · ranked by conviction
       </div>
     </div>
     <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.3)">research only</div>
   </div>
 
-  <table style="width:100%;border-collapse:collapse;table-layout:fixed">
+  <div style="overflow-x:auto;width:100%">
+  <table style="width:100%;min-width:760px;border-collapse:collapse;table-layout:fixed">
     <colgroup>
       <col style="width:32px">
       <col style="width:185px">
@@ -7477,7 +7477,7 @@ function renderTargets(){
     <span>Batter: Green = elite · Teal = above avg</span>
     <span>Pitcher: Red = vulnerable · Amber = weak · Green = dominant</span>
     <span>Border: Amber = Elite · Blue = All-Star · Purple = Value</span>
-  </div>`;
+  </div></div>`;
 }
 
 
