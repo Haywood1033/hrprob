@@ -474,7 +474,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('live',this)">🔴 Live</div>
   <div class="tab" onclick="setView('players',this)">☰ Players</div>
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
-  <div class="tab" onclick="setView('targets',this)">🎯 Best Plays</div>
+  <div class="tab" onclick="setView('targets',this)">📋 Cheat Sheet</div>
   <div class="tab" onclick="setView('derby',this)">📋 Props</div>
   <div class="tab" onclick="setView('pulse',this)">🔍 Pulse</div>
   <div class="tab" onclick="setView('edge',this)">⚔️ Edge</div>
@@ -1102,12 +1102,14 @@ function hrProbWithStreak(batter, park, wx, pit, order) {
 
   // ── CALIBRATION CORRECTION (based on 28-day accuracy data, 1893 predictions) ──
   // 20%+ tier: model avg 22.4% but actual 15.7% → still overconfident, reduce further
-  // 15-19% tier: model avg 17.4% but actual 19.7% → nearly calibrated, slight nudge
-  // 10-14% tier: 12.0% actual vs 12.4% model → perfect, leave alone
-  // 5-9% tier: 7.9% actual vs 7.7% model → perfect, leave alone
+  // ── CALIBRATION — 54-day, 3,727 predictions ──────────────────
+  // 20%+:   model avg 22.2% → actual 16.4% → ×0.74 corrects perfectly
+  // 15-19%: model avg 17.3% → actual 17.6% → essentially perfect, no adjustment needed
+  // 10-14%: model avg 12.4% → actual 12.9% → accurate, no adjustment
+  // 5-9%:   model avg  7.7% → actual  9.2% → model under-predicts → ×1.20 boost
   const pRaw = p;
-  if      (pRaw >= 20) p *= 0.75; // 22.4% avg → ~16.8% (target 15.7%)
-  else if (pRaw >= 15) p *= 1.05; // 17.4% avg → ~18.3% (target 19.7%)
+  if      (pRaw >= 20) p *= 0.74;  // brings 22.2% → 16.4% ✓
+  else if (pRaw >=  5 && pRaw < 10) p *= 1.20; // brings 7.7% → 9.2% ✓
 
   return Math.min(35, p);
 }
@@ -7305,96 +7307,131 @@ function expandTarget(i) {
 }
 
 function renderTargets(){
+  const el = document.getElementById('tgrid');
+  if (!el) return;
+
+  // Build ranked list — dedupe by name, sort by locked hrp
   const seen = new Map();
-  for(const r of allRows){
-    const existing = seen.get(r.name);
-    if(!existing || r.hrp > existing.hrp) seen.set(r.name, r);
+  for (const r of allRows) {
+    if (!seen.has(r.name) || (getSignalsLocked(r).hrp||r.hrp||0) > (getSignalsLocked(seen.get(r.name)).hrp||seen.get(r.name).hrp||0)) {
+      seen.set(r.name, r);
+    }
   }
-  const players = [...seen.values()];
+  const ranked = [...seen.values()]
+    .sort((a,b) => (getSignalsLocked(b).hrp||b.hrp||0) - (getSignalsLocked(a).hrp||a.hrp||0))
+    .slice(0, 50);
 
-  const scoreR = (r) => {
-    const {count,ci} = getSignalsLocked(r);
-    const sb = SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?3:1.5) : 0;
-    const ps = PARK_SPLITS[r.name];
-    return r.hrp*3 + count*5 + sb + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
-  };
+  if (!ranked.length) { el.innerHTML = '<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.4);font-family:monospace">Loading…</div>'; return; }
 
-  const capPerGame = (list, max) => {
-    const counts = {};
-    return list.filter(r => {
-      counts[r.gamePk] = (counts[r.gamePk]||0) + 1;
-      return counts[r.gamePk] <= max;
-    });
-  };
+  // Color helpers
+  const hrpColor  = p => p>=20?'var(--green)':p>=15?'var(--teal)':p>=10?'var(--amber)':'rgba(255,255,255,0.55)';
+  const brlColor  = v => v>=18?'var(--green)':v>=12?'var(--teal)':v>=8?'rgba(255,255,255,0.7)':'rgba(255,255,255,0.4)';
+  const hhColor   = v => v>=55?'var(--green)':v>=45?'var(--teal)':'rgba(255,255,255,0.55)';
+  const evColor   = v => v>=94?'var(--green)':v>=91?'var(--teal)':'rgba(255,255,255,0.55)';
+  const laColor   = v => v!=null&&v>=22&&v<=32?'var(--green)':v!=null&&v>=18&&v<=36?'var(--teal)':'rgba(255,255,255,0.55)';
+  const xeraColor = v => v>=5.00?'var(--red)':v>=4.50?'var(--amber)':'rgba(255,255,255,0.55)';
+  const hr9Color  = v => v>=1.50?'var(--red)':v>=1.20?'var(--amber)':'rgba(255,255,255,0.55)';
+  const hhPitColor= v => v>=50?'var(--red)':v>=43?'var(--amber)':'rgba(255,255,255,0.55)';
+  const whiffColor= v => v>=30?'var(--green)':v>=24?'var(--teal)':'rgba(255,255,255,0.55)';
 
-  // Bucket by badge label — matches exactly what user sees on cards
-  const elite    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Elite')).sort((a,b)=>scoreR(b)-scoreR(a)), 3).slice(0,6);
-  const allStar  = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('All-Star')).sort((a,b)=>scoreR(b)-scoreR(a)), 3).slice(0,8);
-  const value    = capPerGame(players.filter(r => getSignalsLocked(r).badge?.label?.includes('Value')).sort((a,b)=>scoreR(b)-scoreR(a)), 2).slice(0,8);
+  const cell = (val, color, decimals=1) =>
+    `<div style="font-size:11px;font-family:var(--mono);text-align:right;color:${color}">${val!=null?typeof val==='number'?val.toFixed(decimals):val:'—'}</div>`;
 
-  // Top probability — 15%+, no badge required, not already shown above
-  const shownNames = new Set([...elite,...allStar,...value].map(r=>r.name));
-  const topProb = capPerGame(
-    players.filter(r => !shownNames.has(r.name) && r.hrp >= 15).sort((a,b)=>b.hrp-a.hrp),
-    3
-  ).slice(0,12);
+  const rows = ranked.map((r, i) => {
+    const {signals, count, badge, hrp: lhrp} = getSignalsLocked(r);
+    const lockedHrp = lhrp || r.hrp || 0;
+    const streak = STREAK[r.name];
+    const batter = getBatter(r.name) || {};
+    const pit = getPitcher(r.pitName) || {};
+    const park = getPark(r.game?.home || r.team) || {};
 
-  const buildCard = (r) => {
-    const {badge, signals} = getSignalsLocked(r);
-    const streak  = STREAK[r.name];
-    const ps      = PARK_SPLITS[r.name];
-    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-    const src = r.source==='live'||r.source==='confirmed' ? '<span class="sb slive" style="font-size:9px">✓</span>' : '<span class="sb sproj" style="font-size:9px">~</span>';
-    const evBadge = r.bookOdds && r.evEdge > 2
-      ? `<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:rgba(74,222,128,.15);color:var(--green);border:1px solid rgba(74,222,128,.3)">+EV</span>` : '';
-    const activeSignals = signals.filter(s=>s.active);
-    const topReason = activeSignals.length ? activeSignals[0].label
-      : ps?.flag==='boost' ? 'Career park boost'
-      : r.hrp >= 20 ? 'Elite probability' : 'Strong contact profile';
-    return `<div class="tcard" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}" style="cursor:pointer">
-      <div class="tn">${r.name} ${src} <span style="font-size:13px">${streak?.flame||''}</span></div>
-      <div class="tteam">${r.team} vs ${r.pitName} · ${r.time}</div>
-      <div style="display:flex;align-items:center;justify-content:space-between;margin:6px 0">
-        <div class="tprob" style="color:${hrpColor}">${r.hrp.toFixed(1)}<span>%</span></div>
-        <div style="display:flex;gap:4px;align-items:center">
-          ${evBadge}
-          ${badge?`<span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};border:1px solid ${badge.bd}">${badge.label.replace(' Play','')}</span>`:''}
-        </div>
+    // Badge border color
+    const borderColor = badge?.label?.includes('Elite') ? 'rgba(245,158,11,0.6)'
+      : badge?.label?.includes('All') ? 'rgba(96,165,250,0.5)'
+      : badge?.label?.includes('Value') ? 'rgba(167,139,250,0.4)'
+      : 'transparent';
+
+    // Tags
+    const handTag = `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6)">${r.team} ${batter.bats||'R'} · vs ${r.pitHand||'R'}</span>`;
+    const parkTag = (park.f||1)>=1.05
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(74,222,128,0.12);color:var(--green)">Park+</span>`
+      : (park.f||1)<=0.95
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(248,113,113,0.12);color:var(--red)">Park−</span>` : '';
+    const hotTag = streak?.flame
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(245,158,11,0.15);color:var(--amber)">${streak.flame}</span>` : '';
+    const l7Tag = streak?.gameLog?.length
+      ? `<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(96,165,250,0.10);color:var(--blue)">L7 ${streak.gameLog.filter(g=>g.hr>0).length}</span>` : '';
+
+    // Active signal icons
+    const sigIcons = signals.map(s => `<span style="opacity:${s.active?1:0.15};font-size:11px">${s.icon}</span>`).join('');
+
+    // Badge pill
+    const badgePill = badge
+      ? `<span style="font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:${badge.bg};color:${badge.color};border:0.5px solid ${badge.bd};white-space:nowrap">${badge.label.replace(' Play','')}</span>`
+      : `<span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3)">${count} sig</span>`;
+
+    return `<div style="display:grid;grid-template-columns:28px 190px 52px 48px 48px 52px 48px 52px 52px 52px 52px 80px;gap:0;padding:9px 16px;border-bottom:0.5px solid rgba(255,255,255,0.06);align-items:center;border-left:2px solid ${borderColor};cursor:pointer" onclick="goToPlayer('${r.name.replace(/'/g,"\\'")}')">
+      <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-align:center">${i+1}</div>
+      <div style="min-width:0">
+        <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.92);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${r.name}</div>
+        <div style="display:flex;gap:3px;flex-wrap:wrap;margin-top:2px">${handTag}${parkTag}${hotTag}${l7Tag}</div>
       </div>
-      <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">📌 ${topReason}</div>
-      <div>${signalPanel(r, true)}</div>
+      ${cell(lockedHrp, hrpColor(lockedHrp))}
+      ${cell(batter.ba, brlColor(batter.ba||0))}
+      ${cell(batter.hh, hhColor(batter.hh||0), 0)}
+      ${cell(batter.ev, evColor(batter.ev||0))}
+      ${cell(batter.la, laColor(batter.la), 0)}
+      <div style="font-size:11px;font-family:var(--mono);text-align:right;color:${xeraColor(pit.xera||4.5)}">${pit.xera?.toFixed(2)||'—'}</div>
+      <div style="font-size:11px;font-family:var(--mono);text-align:right;color:${hr9Color(pit.hr9||1.2)}">${pit.hr9?.toFixed(2)||'—'}</div>
+      <div style="font-size:11px;font-family:var(--mono);text-align:right;color:${hhPitColor(pit.hh||38)}">${pit.hh?.toFixed(0)||'—'}%</div>
+      <div style="font-size:11px;font-family:var(--mono);text-align:right;color:${whiffColor(pit.whiff||22)}">${pit.whiff?.toFixed(0)||'—'}%</div>
+      <div style="display:flex;gap:1px;justify-content:flex-end;align-items:center">${sigIcons}</div>
+      <div style="text-align:right">${badgePill}</div>
     </div>`;
-  };
+  }).join('');
 
-  const emptyState = (msg) =>
-    `<div style="grid-column:1/-1;padding:10px 4px;font-size:10px;font-family:var(--mono);color:var(--t3);font-style:italic">${msg}</div>`;
+  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
+  const dateStr = new Date(etStr).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
 
-  const sectionHeader = (icon, title, subtitle, color) =>
-    `<div style="grid-column:1/-1;padding:8px 2px 10px;border-top:0.5px solid rgba(255,255,255,0.10);margin-top:4px">
-      <div style="font-size:13px;font-weight:700;color:${color}">${icon} ${title}</div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">${subtitle}</div>
-    </div>`;
+  el.innerHTML = `<div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92)">⚾ HRProb · Cheat Sheet</div>
+      <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:2px;display:flex;align-items:center;gap:6px">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span>
+        ${dateStr} · ${games.length} games · Signal lock set · Top ${ranked.length} by HR probability
+      </div>
+    </div>
+    <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.35)">For research purposes only</div>
+  </div>
 
-  let html = '';
+  <div style="display:grid;grid-template-columns:28px 190px 52px 48px 48px 52px 48px 52px 52px 52px 52px 80px;gap:0;padding:7px 16px;background:var(--bg3);border-bottom:0.5px solid rgba(255,255,255,0.10)">
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em">#</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em">Player</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">HR%</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">Brl%</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">HH%</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">EV</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">LA</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right;border-left:0.5px solid rgba(255,255,255,0.08);padding-left:6px">xERA</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">HR/9</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">HH%</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">Whiff</div>
+    <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:.06em;text-align:right">Signals</div>
+    <div></div>
+  </div>
 
-  // Elite
-  html += sectionHeader('🏆', 'Elite Plays', elite.length ? `${elite.length} play${elite.length!==1?'s':''} today · 5-6 signals · best of the best` : 'No Elite plays today', 'var(--amber)');
-  html += elite.length ? elite.map(r=>buildCard(r)).join('') : emptyState('No players with 5+ signals today — check back as lineups and conditions confirm');
+  <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.25);padding:4px 16px;background:var(--bg3);border-bottom:0.5px solid rgba(255,255,255,0.06);display:flex;gap:16px">
+    <span>← Batter stats</span>
+    <span style="margin-left:auto">Pitcher vulnerability →</span>
+  </div>
 
-  // All-Star
-  html += sectionHeader('⭐', 'All-Star Plays', allStar.length ? `Top ${allStar.length} of today's All-Star plays · 4 signals · max 3 per game` : 'No All-Star plays today', 'var(--teal)');
-  html += allStar.length ? allStar.map(r=>buildCard(r)).join('') : emptyState('No players with 4 signals today');
+  ${rows}
 
-  // Value
-  html += sectionHeader('💡', 'Value Plays', value.length ? `Top ${value.length} of today's Value plays · 3 signals · max 3 per game` : 'No Value plays today', 'var(--purple)');
-  html += value.length ? value.map(r=>buildCard(r)).join('') : emptyState('No players with 3 signals today');
-
-  // Top Probability
-  html += sectionHeader('📊', 'Top Probability', topProb.length ? `${topProb.length} plays · 15%+ model probability · no signal requirement · max 3 per game` : 'No additional probability plays today', 'var(--t2)');
-  html += topProb.length ? topProb.map(r=>buildCard(r)).join('') : emptyState('All 15%+ players already featured above');
-
-  document.getElementById('tgrid').innerHTML = html;
+  <div style="padding:10px 16px;font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);border-top:0.5px solid rgba(255,255,255,0.06)">
+    Green = elite · Teal = above avg · Amber = caution · Red = high vulnerability · Pitcher columns: lower xERA/HR9/HH% = better pitcher
+  </div>`;
 }
+
 
 function updateSbar(rows){}
 
