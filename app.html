@@ -7330,13 +7330,19 @@ function renderTargets(){
     const existing = seen.get(r.name);
     if (!existing || score > scorePlayer(existing)) seen.set(r.name, r);
   }
+  const tierOrder = label => label?.includes('Elite') ? 0 : label?.includes('All') ? 1 : label?.includes('Value') ? 2 : 3;
+
   const ranked = [...seen.values()]
     .filter(r => {
-      const {count, badge, hrp: lhrp} = getSignalsLocked(r);
-      const hrp = lhrp || r.hrp || 0;
+      const {count, badge} = getSignalsLocked(r);
       return count >= 4 || badge?.label?.includes('Elite') || badge?.label?.includes('All-Star');
     })
-    .sort((a,b) => scorePlayer(b) - scorePlayer(a))
+    .sort((a,b) => {
+      const ta = tierOrder(getSignalsLocked(a).badge?.label);
+      const tb = tierOrder(getSignalsLocked(b).badge?.label);
+      if (ta !== tb) return ta - tb;
+      return scorePlayer(b) - scorePlayer(a);
+    })
     .slice(0, 25);
 
   if (!ranked.length) {
