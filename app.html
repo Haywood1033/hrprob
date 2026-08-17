@@ -7310,11 +7310,25 @@ function renderTargets(){
   const el = document.getElementById('tgrid');
   if (!el) return;
 
+  // Inline score function — conviction = hrp × weight + signal boost
+  const scorePlayer = r => {
+    const {count, signals, ci, hrp: lhrp} = getSignalsLocked(r);
+    const hrp = lhrp || r.hrp || 0;
+    const streak = STREAK[r.name];
+    const streakBonus = signals?.[3]?.active ? (streak?.flame==='🔥🔥' ? 3 : 1.5) : 0;
+    const ps = PARK_SPLITS[r.name];
+    return hrp * 3 + count * 5 + streakBonus
+      + (ps?.flag==='boost' ? 2 : 0)
+      + (ci?.tier==='high' ? 2 : ci?.tier==='mid' ? 1 : 0);
+  };
+
   // Best Plays ranking — same scorePlayer logic, dedupe by name
   const seen = new Map();
   for (const r of allRows) {
+    if (!r?.name) continue;
     const score = scorePlayer(r);
-    if (!seen.has(r.name) || score > scorePlayer(seen.get(r.name))) seen.set(r.name, r);
+    const existing = seen.get(r.name);
+    if (!existing || score > scorePlayer(existing)) seen.set(r.name, r);
   }
   const ranked = [...seen.values()]
     .filter(r => {
