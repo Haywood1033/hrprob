@@ -1103,13 +1103,13 @@ function hrProbWithStreak(batter, park, wx, pit, order) {
   // ── CALIBRATION CORRECTION (based on 28-day accuracy data, 1893 predictions) ──
   // 20%+ tier: model avg 22.4% but actual 15.7% → still overconfident, reduce further
   // ── CALIBRATION — 54-day, 3,727 predictions ──────────────────
-  // 20%+:   model avg 22.2% → actual 16.4% → ×0.74 corrects perfectly
-  // 15-19%: model avg 17.3% → actual 17.6% → essentially perfect, no adjustment needed
+  // 20%+:   model avg 22.2% → actual 16.4% → ×0.74 corrects
+  // 15-19%: model avg 17.3% → actual 17.6% → accurate, no adjustment
   // 10-14%: model avg 12.4% → actual 12.9% → accurate, no adjustment
-  // 5-9%:   model avg  7.7% → actual  9.2% → model under-predicts → ×1.20 boost
+  // 5-9%:   model avg  7.7% → actual  9.2% → statistically higher but
+  //         removing boost — signal play hit rate more predictive than raw tier
   const pRaw = p;
-  if      (pRaw >= 20) p *= 0.74;  // brings 22.2% → 16.4% ✓
-  else if (pRaw >=  5 && pRaw < 10) p *= 1.20; // brings 7.7% → 9.2% ✓
+  if (pRaw >= 20) p *= 0.74; // brings 22.2% → 16.4% ✓
 
   return Math.min(35, p);
 }
