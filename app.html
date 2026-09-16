@@ -5113,7 +5113,10 @@ function renderSimulate() {
     return g ? { pk: String(pk), label: `${g.away} @ ${g.home}`, time: g.time } : null;
   }).filter(Boolean);
 
-  if (_simGames.size === 0) gameList.forEach(g => _simGames.add(g.pk));
+  if (_simGames.size === 0 && !window._simInitialized) {
+    window._simInitialized = true;
+    gameList.forEach(g => _simGames.add(g.pk));
+  }
 
   // Filter players by selected games and signal threshold
   const filteredPlayers = allPlayers.filter(p => {
@@ -5194,8 +5197,8 @@ function renderSimulate() {
     <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:8px">🎲 Simulate</div>
     <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:10px">Select games to simulate · ${filteredPlayers.length} players · ${signalPlayers.length} signal plays</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <button onclick="_simGames.clear();window._simGameList?.forEach(g=>_simGames.add(g.pk));renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">All games</button>
-      <button onclick="_simGames.clear();renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">Clear all</button>
+      <button onclick="window._simInitialized=false;_simGames.clear();renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">All games</button>
+      <button onclick="window._simInitialized=true;_simGames.clear();renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">Clear all</button>
       ${gamePills}
     </div>
   </div>
@@ -5283,6 +5286,7 @@ window.toggleSimGame = (pk, btn) => {
   } else {
     _simGames.add(pk);
   }
+  window._simInitialized = true; // prevent auto-repopulate
   renderSimulate();
 };
 
