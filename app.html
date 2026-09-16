@@ -5162,21 +5162,8 @@ function renderSimulate() {
   const hhPColor     = v => v>=50?'var(--red)':v>=43?'var(--amber)':'rgba(255,255,255,0.6)';
   const whiffColor   = v => v>=30?'var(--green)':v>=24?'var(--teal)':'rgba(255,255,255,0.6)';
 
-  // ── Section 1: Slate Narrative (AI-generated) ────────────────
-  const narrativePrompt = `You are a sharp MLB home run analyst writing a concise daily slate briefing. Write 3-4 sentences only. Be direct and specific — no fluff.
-
-Today's data:
-- Date: ${dateStr}
-- Games: ${games.length} total, ${openGames.length} open-air
-- Wind-favorable parks (carrying out): ${windOutGames.map(g=>{const p=getPark(g.home);const hrw=calcHRWeather(g.home,WX[g.home]||{},p||{});return (p?.name||g.home)+' ('+( hrw?.windCarry>0?'+':'')+hrw?.windCarry?.toFixed(1)+'% carry)'}).join(', ')||'None'}
-- Top HR environments: ${topParks.map(p=>p.name+' ('+( p.hrw.score>0?'+':'')+p.hrw.score+'%)').join(', ')||'None standout'}
-- Vulnerable pitchers on slate (xERA 5.00+): ${[...new Set(vulnPitchers.map(p=>p.name||''))].slice(0,3).join(', ')||'None at 5.00+'}
-- Sharp plays identified: ${sharpPlays.length} (players where signals + probability + pitcher vulnerability all align)
-- Top sharp play: ${sharpPlays[0]?sharpPlays[0].name+' ('+( (getSignalsLocked(sharpPlays[0]).hrp||sharpPlays[0].hrp||0).toFixed(1)+'% HR prob, '+(getSignalsLocked(sharpPlays[0]).count)+' signals vs '+(sharpPlays[0].pitName||'TBD')+')'):'None yet'}
-
-Write the briefing. Cover: overall environment quality, standout conditions, key vulnerability, and one-sentence take on the slate. Do not use bullet points. Do not start with "Today" or "The slate". Be sharp and direct like a professional handicapper.`;
-
-  // ── Render skeleton immediately, fill narrative async ────────
+  // ── Section 1: Slate Narrative (data-driven) ────────────────
+  // ── Render full view ────────────────────────────────────────
   el.innerHTML = `
   <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:14px 16px;display:flex;justify-content:space-between;align-items:center">
     <div>
@@ -5314,27 +5301,12 @@ Write the briefing. Cover: overall environment quality, standout conditions, key
 
   </div>`;
 
-  // Generate narrative async via Claude API
-  fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 200,
-      messages: [{ role: 'user', content: narrativePrompt }]
-    })
-  }).then(res => res.json()).then(data => {
-    const text = data.content?.[0]?.text || '';
-    const el2 = document.getElementById('sharp-narrative');
-    if (el2 && text) el2.innerHTML = text.replace(/\n/g,'<br>');
-  }).catch(() => {
-    const el2 = document.getElementById('sharp-narrative');
-    if (el2) {
-      // Fallback: build narrative from data
-      const envScore = topParks.length >= 2 ? 'favorable' : topParks.length === 1 ? 'mixed' : 'neutral';
-      el2.innerHTML = `${games.length}-game slate with ${openGames.length} open-air parks. ${windOutGames.length ? windOutGames.length+' game'+(windOutGames.length>1?'s':'')+' with wind carrying out — '+topParks.map(p=>p.name).join(', ')+' stand out.' : 'No significant wind advantage today.'} ${vulnPitchers.length ? 'Pitcher vulnerability is elevated — '+vulnPitchers.length+' starter'+(vulnPitchers.length>1?'s':'')+' projecting at xERA 5.00+.' : 'Pitcher quality is solid across the board.'} ${sharpPlays.length ? sharpPlays.length+' play'+(sharpPlays.length>1?'s where':'where')+' the full model converges — focus there.' : 'No plays meet the sharp threshold today — consider waiting.'}`;
-    }
-  });
+  // Build narrative from data — no API call needed
+  const envScore = topParks.length >= 2 ? 'favorable' : topParks.length === 1 ? 'mixed' : 'neutral';
+  const narrativeEl = document.getElementById('sharp-narrative');
+  if (narrativeEl) {
+    narrativeEl.innerHTML = `${games.length}-game slate with ${openGames.length} open-air parks. ${windOutGames.length ? windOutGames.length+' game'+(windOutGames.length>1?'s':'')+' with wind carrying out — '+topParks.map(p=>p.name).join(', ')+' stand out.' : 'No significant wind advantage today.'} ${vulnPitchers.length ? 'Pitcher vulnerability is elevated — '+[...new Set(vulnPitchers.map(p=>p.name||''))].slice(0,3).join(', ')+' projecting at xERA 5.00+.' : 'Pitcher quality is solid across the board — no standout vulnerabilities.'} ${sharpPlays.length ? sharpPlays.length+' play'+(sharpPlays.length>1?'s where the full model converges':'where the full model converges')+' — focus there.' : 'No plays meet the sharp threshold today — consider waiting for a better setup.'}`;
+  }
 }
 
 function calcHRWeather(team, wx, park) {
