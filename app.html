@@ -5194,8 +5194,8 @@ function renderSimulate() {
     <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:8px">🎲 Simulate</div>
     <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:10px">Select games to simulate · ${filteredPlayers.length} players · ${signalPlayers.length} signal plays</div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-      <button onclick="Object.keys(Object.fromEntries(_simGames.entries?.()??[])).length;_simGames.clear();gameList?.forEach?.(g=>_simGames.add(g.pk));renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">All games</button>
-      <button onclick="_simGames.clear();renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">Clear</button>
+      <button onclick="_simGames.clear();window._simGameList?.forEach(g=>_simGames.add(g.pk));renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">All games</button>
+      <button onclick="_simGames.clear();renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">Clear all</button>
       ${gamePills}
     </div>
   </div>
