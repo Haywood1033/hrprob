@@ -5226,24 +5226,60 @@ function renderSimulate() {
       </div>
     </div>
 
-    <!-- Section 2: Per-player simulation -->
+    <!-- Section 2: HR Distribution -->
     <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;overflow:hidden">
       <div style="padding:12px 14px;border-bottom:0.5px solid rgba(255,255,255,0.08)">
-        <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.85)">Player HR Probabilities</div>
-        <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:2px">Simulated across ${_simN.toLocaleString()} slates</div>
+        <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.85)">HR Distribution — Selected Games</div>
+        <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:2px">${_simN.toLocaleString()} simulations · ${filteredPlayers.length} players</div>
       </div>
-      <table style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr style="border-bottom:0.5px solid rgba(255,255,255,0.08)">
-            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:left">Player</th>
-            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">Model</th>
-            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">1+ HR</th>
-            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">2+ HR</th>
-            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">Sig</th>
-          </tr>
-        </thead>
-        <tbody>${simRows}</tbody>
-      </table>
+      <div style="padding:14px">
+        ${(() => {
+          // Run full distribution sim
+          const dist = new Array(20).fill(0);
+          for (let i = 0; i < _simN; i++) {
+            let total = 0;
+            filteredPlayers.forEach(p => { if (Math.random() < p.hrp/100) total++; });
+            if (total < dist.length) dist[total]++;
+          }
+          const pct = n => (dist.slice(n).reduce((a,b)=>a+b,0) / _simN * 100).toFixed(1);
+          const median = dist.findIndex((_,i) => dist.slice(0,i+1).reduce((a,b)=>a+b,0) / _simN >= 0.5);
+          const lo90 = dist.findIndex((_,i) => dist.slice(0,i+1).reduce((a,b)=>a+b,0) / _simN >= 0.05);
+          const hi90 = dist.findIndex((_,i) => dist.slice(0,i+1).reduce((a,b)=>a+b,0) / _simN >= 0.95);
+          const maxDist = Math.max(...dist);
+
+          const rows = [0,1,2,3,4,5,6,7,8].map(n => {
+            const p = (dist[n]||0) / _simN * 100;
+            const barW = Math.round(p / (maxDist/_simN*100) * 100);
+            return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+              <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);width:40px;text-align:right">${n} HR${n!==1?'s':''}</div>
+              <div style="flex:1;background:rgba(255,255,255,0.06);border-radius:3px;height:14px;overflow:hidden">
+                <div style="width:${barW}%;height:14px;background:${n===median?'var(--green)':'rgba(74,222,128,0.4)'};border-radius:3px;transition:width .3s"></div>
+              </div>
+              <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.7);width:40px">${p.toFixed(1)}%</div>
+            </div>`;
+          }).join('');
+
+          return `${rows}
+          <div style="border-top:0.5px solid rgba(255,255,255,0.08);margin-top:10px;padding-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-bottom:3px">90% CONFIDENCE</div>
+              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:rgba(255,255,255,0.85)">${lo90}–${hi90} HRs</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-bottom:3px">MEDIAN</div>
+              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:var(--green)">${median} HRs</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-bottom:3px">3+ HRs</div>
+              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:var(--teal)">${pct(3)}%</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:8px;text-align:center">
+              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-bottom:3px">5+ HRs</div>
+              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:var(--amber)">${pct(5)}%</div>
+            </div>
+          </div>`;
+        })()}
+      </div>
     </div>
 
     <!-- Section 3: Parlay Optimizer -->
