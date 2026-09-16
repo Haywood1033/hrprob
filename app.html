@@ -5096,199 +5096,245 @@ function renderSimulate() {
   const el = document.getElementById('sim-grid');
   if (!el) return;
 
-  // Triple-convergence filter: high signals + high hrp + vulnerable pitcher
-  // This is the "sharp" threshold — all three must be true
+  // Build player pool
   const seen = new Map();
   for (const r of allRows) {
     const {hrp: lhrp} = getSignalsLocked(r);
     const hrp = lhrp || r.hrp || 0;
     if (!seen.has(r.name) || hrp > (getSignalsLocked(seen.get(r.name)).hrp||0)) seen.set(r.name, r);
   }
+  const allPlayers = [...seen.values()];
 
-  const sharpPlays = [...seen.values()].filter(r => {
-    const {count, badge, hrp: lhrp} = getSignalsLocked(r);
+  // Triple convergence filter — strict
+  const sharpPlays = allPlayers.filter(r => {
+    const {count, hrp: lhrp} = getSignalsLocked(r);
     const hrp = lhrp || r.hrp || 0;
     const pit = getPitcher(r.pitName) || {};
-    // Strict triple convergence — all three must be true
-    const highSignals = count >= 5;                          // 5+ signals (not just 4)
-    const highProb    = hrp >= 14;                           // 14%+ HR probability
-    const vulnPitcher = (pit.xera||4.5) >= 4.80             // genuinely weak pitcher
-                     || (pit.hr9||1.2)  >= 1.40;
-    return highSignals && highProb && vulnPitcher;
+    return count >= 5 && hrp >= 14
+      && ((pit.xera||4.5) >= 4.80 || (pit.hr9||1.2) >= 1.40);
   }).sort((a,b) => {
-    const ta = t => t?.includes('Elite')?0:t?.includes('All')?1:t?.includes('Value')?2:3;
-    const ba = getSignalsLocked(a).badge?.label, bb = getSignalsLocked(b).badge?.label;
-    if (ta(ba) !== ta(bb)) return ta(ba) - ta(bb);
-    return (getSignalsLocked(b).hrp||b.hrp||0) - (getSignalsLocked(a).hrp||a.hrp||0);
-  }).slice(0, 8);
+    const t = l => l?.includes('Elite')?0:l?.includes('All')?1:l?.includes('Value')?2:3;
+    const ta = t(getSignalsLocked(a).badge?.label), tb = t(getSignalsLocked(b).badge?.label);
+    if (ta!==tb) return ta-tb;
+    return (getSignalsLocked(b).hrp||b.hrp||0)-(getSignalsLocked(a).hrp||a.hrp||0);
+  }).slice(0, 5); // max 5 — force selectivity
+
+  // Near-miss / fade candidates — almost qualified but have red flag
+  const fades = allPlayers.filter(r => {
+    const {count, hrp: lhrp} = getSignalsLocked(r);
+    const hrp = lhrp || r.hrp || 0;
+    const pit = getPitcher(r.pitName) || {};
+    const streak = STREAK[r.name];
+    const gameLog = streak?.gameLog || [];
+    const consecHR = (() => { let c=0; for(const g of gameLog){if(g.hr>0)c++;else break;} return c; })();
+    // Almost qualified but has a concern
+    const almostQual = count >= 4 && hrp >= 12;
+    const hasRedFlag = consecHR >= 3                         // homered 3+ straight
+      || (pit.whiff||0) >= 30                               // pitcher is actually strikeout dominant
+      || ((pit.xera||4.5) < 4.00 && count < 6);            // facing ace with fewer signals
+    return almostQual && hasRedFlag && !sharpPlays.find(s=>s.name===r.name);
+  }).slice(0, 3);
 
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
-  const dateStr = new Date(etStr).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const dateStr = new Date(etStr).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
 
-  if (!sharpPlays.length) {
-    el.innerHTML = `<div style="padding:40px;text-align:center;color:rgba(255,255,255,0.4);font-family:var(--mono);font-size:13px">
-      <div style="font-size:24px;margin-bottom:12px">🎯</div>
-      No sharp plays yet — signal lock may still be building<br>
-      <span style="font-size:11px">Requires 4+ signals + 10%+ HR prob + vulnerable pitcher</span>
-    </div>`;
-    return;
-  }
+  // ── Slate context for narrative ──────────────────────────────
+  const openGames = games.filter(g => !WX[g.home]?.dome);
+  const windOutGames = openGames.filter(g => {
+    const wx = WX[g.home]||{};
+    const park = getPark(g.home)||{};
+    const hrw = calcHRWeather(g.home, wx, park);
+    return (hrw?.windCarry||0) > 2;
+  });
+  const vulnPitchers = allPlayers.map(r => getPitcher(r.pitName)).filter(p => p && (p.xera||4.5)>=5.00);
+  const topParks = openGames.map(g => {
+    const wx = WX[g.home]||{}, park = getPark(g.home)||{};
+    return { name: park.name||g.home, hrw: calcHRWeather(g.home, wx, park) };
+  }).filter(p=>p.hrw?.score>5).sort((a,b)=>b.hrw.score-a.hrw.score).slice(0,3);
 
-  const tierColor = label => label?.includes('Elite') ? '#BA7517' : label?.includes('All') ? '#185FA5' : '#533AB7';
-  const tierBg    = label => label?.includes('Elite') ? 'rgba(186,117,23,0.06)' : label?.includes('All') ? 'rgba(24,95,165,0.06)' : 'rgba(83,58,183,0.06)';
-  const tierBadgeBg = label => label?.includes('Elite') ? 'rgba(245,158,11,0.15)' : label?.includes('All') ? 'rgba(96,165,250,0.12)' : 'rgba(167,139,250,0.12)';
-  const probColor = p => p>=20?'var(--green)':p>=15?'var(--teal)':p>=10?'var(--amber)':'rgba(255,255,255,0.6)';
-  const xeraColor = v => v>=5.00?'var(--red)':v>=4.50?'var(--amber)':'rgba(255,255,255,0.6)';
-  const hr9Color  = v => v>=1.50?'var(--red)':v>=1.20?'var(--amber)':'rgba(255,255,255,0.6)';
-  const hhPColor  = v => v>=50?'var(--red)':v>=43?'var(--amber)':'rgba(255,255,255,0.6)';
-  const whiffColor= v => v>=30?'var(--green)':v>=24?'var(--teal)':'rgba(255,255,255,0.6)';
-  const brlColor  = v => v>=18?'var(--green)':v>=12?'var(--teal)':'rgba(255,255,255,0.6)';
-  const hhBColor  = v => v>=55?'var(--green)':v>=45?'var(--teal)':'rgba(255,255,255,0.6)';
-  const laColor   = v => v!=null&&v>=22&&v<=32?'var(--green)':v!=null&&v>=18&&v<=36?'var(--teal)':'rgba(255,255,255,0.6)';
+  // Color helpers
+  const tierColor    = l => l?.includes('Elite')?'#BA7517':l?.includes('All')?'#185FA5':'#533AB7';
+  const tierBg       = l => l?.includes('Elite')?'rgba(186,117,23,0.06)':l?.includes('All')?'rgba(24,95,165,0.06)':'rgba(83,58,183,0.06)';
+  const tierBadgeBg  = l => l?.includes('Elite')?'rgba(245,158,11,0.15)':l?.includes('All')?'rgba(96,165,250,0.12)':'rgba(167,139,250,0.12)';
+  const probColor    = p => p>=20?'var(--green)':p>=15?'var(--teal)':p>=10?'var(--amber)':'rgba(255,255,255,0.6)';
+  const xeraColor    = v => v>=5.00?'var(--red)':v>=4.50?'var(--amber)':v<4.00?'var(--green)':'rgba(255,255,255,0.6)';
+  const hr9Color     = v => v>=1.50?'var(--red)':v>=1.20?'var(--amber)':v<1.00?'var(--green)':'rgba(255,255,255,0.6)';
+  const hhPColor     = v => v>=50?'var(--red)':v>=43?'var(--amber)':'rgba(255,255,255,0.6)';
+  const whiffColor   = v => v>=30?'var(--green)':v>=24?'var(--teal)':'rgba(255,255,255,0.6)';
 
-  const cards = sharpPlays.map(r => {
-    const {signals, count, badge, hrp: lhrp, ci} = getSignalsLocked(r);
-    const hrp    = lhrp || r.hrp || 0;
-    const batter = getBatter(r.name) || {};
-    const pit    = getPitcher(r.pitName) || {};
-    const park   = getPark(r.game?.home || r.team) || {};
-    const streak = STREAK[r.name];
-    const wx     = WX[r.game?.home || r.team] || {};
-    const hrw    = calcHRWeather(r.game?.home || r.team, wx, park);
+  // ── Section 1: Slate Narrative (AI-generated) ────────────────
+  const narrativePrompt = `You are a sharp MLB home run analyst writing a concise daily slate briefing. Write 3-4 sentences only. Be direct and specific — no fluff.
 
-    // HR recency — consecutive games with HR and days since last HR
-    const gameLog = streak?.gameLog || [];
-    const hrGames = gameLog.map(g => g.hr > 0);
-    let consecHR = 0;
-    for (let i = 0; i < hrGames.length; i++) {
-      if (hrGames[i]) consecHR++;
-      else break;
-    }
-    const lastHRIdx = hrGames.findIndex(g => g);
-    const daysSinceHR = lastHRIdx === -1 ? null : lastHRIdx; // 0 = homered last game
-    const hrRecencyText = consecHR >= 2
-      ? `🔴 HR in last ${consecHR} straight games`
-      : consecHR === 1
-      ? `✅ HR last game`
-      : lastHRIdx === -1
-      ? `No HR in last ${gameLog.length} games`
-      : `Last HR: ${lastHRIdx} game${lastHRIdx>1?'s':''} ago`;
-    const hrRecencyColor = consecHR >= 3 ? 'var(--red)'
-      : consecHR >= 2 ? 'var(--amber)'
-      : consecHR === 1 ? 'var(--teal)'
-      : lastHRIdx === -1 ? 'rgba(255,255,255,0.4)'
-      : 'rgba(255,255,255,0.6)';
-    const hrRecencyNote = consecHR >= 3
-      ? '— regression risk'
-      : consecHR >= 2
-      ? '— monitor closely'
-      : consecHR === 1
-      ? '— hot right now'
-      : '';
-    const badgeLabel = badge?.label || '';
-    const tColor = tierColor(badgeLabel);
+Today's data:
+- Date: ${dateStr}
+- Games: ${games.length} total, ${openGames.length} open-air
+- Wind-favorable parks (carrying out): ${windOutGames.map(g=>{const p=getPark(g.home);const hrw=calcHRWeather(g.home,WX[g.home]||{},p||{});return (p?.name||g.home)+' ('+( hrw?.windCarry>0?'+':'')+hrw?.windCarry?.toFixed(1)+'% carry)'}).join(', ')||'None'}
+- Top HR environments: ${topParks.map(p=>p.name+' ('+( p.hrw.score>0?'+':'')+p.hrw.score+'%)').join(', ')||'None standout'}
+- Vulnerable pitchers on slate (xERA 5.00+): ${[...new Set(vulnPitchers.map(p=>p.name||''))].slice(0,3).join(', ')||'None at 5.00+'}
+- Sharp plays identified: ${sharpPlays.length} (players where signals + probability + pitcher vulnerability all align)
+- Top sharp play: ${sharpPlays[0]?sharpPlays[0].name+' ('+( (getSignalsLocked(sharpPlays[0]).hrp||sharpPlays[0].hrp||0).toFixed(1)+'% HR prob, '+(getSignalsLocked(sharpPlays[0]).count)+' signals vs '+(sharpPlays[0].pitName||'TBD')+')'):'None yet'}
 
-    // Why it's sharp — build conviction reasons from active signals
-    const reasons = [];
-    if (signals[0]?.active) {
-      const pf = park.f ? ((park.f-1)*100).toFixed(0) : '';
-      reasons.push(`🏟 Park+ ${pf?'· '+pf+'% HR factor':''}`);
-    }
-    if (signals[1]?.active) {
-      const carry = hrw?.windCarry ? (hrw.windCarry>0?'+':'')+hrw.windCarry.toFixed(1)+'% carry' : '';
-      reasons.push(`💨 Wind out ${wx.ws||0}mph ${carry?'· '+carry:''}`);
-    }
-    if (signals[2]?.active) reasons.push(`🎯 Pitcher xERA ${(pit.xera||4.5).toFixed(2)} · HR/9 ${(pit.hr9||1.2).toFixed(2)}`);
-    if (signals[3]?.active) reasons.push(`🔥 ${streak?.flame==='🔥🔥'?'Scorching':'Hot streak'} · ${streak?.gameLog?.filter(g=>g.hr>0).length||0} HR last 10 games`);
-    if (signals[5]?.active) reasons.push(`🏏 Pull ${batter.pull_pct?.toFixed(0)||'—'}% · FB ${batter.fb_pct?.toFixed(0)||'—'}% vs fly-ball pitcher`);
-    if (signals[6]?.active) {
-      const bvp = BATTER_VS_PITCH[r.name];
-      const topPitch = bvp ? Object.entries(bvp).sort((a,b)=>b[1].pa-a[1].pa)[0] : null;
-      reasons.push(`⚔️ xwOBA ${topPitch?topPitch[1].xwoba?.toFixed(3):'—'} vs ${topPitch?topPitch[0]:'primary pitch'}`);
-    }
-    if (signals[7]?.active) reasons.push(`💥 Brl ${batter.ba?.toFixed(1)||'—'}% · HH ${batter.hh?.toFixed(0)||'—'}% · LA ${batter.la?.toFixed(0)||'—'}°`);
+Write the briefing. Cover: overall environment quality, standout conditions, key vulnerability, and one-sentence take on the slate. Do not use bullet points. Do not start with "Today" or "The slate". Be sharp and direct like a professional handicapper.`;
 
-    const reasonsHTML = reasons.slice(0,5).map(r =>
-      `<div style="font-size:11px;color:rgba(255,255,255,0.75);padding:2px 0;display:flex;gap:6px">
-        <span style="flex-shrink:0">${r.slice(0,2)}</span>
-        <span style="color:rgba(255,255,255,0.65)">${r.slice(2)}</span>
-      </div>`
-    ).join('');
-
-    const sigIcons = signals.map(s =>
-      `<span style="font-size:14px;opacity:${s.active?1:0.15}">${s.icon}</span>`
-    ).join('');
-
-    // Signal summary line
-    const missingSigs = signals.filter(s=>!s.active).map(s=>s.icon).join(' ');
-    const summaryText = count===8 ? 'Everything aligned · maximum conviction'
-      : missingSigs ? `Missing ${missingSigs} only` : `${count} of 8 signals firing`;
-
-    return `<div style="background:var(--bg2);border:1px solid ${tColor};border-radius:12px;overflow:hidden;margin-bottom:12px">
-
-      <div style="background:${tierBg(badgeLabel)};padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:0.5px solid rgba(255,255,255,0.08)">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:3px">${r.name} ${streak?.flame||''}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.55);margin-bottom:6px">${r.team} · Bat ${r.order} · vs ${r.pitName} · ${r.game?.time||''} · ${park.name||''}</div>
-          <span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:${tierBadgeBg(badgeLabel)};color:${tColor};border:0.5px solid ${tColor}">${badgeLabel}</span>
-          <span style="font-size:10px;font-family:var(--mono);color:${hrRecencyColor};margin-left:8px">${hrRecencyText} ${hrRecencyNote}</span>
-        </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:16px">
-          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HR PROB</div>
-          <div style="font-size:32px;font-weight:500;font-family:var(--mono);color:${probColor(hrp)};letter-spacing:-1px;line-height:1">${hrp.toFixed(1)}%</div>
-          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:3px">${ci?.label||''} confidence</div>
-        </div>
+  // ── Render skeleton immediately, fill narrative async ────────
+  el.innerHTML = `
+  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:14px 16px;display:flex;justify-content:space-between;align-items:center">
+    <div>
+      <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92)">🎯 Sharp Plays</div>
+      <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:2px;display:flex;align-items:center;gap:6px">
+        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span>
+        ${dateStr} · ${sharpPlays.length} sharp plays · 5+ signals · 14%+ HR · vulnerable pitcher
       </div>
+    </div>
+    <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);text-align:right">Triple convergence filter</div>
+  </div>
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+  <div style="padding:14px 16px">
 
-        <div style="padding:12px 16px;border-right:0.5px solid rgba(255,255,255,0.08)">
-          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Why it's sharp</div>
-          ${reasonsHTML || '<div style="font-size:11px;color:rgba(255,255,255,0.4)">Signal details loading…</div>'}
+    <!-- Section 1: Slate Narrative -->
+    <div style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+      <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+        <span style="width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block"></span>
+        Today's slate read
+      </div>
+      <div id="sharp-narrative" style="font-size:13px;line-height:1.7;color:rgba(255,255,255,0.80)">
+        <span style="color:rgba(255,255,255,0.3);font-family:var(--mono);font-size:11px">Generating slate briefing…</span>
+      </div>
+    </div>
+
+    <!-- Section 2: Sharp Plays -->
+    <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+      <span>The plays</span>
+      <span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4)">${sharpPlays.length} targets where everything aligns</span>
+    </div>
+    ${sharpPlays.length ? sharpPlays.map(r => {
+      const {signals,count,badge,hrp:lhrp,ci} = getSignalsLocked(r);
+      const hrp    = lhrp||r.hrp||0;
+      const b      = getBatter(r.name)||{};
+      const pit    = getPitcher(r.pitName)||{};
+      const park   = getPark(r.game?.home||r.team)||{};
+      const streak = STREAK[r.name];
+      const wx     = WX[r.game?.home||r.team]||{};
+      const hrw    = calcHRWeather(r.game?.home||r.team, wx, park);
+      const badgeLabel = badge?.label||'';
+      const tColor = tierColor(badgeLabel);
+
+      // HR recency
+      const gameLog = streak?.gameLog||[];
+      let consecHR=0; for(const g of gameLog){if(g.hr>0)consecHR++;else break;}
+      const lastHRIdx = gameLog.findIndex(g=>g.hr>0);
+      const hrRecencyText = consecHR>=3?`🔴 HR ${consecHR} straight — regression risk`
+        :consecHR>=2?`🟡 HR last 2 games — monitor`
+        :consecHR===1?`✅ HR last game`
+        :lastHRIdx===-1?`No HR in last ${gameLog.length} games`
+        :`Last HR: ${lastHRIdx} game${lastHRIdx>1?'s':''} ago`;
+      const hrRecencyColor = consecHR>=3?'var(--red)':consecHR>=2?'var(--amber)':consecHR===1?'var(--teal)':'rgba(255,255,255,0.5)';
+
+      // Why it's sharp
+      const reasons = [];
+      if(signals[0]?.active){const pf=park.f?(( (park.f-1)*100).toFixed(0)):'';reasons.push(`🏟 Park+ ${pf?'· +'+pf+'% HR factor':''}`);}
+      if(signals[1]?.active){const carry=hrw?.windCarry?(hrw.windCarry>0?'+':'')+hrw.windCarry.toFixed(1)+'% carry':'';reasons.push(`💨 Wind out ${wx.ws||0}mph${carry?' · '+carry:''}`);}
+      if(signals[2]?.active)reasons.push(`🎯 Pitcher xERA ${(pit.xera||4.5).toFixed(2)} · HR/9 ${(pit.hr9||1.2).toFixed(2)}`);
+      if(signals[3]?.active)reasons.push(`🔥 ${streak?.flame==='🔥🔥'?'Scorching':'Hot'} · ${gameLog.filter(g=>g.hr>0).length} HR last 10 games`);
+      if(signals[5]?.active)reasons.push(`🏏 Pull ${b.pull_pct?.toFixed(0)||'—'}% · FB ${b.fb_pct?.toFixed(0)||'—'}% vs fly-ball pitcher`);
+      if(signals[6]?.active){const bvp=BATTER_VS_PITCH[r.name];const tp=bvp?Object.entries(bvp).sort((a,b2)=>b2[1].pa-a[1].pa)[0]:null;reasons.push(`⚔️ xwOBA ${tp?tp[1].xwoba?.toFixed(3):'—'} vs ${tp?tp[0]:'primary pitch'}`);}
+      if(signals[7]?.active)reasons.push(`💥 Brl ${b.ba?.toFixed(1)||'—'}% · HH ${b.hh?.toFixed(0)||'—'}% · LA ${b.la?.toFixed(0)||'—'}°`);
+
+      const sigIcons = signals.map(s=>`<span style="font-size:14px;opacity:${s.active?1:0.12}">${s.icon}</span>`).join('');
+      const summaryText = count===8?'Everything aligned · maximum conviction':count>=6?`${count}/8 signals · elite convergence`:`${count}/8 signals`;
+
+      return `<div style="background:var(--bg2);border:1px solid ${tColor};border-radius:12px;overflow:hidden;margin-bottom:12px">
+        <div style="background:${tierBg(badgeLabel)};padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+          <div style="flex:1;min-width:0">
+            <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:3px">${r.name} ${streak?.flame||''}</div>
+            <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.55);margin-bottom:6px">${r.team} · Bat ${r.order} · vs ${r.pitName} · ${r.game?.time||''} · ${park.name||''}</div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+              <span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:${tierBadgeBg(badgeLabel)};color:${tColor};border:0.5px solid ${tColor}">${badgeLabel}</span>
+              <span style="font-size:10px;font-family:var(--mono);color:${hrRecencyColor}">${hrRecencyText}</span>
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:16px">
+            <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HR PROB</div>
+            <div style="font-size:32px;font-weight:500;font-family:var(--mono);color:${probColor(hrp)};letter-spacing:-1px;line-height:1">${hrp.toFixed(1)}%</div>
+            <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:3px">${ci?.label||''} confidence</div>
+          </div>
         </div>
-
-        <div style="padding:12px 16px">
-          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${r.pitName} — vulnerability</div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
-            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center">
-              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">xERA</div>
-              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${xeraColor(pit.xera||4.5)}">${(pit.xera||4.5).toFixed(2)}</div>
-            </div>
-            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center">
-              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HR/9</div>
-              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${hr9Color(pit.hr9||1.2)}">${(pit.hr9||1.2).toFixed(2)}</div>
-            </div>
-            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center">
-              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HH% allowed</div>
-              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${hhPColor(pit.hh||38)}">${(pit.hh||38).toFixed(0)}%</div>
-            </div>
-            <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center">
-              <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">Whiff%</div>
-              <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${whiffColor(pit.whiff||22)}">${(pit.whiff||22).toFixed(0)}%</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+          <div style="padding:12px 16px;border-right:0.5px solid rgba(255,255,255,0.08)">
+            <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Why it's sharp</div>
+            ${reasons.slice(0,5).map(reason=>`<div style="font-size:11px;color:rgba(255,255,255,0.75);padding:2px 0;display:flex;gap:6px"><span style="flex-shrink:0">${reason.slice(0,2)}</span><span style="color:rgba(255,255,255,0.65)">${reason.slice(2)}</span></div>`).join('')||'<div style="font-size:11px;color:rgba(255,255,255,0.4)">Signal details loading…</div>'}
+          </div>
+          <div style="padding:12px 16px">
+            <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">${r.pitName} — vulnerability</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
+              <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center"><div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">xERA</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${xeraColor(pit.xera||4.5)}">${(pit.xera||4.5).toFixed(2)}</div></div>
+              <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center"><div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HR/9</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${hr9Color(pit.hr9||1.2)}">${(pit.hr9||1.2).toFixed(2)}</div></div>
+              <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center"><div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HH% allowed</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${hhPColor(pit.hh||38)}">${(pit.hh||38).toFixed(0)}%</div></div>
+              <div style="background:rgba(255,255,255,0.04);border-radius:6px;padding:7px 8px;text-align:center"><div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">Whiff%</div><div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${whiffColor(pit.whiff||22)}">${(pit.whiff||22).toFixed(0)}%</div></div>
             </div>
           </div>
         </div>
-      </div>
+        <div style="padding:10px 16px;background:rgba(255,255,255,0.02);display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <div style="display:flex;gap:3px">${sigIcons}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:${tColor}">${summaryText}</div>
+        </div>
+      </div>`;
+    }).join('') : `<div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:32px;text-align:center;color:rgba(255,255,255,0.4);font-family:var(--mono);font-size:12px">No plays meet the sharp threshold today<br><span style="font-size:10px;opacity:.6">5+ signals · 14%+ HR · vulnerable pitcher required</span></div>`}
 
-      <div style="padding:10px 16px;background:rgba(255,255,255,0.02);display:flex;align-items:center;gap:8px;justify-content:space-between">
-        <div style="display:flex;gap:3px">${sigIcons}</div>
-        <div style="font-size:10px;font-family:var(--mono);color:${tColor}">${count}/8 signals · ${summaryText}</div>
+    <!-- Section 3: Risks & Fades -->
+    ${fades.length ? `<div style="margin-top:20px">
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <span>⚠️ Risks & fades</span>
+        <span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4)">Almost qualified — but proceed with caution</span>
       </div>
-    </div>`;
-  }).join('');
+      ${fades.map(r => {
+        const {count,hrp:lhrp,badge} = getSignalsLocked(r);
+        const hrp = lhrp||r.hrp||0;
+        const pit = getPitcher(r.pitName)||{};
+        const streak = STREAK[r.name];
+        const gameLog = streak?.gameLog||[];
+        let consecHR=0; for(const g of gameLog){if(g.hr>0)consecHR++;else break;}
+        const flags = [];
+        if(consecHR>=3) flags.push(`Homered ${consecHR} straight days — possible regression`);
+        if((pit.whiff||0)>=30) flags.push(`Pitcher whiff rate ${pit.whiff?.toFixed(0)}% — strikeout risk`);
+        if((pit.xera||4.5)<4.00) flags.push(`Facing strong pitcher (xERA ${(pit.xera||4.5).toFixed(2)}) despite signals`);
+        return `<div style="background:rgba(248,113,113,0.04);border:0.5px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.85);margin-bottom:3px">${r.name} ${streak?.flame||''}</div>
+            <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:5px">${r.team} · vs ${r.pitName} · ${count} signals</div>
+            ${flags.map(f=>`<div style="font-size:11px;color:var(--amber);margin-top:2px">⚠️ ${f}</div>`).join('')}
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:12px">
+            <div style="font-size:20px;font-weight:500;font-family:var(--mono);color:rgba(255,255,255,0.6)">${hrp.toFixed(1)}%</div>
+            <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.35)">HR prob</div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>` : ''}
 
-  el.innerHTML = `
-  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:12px 16px;display:flex;justify-content:space-between;align-items:center">
-    <div>
-      <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92)">🎯 Sharp Plays</div>
-      <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:2px;display:flex;align-items:center;gap:6px">
-        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span>
-        ${dateStr} · ${sharpPlays.length} plays where signals + probability + pitcher all align
-      </div>
-    </div>
-    <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);text-align:right">5+ signals · 14%+ HR · xERA ≥4.80 or HR/9 ≥1.40</div>
-  </div>
-  <div style="padding:14px 16px">${cards}</div>`;
+  </div>`;
+
+  // Generate narrative async via Claude API
+  fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 200,
+      messages: [{ role: 'user', content: narrativePrompt }]
+    })
+  }).then(res => res.json()).then(data => {
+    const text = data.content?.[0]?.text || '';
+    const el2 = document.getElementById('sharp-narrative');
+    if (el2 && text) el2.innerHTML = text.replace(/\n/g,'<br>');
+  }).catch(() => {
+    const el2 = document.getElementById('sharp-narrative');
+    if (el2) {
+      // Fallback: build narrative from data
+      const envScore = topParks.length >= 2 ? 'favorable' : topParks.length === 1 ? 'mixed' : 'neutral';
+      el2.innerHTML = `${games.length}-game slate with ${openGames.length} open-air parks. ${windOutGames.length ? windOutGames.length+' game'+(windOutGames.length>1?'s':'')+' with wind carrying out — '+topParks.map(p=>p.name).join(', ')+' stand out.' : 'No significant wind advantage today.'} ${vulnPitchers.length ? 'Pitcher vulnerability is elevated — '+vulnPitchers.length+' starter'+(vulnPitchers.length>1?'s':'')+' projecting at xERA 5.00+.' : 'Pitcher quality is solid across the board.'} ${sharpPlays.length ? sharpPlays.length+' play'+(sharpPlays.length>1?'s where':'where')+' the full model converges — focus there.' : 'No plays meet the sharp threshold today — consider waiting.'}`;
+    }
+  });
 }
 
 function calcHRWeather(team, wx, park) {
