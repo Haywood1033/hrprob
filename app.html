@@ -5155,6 +5155,36 @@ function renderSimulate() {
     const streak = STREAK[r.name];
     const wx     = WX[r.game?.home || r.team] || {};
     const hrw    = calcHRWeather(r.game?.home || r.team, wx, park);
+
+    // HR recency — consecutive games with HR and days since last HR
+    const gameLog = streak?.gameLog || [];
+    const hrGames = gameLog.map(g => g.hr > 0);
+    let consecHR = 0;
+    for (let i = 0; i < hrGames.length; i++) {
+      if (hrGames[i]) consecHR++;
+      else break;
+    }
+    const lastHRIdx = hrGames.findIndex(g => g);
+    const daysSinceHR = lastHRIdx === -1 ? null : lastHRIdx; // 0 = homered last game
+    const hrRecencyText = consecHR >= 2
+      ? `🔴 HR in last ${consecHR} straight games`
+      : consecHR === 1
+      ? `✅ HR last game`
+      : lastHRIdx === -1
+      ? `No HR in last ${gameLog.length} games`
+      : `Last HR: ${lastHRIdx} game${lastHRIdx>1?'s':''} ago`;
+    const hrRecencyColor = consecHR >= 3 ? 'var(--red)'
+      : consecHR >= 2 ? 'var(--amber)'
+      : consecHR === 1 ? 'var(--teal)'
+      : lastHRIdx === -1 ? 'rgba(255,255,255,0.4)'
+      : 'rgba(255,255,255,0.6)';
+    const hrRecencyNote = consecHR >= 3
+      ? '— regression risk'
+      : consecHR >= 2
+      ? '— monitor closely'
+      : consecHR === 1
+      ? '— hot right now'
+      : '';
     const badgeLabel = badge?.label || '';
     const tColor = tierColor(badgeLabel);
 
@@ -5201,6 +5231,7 @@ function renderSimulate() {
           <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:3px">${r.name} ${streak?.flame||''}</div>
           <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.55);margin-bottom:6px">${r.team} · Bat ${r.order} · vs ${r.pitName} · ${r.game?.time||''} · ${park.name||''}</div>
           <span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:4px;background:${tierBadgeBg(badgeLabel)};color:${tColor};border:0.5px solid ${tColor}">${badgeLabel}</span>
+          <span style="font-size:10px;font-family:var(--mono);color:${hrRecencyColor};margin-left:8px">${hrRecencyText} ${hrRecencyNote}</span>
         </div>
         <div style="text-align:right;flex-shrink:0;margin-left:16px">
           <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:3px">HR PROB</div>
