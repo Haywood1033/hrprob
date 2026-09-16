@@ -94,8 +94,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge,#vlive,#vparks{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on,#vlive.on,#vparks.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge,#vlive,#vparks,#vsimulate{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on,#vlive.on,#vparks.on,#vsimulate.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -481,6 +481,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>renderParks())">🏟 Parks</div>
+  <div class="tab" onclick="setView('simulate',this)">🎲 Simulate</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
 <div class="fbar" id="fbar">
@@ -514,6 +515,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vderby" class="view"><div id="derby-grid"></div></div>
 <div id="vlive" class="view"><div id="live-grid" style="padding:14px 20px"></div></div>
 <div id="vparks" class="view"><div id="parks-grid" style="padding:14px 20px"></div></div>
+<div id="vsimulate" class="view"><div id="sim-grid" style="padding:0"></div></div>
 <div id="vedge" class="view"><div id="edge-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
@@ -4975,7 +4977,315 @@ function startLivePolling() {
   }, 3 * 60 * 1000); // every 3 minutes
 }
 
-// ── PARKS & WEATHER TAB ──────────────────────────────────────
+// ── SIMULATE TAB ─────────────────────────────────────────────
+let _simGames     = new Set(); // selected game pks
+let _simPlayers   = null;      // null = all, else Set of names
+let _simResults   = null;      // cached simulation results
+let _simN         = 10000;     // simulation runs
+
+function runSlateSimulation(players, n = _simN) {
+  // Monte Carlo: simulate n slates, track HR outcomes per player
+  const results = {};
+  players.forEach(p => {
+    results[p.name] = { hr1: 0, hr2: 0, hr0: 0, hrp: p.hrp };
+  });
+
+  for (let i = 0; i < n; i++) {
+    players.forEach(p => {
+      const r = Math.random();
+      const p1 = p.hrp / 100;
+      const p2 = p1 * p1 * 0.35; // 2+ HR is much rarer
+      if (r < p2) {
+        results[p.name].hr2++;
+        results[p.name].hr1++;
+      } else if (r < p1) {
+        results[p.name].hr1++;
+      } else {
+        results[p.name].hr0++;
+      }
+    });
+  }
+
+  // Convert to percentages
+  Object.keys(results).forEach(name => {
+    const r = results[name];
+    r.p1 = +(r.hr1 / n * 100).toFixed(1);
+    r.p2 = +(r.hr2 / n * 100).toFixed(1);
+    r.p0 = +(r.hr0 / n * 100).toFixed(1);
+  });
+
+  // Expected total HRs per sim
+  const expHR = players.reduce((s,p) => s + p.hrp/100, 0);
+
+  return { results, expHR: +expHR.toFixed(1), n, players: players.length };
+}
+
+function calcParlayProb(players) {
+  // Correlation-adjusted parlay probability
+  // Players in same game with same park/weather conditions are positively correlated
+  let prob = 1;
+  const gameCounts = {};
+  players.forEach(p => {
+    prob *= (p.hrp / 100);
+    gameCounts[p.gamePk] = (gameCounts[p.gamePk] || 0) + 1;
+  });
+
+  // Correlation boost: shared favorable conditions
+  const sharedGame = Object.values(gameCounts).some(c => c >= 2);
+  const corrFactor = sharedGame ? 1.08 : 1.0; // slight positive correlation in same game
+
+  return +(prob * corrFactor * 100).toFixed(3);
+}
+
+function getBestParlays(players, legs = 3) {
+  // Generate all combinations of `legs` players, rank by probability
+  const combos = [];
+  const n = players.length;
+
+  function combo(start, current) {
+    if (current.length === legs) {
+      const prob = calcParlayProb(current);
+      combos.push({ players: [...current], prob });
+      return;
+    }
+    for (let i = start; i < n; i++) {
+      current.push(players[i]);
+      combo(i + 1, current);
+      current.pop();
+    }
+  }
+
+  if (n >= legs) combo(0, []);
+  return combos.sort((a,b) => b.prob - a.prob).slice(0, 5);
+}
+
+function runBacktest() {
+  const today = new Date().toLocaleDateString('en-CA');
+  const eligible = historyRecords.filter(r =>
+    r.date < today && r.resultsAdded && r.predictions?.length > 0
+  );
+
+  const tiers = {
+    elite:   { label: '🏆 Elite (6+ sig)',    hits: 0, total: 0, preds: [] },
+    allstar: { label: '⭐ All-Star (5 sig)',   hits: 0, total: 0, preds: [] },
+    value:   { label: '💡 Value (4 sig)',      hits: 0, total: 0, preds: [] },
+    signal:  { label: 'All Signal (4+ sig)',   hits: 0, total: 0, preds: [] },
+    top20:   { label: '20%+ HR prob',          hits: 0, total: 0, preds: [] },
+    top15:   { label: '15-19% HR prob',        hits: 0, total: 0, preds: [] },
+  };
+
+  eligible.forEach(day => {
+    day.predictions.forEach(p => {
+      const lock = day.signalLock?.[p.name];
+      const count = lock?.count || 0;
+      const badge = lock?.badge?.label || '';
+
+      if (badge.includes('Elite'))    { tiers.elite.total++;   if(p.hit) tiers.elite.hits++;   tiers.elite.preds.push(p.hrp); }
+      if (badge.includes('All-Star')) { tiers.allstar.total++; if(p.hit) tiers.allstar.hits++; tiers.allstar.preds.push(p.hrp); }
+      if (badge.includes('Value'))    { tiers.value.total++;   if(p.hit) tiers.value.hits++;   tiers.value.preds.push(p.hrp); }
+      if (count >= 4)                 { tiers.signal.total++;  if(p.hit) tiers.signal.hits++;  tiers.signal.preds.push(p.hrp); }
+      if (p.hrp >= 20)                { tiers.top20.total++;   if(p.hit) tiers.top20.hits++;   tiers.top20.preds.push(p.hrp); }
+      if (p.hrp >= 15 && p.hrp < 20) { tiers.top15.total++;   if(p.hit) tiers.top15.hits++;   tiers.top15.preds.push(p.hrp); }
+    });
+  });
+
+  return { tiers, days: eligible.length };
+}
+
+function renderSimulate() {
+  const el = document.getElementById('sim-grid');
+  if (!el) return;
+
+  // Dedupe players by name, use locked hrp
+  const seen = new Map();
+  for (const r of allRows) {
+    const {hrp: lhrp, count} = getSignalsLocked(r);
+    const hrp = lhrp || r.hrp || 0;
+    if (!seen.has(r.name) || hrp > (getSignalsLocked(seen.get(r.name)).hrp || 0)) {
+      seen.set(r.name, { ...r, hrp });
+    }
+  }
+  const allPlayers = [...seen.values()];
+
+  // Game filter
+  const gameList = [...new Set(allPlayers.map(p => p.gamePk).filter(Boolean))].map(pk => {
+    const g = games.find(g => String(g.pk) === String(pk));
+    return g ? { pk: String(pk), label: `${g.away} @ ${g.home}`, time: g.time } : null;
+  }).filter(Boolean);
+
+  if (_simGames.size === 0) gameList.forEach(g => _simGames.add(g.pk));
+
+  // Filter players by selected games and signal threshold
+  const filteredPlayers = allPlayers.filter(p => {
+    const pkStr = String(p.gamePk);
+    return _simGames.has(pkStr) && p.hrp >= 5;
+  });
+
+  const signalPlayers = filteredPlayers.filter(p => getSignalsLocked(p).count >= 4);
+
+  // Run simulations
+  const slateSimAll    = runSlateSimulation(filteredPlayers);
+  const slateSimSignal = runSlateSimulation(signalPlayers);
+
+  // Best parlays from signal players
+  const parlays3 = getBestParlays(signalPlayers.slice(0,15), 3);
+  const parlays4 = getBestParlays(signalPlayers.slice(0,12), 4);
+  const parlays5 = getBestParlays(signalPlayers.slice(0,10), 5);
+
+  // Backtest
+  const bt = runBacktest();
+
+  // Color helpers
+  const pColor = p => p >= 25?'var(--green)':p >= 15?'var(--teal)':p >= 8?'var(--amber)':'rgba(255,255,255,0.6)';
+  const hitColor = p => p >= 35?'var(--green)':p >= 25?'var(--teal)':p >= 15?'var(--amber)':'rgba(255,255,255,0.6)';
+
+  // Game filter pills
+  const gamePills = gameList.map(g =>
+    `<button onclick="toggleSimGame('${g.pk}',this)" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid ${_simGames.has(g.pk)?'rgba(74,222,128,0.3)':'rgba(255,255,255,0.12)'};background:${_simGames.has(g.pk)?'rgba(74,222,128,0.08)':'transparent'};color:${_simGames.has(g.pk)?'var(--green)':'rgba(255,255,255,0.55)'};cursor:pointer;white-space:nowrap">${g.label}</button>`
+  ).join('');
+
+  // Parlay table
+  const parlaySection = (legs, combos) => {
+    if (!combos.length) return '';
+    return `<div style="margin-bottom:16px">
+      <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.7);margin-bottom:8px">${legs}-Leg Parlays — Top 5 by probability</div>
+      ${combos.map((c,i) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid rgba(255,255,255,0.06)">
+        <span style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.4);width:16px">${i+1}</span>
+        <div style="flex:1;font-size:11px;color:rgba(255,255,255,0.85)">${c.players.map(p=>p.name.split(' ').pop()).join(' · ')}</div>
+        <div style="font-size:12px;font-family:var(--mono);color:${pColor(c.prob)};font-weight:500">${c.prob.toFixed(2)}%</div>
+        <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4)">1 in ${Math.round(100/c.prob)}</div>
+      </div>`).join('')}
+    </div>`;
+  };
+
+  // Simulation results table
+  const simRows = Object.entries(slateSimAll.results)
+    .sort((a,b) => b[1].p1 - a[1].p1)
+    .slice(0, 20)
+    .map(([name, r]) => {
+      const {badge, count} = getSignalsLocked(seen.get(name));
+      const badgePill = badge
+        ? `<span style="font-size:7px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:${badge.bg};color:${badge.color}">${badge.label.includes('Elite')?'E':badge.label.includes('All')?'A':'V'}</span>` : '';
+      return `<tr>
+        <td style="font-size:12px;color:rgba(255,255,255,0.85);padding:7px 8px;white-space:nowrap">${name} ${badgePill}</td>
+        <td style="font-size:12px;font-family:var(--mono);text-align:right;padding:7px 8px;color:${pColor(r.hrp)}">${r.hrp.toFixed(1)}%</td>
+        <td style="font-size:13px;font-family:var(--mono);text-align:right;padding:7px 8px;color:${hitColor(r.p1)};font-weight:500">${r.p1}%</td>
+        <td style="font-size:12px;font-family:var(--mono);text-align:right;padding:7px 8px;color:rgba(255,255,255,0.55)">${r.p2}%</td>
+        <td style="font-size:11px;font-family:var(--mono);text-align:right;padding:7px 8px;color:rgba(255,255,255,0.4)">${count} sig</td>
+      </tr>`;
+    }).join('');
+
+  // Backtest rows
+  const btRows = Object.values(bt.tiers).map(t => {
+    if (!t.total) return '';
+    const rate = (t.hits/t.total*100).toFixed(1);
+    const modelAvg = t.preds.length ? (t.preds.reduce((a,b)=>a+b,0)/t.preds.length).toFixed(1) : '—';
+    const rateColor = +rate >= 30?'var(--green)':+rate >= 20?'var(--teal)':+rate >= 12?'var(--amber)':'rgba(255,255,255,0.6)';
+    return `<tr>
+      <td style="font-size:12px;color:rgba(255,255,255,0.85);padding:8px;white-space:nowrap">${t.label}</td>
+      <td style="font-size:13px;font-family:var(--mono);text-align:right;padding:8px;color:${rateColor};font-weight:500">${rate}%</td>
+      <td style="font-size:12px;font-family:var(--mono);text-align:right;padding:8px;color:rgba(255,255,255,0.55)">${t.hits}/${t.total}</td>
+      <td style="font-size:12px;font-family:var(--mono);text-align:right;padding:8px;color:rgba(255,255,255,0.45)">${modelAvg}%</td>
+    </tr>`;
+  }).join('');
+
+  el.innerHTML = `
+  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:12px 16px">
+    <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:8px">🎲 Simulate</div>
+    <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:10px">Select games to simulate · ${filteredPlayers.length} players · ${signalPlayers.length} signal plays</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button onclick="Object.keys(Object.fromEntries(_simGames.entries?.()??[])).length;_simGames.clear();gameList?.forEach?.(g=>_simGames.add(g.pk));renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">All games</button>
+      <button onclick="_simGames.clear();renderSimulate()" style="font-size:10px;font-family:var(--mono);padding:5px 10px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);background:transparent;color:rgba(255,255,255,0.55);cursor:pointer">Clear</button>
+      ${gamePills}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;padding:16px;gap:16px">
+
+    <!-- Section 1: Slate Simulation -->
+    <div style="grid-column:1/-1">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Expected HRs (full slate)</div>
+          <div style="font-size:32px;font-weight:500;font-family:var(--mono);color:var(--green);letter-spacing:-1px">${slateSimAll.expHR}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:4px">${filteredPlayers.length} players simulated</div>
+        </div>
+        <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Expected HRs (signal plays)</div>
+          <div style="font-size:32px;font-weight:500;font-family:var(--mono);color:var(--teal);letter-spacing:-1px">${slateSimSignal.expHR}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:4px">${signalPlayers.length} signal players</div>
+        </div>
+        <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:14px;text-align:center">
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Simulations run</div>
+          <div style="font-size:32px;font-weight:500;font-family:var(--mono);color:rgba(255,255,255,0.7);letter-spacing:-1px">${_simN.toLocaleString()}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:4px">Monte Carlo</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section 2: Per-player simulation -->
+    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;overflow:hidden">
+      <div style="padding:12px 14px;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+        <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.85)">Player HR Probabilities</div>
+        <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:2px">Simulated across ${_simN.toLocaleString()} slates</div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="border-bottom:0.5px solid rgba(255,255,255,0.08)">
+            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:left">Player</th>
+            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">Model</th>
+            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">1+ HR</th>
+            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">2+ HR</th>
+            <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:6px 8px;text-align:right">Sig</th>
+          </tr>
+        </thead>
+        <tbody>${simRows}</tbody>
+      </table>
+    </div>
+
+    <!-- Section 3: Parlay Optimizer -->
+    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:14px;overflow:hidden">
+      <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.85);margin-bottom:4px">Parlay Optimizer</div>
+      <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-bottom:14px">Best combinations from signal plays · correlation-adjusted</div>
+      ${parlaySection(3, parlays3)}
+      ${parlaySection(4, parlays4)}
+      ${parlaySection(5, parlays5)}
+    </div>
+
+  </div>
+
+  <!-- Section 4: Historical Backtest -->
+  <div style="margin:0 16px 16px;background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;overflow:hidden">
+    <div style="padding:12px 14px;border-bottom:0.5px solid rgba(255,255,255,0.08)">
+      <div style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.85)">Historical Backtest</div>
+      <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:2px">${bt.days} days of data · ${historyRecords.filter(r=>r.predictions?.length>0).reduce((s,r)=>s+(r.predictions?.length||0),0).toLocaleString()} predictions tracked</div>
+    </div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="border-bottom:0.5px solid rgba(255,255,255,0.08)">
+          <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:7px 8px;text-align:left">Tier / Filter</th>
+          <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:7px 8px;text-align:right">Hit Rate</th>
+          <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:7px 8px;text-align:right">Hits/Total</th>
+          <th style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);font-weight:400;text-transform:uppercase;padding:7px 8px;text-align:right">Model Avg</th>
+        </tr>
+      </thead>
+      <tbody>${btRows}</tbody>
+    </table>
+  </div>`;
+
+  // Store gameList for toggle function
+  window._simGameList = gameList;
+}
+
+window.toggleSimGame = (pk, btn) => {
+  if (_simGames.has(pk)) {
+    _simGames.delete(pk);
+  } else {
+    _simGames.add(pk);
+  }
+  renderSimulate();
+};
+
 function calcHRWeather(team, wx, park) {
   if (!wx || wx.dome) return null;
   const tempAdj  = ((wx.t || 72) - 72) * 0.18;
@@ -7503,6 +7813,7 @@ function renderAll(){
   else if(curView==='edge')    renderEdge();
   else if(curView==='live')    renderLive();
   else if(curView==='parks')   renderParks();
+  else if(curView==='simulate') renderSimulate();
   else renderTargets();
 }
 
@@ -7510,7 +7821,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby','live','parks'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby','live','parks','simulate'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
