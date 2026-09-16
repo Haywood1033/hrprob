@@ -5109,14 +5109,18 @@ function renderSimulate() {
     const {count, badge, hrp: lhrp} = getSignalsLocked(r);
     const hrp = lhrp || r.hrp || 0;
     const pit = getPitcher(r.pitName) || {};
-    const pitVuln = (pit.xera||4.5) >= 4.50 || (pit.hr9||1.2) >= 1.20;
-    return count >= 4 && hrp >= 10 && pitVuln;
+    // Strict triple convergence — all three must be true
+    const highSignals = count >= 5;                          // 5+ signals (not just 4)
+    const highProb    = hrp >= 14;                           // 14%+ HR probability
+    const vulnPitcher = (pit.xera||4.5) >= 4.80             // genuinely weak pitcher
+                     || (pit.hr9||1.2)  >= 1.40;
+    return highSignals && highProb && vulnPitcher;
   }).sort((a,b) => {
     const ta = t => t?.includes('Elite')?0:t?.includes('All')?1:t?.includes('Value')?2:3;
     const ba = getSignalsLocked(a).badge?.label, bb = getSignalsLocked(b).badge?.label;
     if (ta(ba) !== ta(bb)) return ta(ba) - ta(bb);
     return (getSignalsLocked(b).hrp||b.hrp||0) - (getSignalsLocked(a).hrp||a.hrp||0);
-  }).slice(0, 15);
+  }).slice(0, 8);
 
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const dateStr = new Date(etStr).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
@@ -5251,7 +5255,7 @@ function renderSimulate() {
         ${dateStr} · ${sharpPlays.length} plays where signals + probability + pitcher all align
       </div>
     </div>
-    <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);text-align:right">4+ signals · 10%+ HR · xERA ≥4.50 or HR/9 ≥1.20</div>
+    <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);text-align:right">5+ signals · 14%+ HR · xERA ≥4.80 or HR/9 ≥1.40</div>
   </div>
   <div style="padding:14px 16px">${cards}</div>`;
 }
