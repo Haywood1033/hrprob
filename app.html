@@ -791,13 +791,6 @@ function getBatter(name) {
       || BATTER[name.normalize('NFD').replace(/[\u0300-\u036f]/g,'')]
       || null;
 }
-function getStreak(name) {
-  if (!name) return null;
-  return STREAK[name]
-      || STREAK[name.normalize('NFC')]
-      || STREAK[name.normalize('NFD').replace(/[\u0300-\u036f]/g,'')]
-      || null;
-}
 
 const BULLPEN = {}; // team bullpen stats: era, hr9, whip, k9
 const PITCHER_ARSENAL = {}; // pitcher pitch mix
@@ -1293,32 +1286,6 @@ function parseStatcastCSV(csv,type){
   }
 }
 
-// getBatter defined above with normalization
-function getBatter_old(name){
-  if(BATTER[name])return BATTER[name];
-  const aliases = {
-    'Ronald Acuña':    'Ronald Acuña Jr.',
-    'Vladimir Guerrero': 'Vladimir Guerrero Jr.',
-    'Fernando Tatis':  'Fernando Tatis Jr.',
-    'Bobby Witt':      'Bobby Witt Jr.',
-  };
-  if (aliases[name] && BATTER[aliases[name]]) return BATTER[aliases[name]];
-  if (!name.includes('Jr.') && BATTER[name+' Jr.']) return BATTER[name+' Jr.'];
-  if (!name.includes('Sr.') && BATTER[name+' Sr.']) return BATTER[name+' Sr.'];
-  // Fuzzy match — handles accent variations, Jr./Sr. etc
-  const n=name.toLowerCase().replace(/[^a-z ]/g,'');
-  for(const[k,v]of Object.entries(BATTER)){
-    if(k.toLowerCase().replace(/[^a-z ]/g,'')===n)return v;
-  }
-  // Partial match on last name
-  const lastName=n.split(' ').pop();
-  if(lastName.length>4){
-    for(const[k,v]of Object.entries(BATTER)){
-      if(k.toLowerCase().replace(/[^a-z ]/g,'').includes(lastName))return v;
-    }
-  }
-  return null;
-}
 function getPitcher(name){
   if (!name) return null;
   const base = PITCHER[name] || (() => {
@@ -1488,12 +1455,6 @@ function oddsToImplied(american) {
   return Math.abs(american) / (Math.abs(american) + 100);
 }
 
-// Convert our HR% to American odds equivalent
-function probToAmerican(pct) {
-  const p = pct / 100;
-  if (p >= 0.5) return Math.round(-(p / (1-p)) * 100);
-  return Math.round(((1-p) / p) * 100);
-}
 
 // Calculate +EV: returns edge as percentage points
 // Positive = we have edge over book, Negative = book has edge
@@ -2656,29 +2617,6 @@ function headshot(id, size=48, alt='') {
     <div style="display:none;width:${size}px;height:${size}px;border-radius:50%;background:var(--bg3);border:2px solid var(--bd);align-items:center;justify-content:center;font-size:${Math.round(size*0.4)}px;flex-shrink:0">⚾</div>`;
 }
 
-function pullBadge(name, compact=false) {
-  const b = getBatter(name);
-  if (!b?.pull_pct) return '';
-  const pull = b.pull_pct;
-  const fb   = b.fb_pct;
-  const gb   = b.gb_pct;
-  if (pull < 40) return '';
-  // Guard against ground ball pullers
-  const isGroundBallPuller = (gb !== null && gb >= 50) || (fb !== null && fb < 28);
-  if (isGroundBallPuller) return '';
-  // Mixed profile — GB > FB means not predominantly a pull air hitter
-  const isMixedProfile = gb !== null && fb !== null && gb > fb;
-  if (isMixedProfile) return ''; // remove badge for mixed profiles
-  // Must confirm air contact — FB% >= 35% required to show badge
-  if (fb === null || fb < 35) return '';
-  const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
-  const bg    = pull >= 44 ? 'rgba(245,158,11,.1)' : 'rgba(45,212,191,.08)';
-  const bd    = pull >= 44 ? 'rgba(245,158,11,.3)' : 'rgba(45,212,191,.2)';
-  const label = `🏏 ${pull.toFixed(0)}% pull air`;
-  return compact
-    ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}" title="Pull air%: ${pull.toFixed(1)}%">${label}</span>`
-    : `<span style="font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${bd}">${label}</span>`;
-}
 
 function parkBadge(name, compact=false) {
   const ps = PARK_SPLITS[name];
@@ -4860,115 +4798,6 @@ let _simGames     = new Set(); // selected game pks
 let _simPlayers   = null;      // null = all, else Set of names
 let _simResults   = null;      // cached simulation results
 let _simN         = 10000;     // simulation runs
-
-function runSlateSimulation(players, n = _simN) {
-  // Monte Carlo: simulate n slates, track HR outcomes per player
-  const results = {};
-  players.forEach(p => {
-    results[p.name] = { hr1: 0, hr2: 0, hr0: 0, hrp: p.hrp };
-  });
-
-  for (let i = 0; i < n; i++) {
-    players.forEach(p => {
-      const r = Math.random();
-      const p1 = p.hrp / 100;
-      const p2 = p1 * p1 * 0.35; // 2+ HR is much rarer
-      if (r < p2) {
-        results[p.name].hr2++;
-        results[p.name].hr1++;
-      } else if (r < p1) {
-        results[p.name].hr1++;
-      } else {
-        results[p.name].hr0++;
-      }
-    });
-  }
-
-  // Convert to percentages
-  Object.keys(results).forEach(name => {
-    const r = results[name];
-    r.p1 = +(r.hr1 / n * 100).toFixed(1);
-    r.p2 = +(r.hr2 / n * 100).toFixed(1);
-    r.p0 = +(r.hr0 / n * 100).toFixed(1);
-  });
-
-  // Expected total HRs per sim
-  const expHR = players.reduce((s,p) => s + p.hrp/100, 0);
-
-  return { results, expHR: +expHR.toFixed(1), n, players: players.length };
-}
-
-function calcParlayProb(players) {
-  // Correlation-adjusted parlay probability
-  // Players in same game with same park/weather conditions are positively correlated
-  let prob = 1;
-  const gameCounts = {};
-  players.forEach(p => {
-    prob *= (p.hrp / 100);
-    gameCounts[p.gamePk] = (gameCounts[p.gamePk] || 0) + 1;
-  });
-
-  // Correlation boost: shared favorable conditions
-  const sharedGame = Object.values(gameCounts).some(c => c >= 2);
-  const corrFactor = sharedGame ? 1.08 : 1.0; // slight positive correlation in same game
-
-  return +(prob * corrFactor * 100).toFixed(3);
-}
-
-function getBestParlays(players, legs = 3) {
-  // Generate all combinations of `legs` players, rank by probability
-  const combos = [];
-  const n = players.length;
-
-  function combo(start, current) {
-    if (current.length === legs) {
-      const prob = calcParlayProb(current);
-      combos.push({ players: [...current], prob });
-      return;
-    }
-    for (let i = start; i < n; i++) {
-      current.push(players[i]);
-      combo(i + 1, current);
-      current.pop();
-    }
-  }
-
-  if (n >= legs) combo(0, []);
-  return combos.sort((a,b) => b.prob - a.prob).slice(0, 5);
-}
-
-function runBacktest() {
-  const today = new Date().toLocaleDateString('en-CA');
-  const eligible = historyRecords.filter(r =>
-    r.date < today && r.resultsAdded && r.predictions?.length > 0
-  );
-
-  const tiers = {
-    elite:   { label: '🏆 Elite (6+ sig)',    hits: 0, total: 0, preds: [] },
-    allstar: { label: '⭐ All-Star (5 sig)',   hits: 0, total: 0, preds: [] },
-    value:   { label: '💡 Value (4 sig)',      hits: 0, total: 0, preds: [] },
-    signal:  { label: 'All Signal (4+ sig)',   hits: 0, total: 0, preds: [] },
-    top20:   { label: '20%+ HR prob',          hits: 0, total: 0, preds: [] },
-    top15:   { label: '15-19% HR prob',        hits: 0, total: 0, preds: [] },
-  };
-
-  eligible.forEach(day => {
-    day.predictions.forEach(p => {
-      const lock = day.signalLock?.[p.name];
-      const count = lock?.count || 0;
-      const badge = lock?.badge?.label || '';
-
-      if (badge.includes('Elite'))    { tiers.elite.total++;   if(p.hit) tiers.elite.hits++;   tiers.elite.preds.push(p.hrp); }
-      if (badge.includes('All-Star')) { tiers.allstar.total++; if(p.hit) tiers.allstar.hits++; tiers.allstar.preds.push(p.hrp); }
-      if (badge.includes('Value'))    { tiers.value.total++;   if(p.hit) tiers.value.hits++;   tiers.value.preds.push(p.hrp); }
-      if (count >= 4)                 { tiers.signal.total++;  if(p.hit) tiers.signal.hits++;  tiers.signal.preds.push(p.hrp); }
-      if (p.hrp >= 20)                { tiers.top20.total++;   if(p.hit) tiers.top20.hits++;   tiers.top20.preds.push(p.hrp); }
-      if (p.hrp >= 15 && p.hrp < 20) { tiers.top15.total++;   if(p.hit) tiers.top15.hits++;   tiers.top15.preds.push(p.hrp); }
-    });
-  });
-
-  return { tiers, days: eligible.length };
-}
 
 function renderSimulate() {
   const el = document.getElementById('sim-grid');
@@ -7397,126 +7226,6 @@ function renderGames(){
   }).join('');
 }
 
-
-
-function expandTarget(i) {
-  // Close any other open target expansions
-  document.querySelectorAll('[id^="texp-"]').forEach(el => {
-    if (el.id !== `texp-${i}`) {
-      el.style.display = 'none';
-      el.innerHTML = '';
-      // Reset parent card border
-      const idx = el.id.replace('texp-','');
-      const card = document.getElementById('tc-'+idx);
-      if (card) card.style.borderColor = '';
-    }
-  });
-
-  const expEl = document.getElementById(`texp-${i}`);
-  if (!expEl) return;
-
-  // Toggle
-  if (expEl.style.display === 'block') {
-    expEl.style.display = 'none';
-    expEl.innerHTML = '';
-    const card = document.getElementById(`tc-${i}`);
-    if (card) card.style.borderColor = '';
-    return;
-  }
-
-  // Get the player row data
-  // View toggle pills
-  const viewToggle = '<div style="display:flex;gap:8px;margin-bottom:14px">'
-    + '<button onclick="_propsView=\'hrr\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='hrr'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='hrr'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='hrr'?'var(--teal)':'var(--t3)') + ';cursor:pointer">📋 H+R+RBI</button>'
-    + '<button onclick="_propsView=\'kprop\';renderDerby()" style="font-size:11px;font-family:var(--mono);font-weight:700;padding:6px 18px;border-radius:20px;border:1px solid ' + (_propsView==='kprop'?'var(--teal)':'var(--bd)') + ';background:' + (_propsView==='kprop'?'rgba(45,212,191,.1)':'transparent') + ';color:' + (_propsView==='kprop'?'var(--teal)':'var(--t3)') + ';cursor:pointer">⚾ Pitcher K Props</button>'
-    + '</div>';
-
-  // K prop view
-  if (_propsView === 'kprop') {
-    el.innerHTML = '<div style="padding:12px 0">' + viewToggle + renderKProps() + '</div>';
-    return;
-  }
-
-  const seen = new Map();
-  for (const r of allRows) {
-    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
-  }
-  const top = [...seen.values()].sort((a,b)=>b.hrp-a.hrp);
-  const r = top[i];
-  if (!r) return;
-
-  // Highlight card
-  const card = document.getElementById(`tc-${i}`);
-  if (card) card.style.borderColor = 'var(--teal)';
-
-  const pk = getPark(r.game?.home||r.team)||{};
-  const pit = r.pit||{};
-  const w = r.wx||{};
-  const wxd = pk.roof==='dome'?'Dome':w.ws?`${Math.round(w.ws)}mph · ${Math.round(w.t||70)}°F`:'—';
-  const pitHandT = pit.hand||'R';
-  const isSameHandT = r.bats !== 'S' && r.bats === pitHandT;
-  const splitKeyT = pitHandT==='L'?'vsLHP':'vsRHP';
-  const oppKeyT   = pitHandT==='L'?'vsRHP':'vsLHP';
-  const realSplitT = SPLITS[r.name]?.[splitKeyT];
-  const oppSplitT  = SPLITS[r.name]?.[oppKeyT];
-  let platoon;
-  if (realSplitT?.ab >= 15 && oppSplitT?.ab >= 15) {
-    const thisHrpa = realSplitT.hrpa || (realSplitT.hr / Math.max(realSplitT.ab,1));
-    const oppHrpa  = oppSplitT.hrpa  || (oppSplitT.hr  / Math.max(oppSplitT.ab,1));
-    platoon = r.bats==='S' ? '— Switch' : thisHrpa < oppHrpa*0.7 ? '⚠ Split disadvantage' : !isSameHandT ? '✓ Platoon adv' : '~ Same side';
-  } else {
-    platoon = r.bats==='S' ? '— Switch' : isSameHandT ? '⚠ Same side' : '✓ Platoon adv';
-  }
-  const parkEdge = (pk.f||1)>=1.05?`📈 +${(((pk.f||1)-1)*100).toFixed(0)}% hitter park`:(pk.f||1)<=0.95?`📉 ${(((pk.f||1)-1)*100).toFixed(0)}% pitcher park`:'— Neutral';
-  const windEdge = wxd.includes('out')?'💨 Blowing out':wxd.includes('in')?'🌬 Blowing in':wxd.includes('Dome')?'🏟 Dome':'— Neutral wind';
-  const evColor = r.evEdge>2?'var(--green)':r.evEdge<-2?'var(--red)':'var(--t1)';
-  const evLabel = r.evEdge>2?`+EV +${r.evEdge}% edge`:r.evEdge<-2?`-EV ${r.evEdge}% edge`:`Fair (${r.evEdge||0}%)`;
-  const streak = STREAK[r.name];
-
-  expEl.innerHTML = `
-    <div style="margin-top:12px;border-top:0.5px solid rgba(255,255,255,0.10);padding-top:12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px">
-      <div class="sb2"><div class="sl">Exit Velocity</div><div class="sv">${r.ev.toFixed(1)}</div><div class="ss">HH% ${(r.hh||0).toFixed(1)}</div></div>
-      <div class="sb2"><div class="sl">Barrel %</div><div class="sv">${r.barrel.toFixed(1)}%</div><div class="ss">Statcast 2026</div></div>
-      <div class="sb2"><div class="sl">ISO / xwOBA</div><div class="sv">${r.iso.toFixed(3)}</div><div class="ss">xwOBA ${r.xwoba.toFixed(3)}</div></div>
-      <div class="sb2"><div class="sl">Pitcher xERA</div><div class="sv">${(pit.xera||pit.era||4.5).toFixed(2)}</div><div class="ss">HR/9 ${(pit.hr9||1.2).toFixed(2)} · Whiff ${(pit.whiff||22).toFixed(1)}%</div></div>
-      <div class="sb2"><div class="sl">Platoon</div><div class="sv" style="font-size:13px">${platoon}</div><div class="ss">${r.bats||'R'} vs ${pit.hand||'R'}</div></div>
-      <div class="sb2"><div class="sl">Park Edge</div><div class="sv" style="font-size:13px">${parkEdge}</div><div class="ss">${pk.name||'—'} · ${pk.elev||0}ft</div></div>
-      <div class="sb2"><div class="sl">Weather</div><div class="sv" style="font-size:13px">${windEdge}</div><div class="ss">${wxd}</div></div>
-      <div class="sb2"><div class="sl">Batting Order</div><div class="sv">${r.order}</div><div class="ss">Slot ${r.order} of 9</div></div>
-      ${streak?`<div class="sb2"><div class="sl">Last 20 PA ${streak.flame}</div><div class="sv" style="font-size:15px;color:${streak.flame==='🔥🔥'?'var(--amber)':streak.flame==='🔥'?'var(--amber)':streak.flame==='❄️'?'#93c5fd':'var(--t1)'}">${streak.hr} HR · .${Math.round(streak.avg*1000).toString().padStart(3,'0')} AVG</div><div class="ss">SLG .${Math.round(streak.slg*1000).toString().padStart(3,'0')} · ${streak.pa||streak.games} PA</div></div>`:''}
-      ${r.bookOdds?`<div class="sb2"><div class="sl">Book vs Model</div><div class="sv" style="font-size:13px;color:${evColor}">${r.bookOdds>0?'+':''}${r.bookOdds} → ${evLabel}</div><div class="ss">Book ${(oddsToImplied(r.bookOdds)*100).toFixed(1)}% · Ours ${r.hrp.toFixed(1)}%</div></div>`:''}
-      ${r.gameOdds?`<div class="sb2"><div class="sl">Game O/U</div><div class="sv" style="color:var(--amber)">${r.gameOdds.ou}</div><div class="ss">O ${r.gameOdds.overOdds>0?'+':''}${r.gameOdds.overOdds} / U ${r.gameOdds.underOdds>0?'+':''}${r.gameOdds.underOdds}</div></div>`:''}
-    </div>
-    <div id="targ-h2h-${i}" style="margin-top:10px;padding-top:10px;border-top:0.5px solid rgba(255,255,255,0.10)">
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">H2H vs ${r.pitName||'—'} (Career)</div>
-      <div id="targ-h2h-data-${i}" style="font-size:12px;color:var(--t3);font-family:var(--mono)">Loading…</div>
-    </div>`;
-
-  expEl.style.display = 'block';
-
-  // Fetch H2H
-  const pitId = PITCHER_IDS[r.pitName];
-  fetchH2H(r.name, r.pitName, pitId).then(h2h => {
-    const el = document.getElementById(`targ-h2h-data-${i}`);
-    if (!el) return;
-    if (!h2h || h2h.ab === 0) { el.textContent = 'No career matchup data'; return; }
-    const ac = h2h.avg>=0.300?'var(--green)':h2h.avg>=0.200?'var(--t1)':'var(--red)';
-    const hc = h2h.hr>0?'var(--teal)':'var(--t3)';
-    el.innerHTML = `<div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center">
-      <div><span style="color:var(--t3)">AVG </span><span style="color:${ac};font-weight:700">${h2h.avg.toFixed(3)}</span></div>
-      <div><span style="color:var(--t3)">H </span><span style="color:var(--t1)">${h2h.h}/${h2h.ab}</span></div>
-      <div><span style="color:var(--t3)">HR </span><span style="color:${hc};font-weight:700">${h2h.hr}</span></div>
-      <div><span style="color:var(--t3)">BB </span><span style="color:var(--t1)">${h2h.bb}</span></div>
-      <div><span style="color:var(--t3)">K </span><span style="color:var(--t1)">${h2h.k}</span></div>
-      <div><span style="color:var(--t3)">OBP </span><span style="color:var(--t1)">${h2h.obp.toFixed(3)}</span></div>
-      <div style="color:var(--t3);font-size:10px">${h2h.ab} AB · ${h2h.seasons} season${h2h.seasons!==1?'s':''}</div>
-    </div>`;
-  }).catch(() => {
-    const el = document.getElementById(`targ-h2h-data-${i}`);
-    if (el) el.textContent = 'H2H unavailable';
-  });
-}
-
 function renderTargets(){
   const el = document.getElementById('tgrid');
   if (!el) return;
@@ -7798,36 +7507,8 @@ function hasWxEdge(r) {
 }
 function sortBy(k){if(sortKey===k)sortAsc=!sortAsc;else{sortKey=k;sortAsc=false;}allRows.sort((a,b)=>sortAsc?a[k]-b[k]:b[k]-a[k]);renderPlayers();}
 function setStatus(s,msg){document.getElementById('sdot').className='dot '+(s==='live'?'live':s==='loading'?'spin':'');document.getElementById('stxt').textContent=msg;}
-async function doRefresh(){
-  setStatus('loading','Refreshing…');
-  await Promise.allSettled([loadLineups(),loadWeather()]);
-  if(curView==='parks') renderParks();
-  rebuild(); renderAll();
-  const conf=games.filter(g=>g.awayLineup.length||g.homeLineup.length).length;
-  setStatus(conf>0?'live':'loading',`${games.length} games · ${conf} lineups · ${statReady?'Statcast live':'Statcast loading'}`);
-  _loadState.slate = true; updateLoadingStep('slate','done'); updateLoadingStep('weather','done'); checkAllReady(); dismissOverlay();
-}
 
 // ── INIT ──
-// ── AUTO-UPDATE via sendPrompt (works when opened in Claude chat) ──
-function requestSlateUpdate() {
-  const today = new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  const msg = `Update the HRProb odds for ${today}: fetch today's HR prop odds from DraftKings and today's game O/U totals for all games. Update only GAME_ODDS and HR_ODDS in index.html and provide the updated file.`;
-
-  if (typeof window.sendPrompt === 'function') {
-    // Running inside Claude chat — trigger directly
-    window.sendPrompt(msg);
-    document.getElementById('update-btn').textContent = '⏳ Updating…';
-    document.getElementById('update-btn').disabled = true;
-  } else {
-    // Standalone — show confirmation message
-    const btn = document.getElementById('update-btn');
-    const orig = btn.textContent;
-    btn.textContent = '✓ Update has been requested with the host';
-    btn.disabled = true;
-    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 5000);
-  }
-}
 
 // Check if today's slate is stale and auto-prompt if in Claude chat
 function checkSlateDate() {
