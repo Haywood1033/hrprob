@@ -3184,87 +3184,6 @@ const ROSTERS = {};   // active rosters from /api/slate — current 26-man      
 window._debug = {get STREAK(){return STREAK;}, get BATTER(){return BATTER;}, get PITCHER(){return PITCHER;}, get games(){return games;}, get allRows(){return allRows;}};
 const STREAK_ID_CACHE = {};
 
-async function fetchStreakForPlayer(name, playerId) {
-  try {
-    const id = playerId || STREAK_ID_CACHE[name] || await getPlayerId(name);
-    if (!id) return null;
-    STREAK_ID_CACHE[name] = id;
-
-    const r = await safeFetch(
-      `https://statsapi.mlb.com/api/v1/people/${id}/stats?stats=lastXGames&limit=14&group=hitting&sportId=1`,
-      6000
-    );
-    if (!r.ok) return null;
-    const d = await r.json();
-    const splits = d.stats?.[0]?.splits || [];
-    if (!splits.length) return null;
-
-    // Aggregate last 14 games
-    let hr=0, h=0, ab=0, tb=0, bb=0;
-    for (const s of splits) {
-      hr += s.stat?.homeRuns    || 0;
-      h  += s.stat?.hits        || 0;
-      ab += s.stat?.atBats      || 0;
-      tb += s.stat?.totalBases  || 0;
-      bb += s.stat?.baseOnBalls || 0;
-    }
-    const avg = ab > 0 ? h / ab   : 0;
-    const slg = ab > 0 ? tb / ab  : 0;
-    const obp = (ab+bb) > 0 ? (h+bb)/(ab+bb) : 0;
-    const games = splits.length;
-
-    // Determine flame tier
-    let flame = '';
-    if      (hr >= 3)                          flame = '🔥🔥';
-    else if (hr >= 1)                          flame = '🔥';
-    else if (ab >= 20 && slg < 0.350)         flame = '❄️';
-
-    return { hr, avg, slg, obp, ab, games, flame };
-  } catch(e) { return null; }
-}
-
-
-
-async function fetchStreakForPlayer(name, playerId) {
-  try {
-    const id = playerId || STREAK_ID_CACHE[name] || await getPlayerId(name);
-    if (!id) return null;
-    STREAK_ID_CACHE[name] = id;
-
-    const r = await safeFetch(
-      `https://statsapi.mlb.com/api/v1/people/${id}/stats?stats=lastXGames&limit=14&group=hitting&sportId=1`,
-      6000
-    );
-    if (!r.ok) return null;
-    const d = await r.json();
-    const splits = d.stats?.[0]?.splits || [];
-    if (!splits.length) return null;
-
-    // Aggregate last 14 games
-    let hr=0, h=0, ab=0, tb=0, bb=0;
-    for (const s of splits) {
-      hr += s.stat?.homeRuns    || 0;
-      h  += s.stat?.hits        || 0;
-      ab += s.stat?.atBats      || 0;
-      tb += s.stat?.totalBases  || 0;
-      bb += s.stat?.baseOnBalls || 0;
-    }
-    const avg = ab > 0 ? h / ab   : 0;
-    const slg = ab > 0 ? tb / ab  : 0;
-    const obp = (ab+bb) > 0 ? (h+bb)/(ab+bb) : 0;
-    const games = splits.length;
-
-    // Determine flame tier
-    let flame = '';
-    if      (hr >= 3)                          flame = '🔥🔥';
-    else if (hr >= 1)                          flame = '🔥';
-    else if (ab >= 20 && slg < 0.350)         flame = '❄️';
-
-    return { hr, avg, slg, obp, ab, games, flame };
-  } catch(e) { return null; }
-}
-
-
 async function loadBullpenData() {
   try {
     const r = await safeFetch('/api/bullpen', 10000);
@@ -3325,47 +3244,6 @@ async function loadStreakData() {
     _dataReady.streaks = true; // mark done even on error
   }
 }
-
-
-async function fetchStreakForPlayer(name, playerId) {
-  try {
-    const id = playerId || STREAK_ID_CACHE[name] || await getPlayerId(name);
-    if (!id) return null;
-    STREAK_ID_CACHE[name] = id;
-
-    const r = await safeFetch(
-      `https://statsapi.mlb.com/api/v1/people/${id}/stats?stats=lastXGames&limit=14&group=hitting&sportId=1`,
-      6000
-    );
-    if (!r.ok) return null;
-    const d = await r.json();
-    const splits = d.stats?.[0]?.splits || [];
-    if (!splits.length) return null;
-
-    // Aggregate last 14 games
-    let hr=0, h=0, ab=0, tb=0, bb=0;
-    for (const s of splits) {
-      hr += s.stat?.homeRuns    || 0;
-      h  += s.stat?.hits        || 0;
-      ab += s.stat?.atBats      || 0;
-      tb += s.stat?.totalBases  || 0;
-      bb += s.stat?.baseOnBalls || 0;
-    }
-    const avg = ab > 0 ? h / ab   : 0;
-    const slg = ab > 0 ? tb / ab  : 0;
-    const obp = (ab+bb) > 0 ? (h+bb)/(ab+bb) : 0;
-    const games = splits.length;
-
-    // Determine flame tier
-    let flame = '';
-    if      (hr >= 3)                          flame = '🔥🔥';
-    else if (hr >= 1)                          flame = '🔥';
-    else if (ab >= 20 && slg < 0.350)         flame = '❄️';
-
-    return { hr, avg, slg, obp, ab, games, flame };
-  } catch(e) { return null; }
-}
-
 
 
 async function fetchStreakForPlayer(name, playerId) {
