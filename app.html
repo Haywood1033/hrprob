@@ -1169,7 +1169,6 @@ function parseLineupHTML(html){
   }
   const res={};
   for(const[t,p]of Object.entries(out))if(p.length>=8)res[t]=p.sort((a,b)=>a.battingOrder-b.battingOrder);
-  console.log('Lineups parsed:',Object.keys(res).length,'teams');
   return res;
 }
 
@@ -1184,7 +1183,6 @@ async function loadLineups(){
   ];
   for(const mk of proxies){
     try{
-      console.log('Lineup proxy trying...');
       const r=await safeFetch(mk(url),12000);
       if(!r.ok){console.warn('Lineup HTTP',r.status);continue;}
       // /raw returns plain HTML; /get returns JSON with .contents
@@ -1192,7 +1190,6 @@ async function loadLineups(){
       const ct=r.headers.get('content-type')||'';
       if(ct.includes('json')){const d=await r.json().catch(()=>null);html=d?(d.contents||d.body||''):'';}
       else{html=await r.text();}
-      console.log('Lineup response:',html?.length,'chars, starts:',html?.substring(0,60));
       if(!html||html.length<500){console.warn('Too short/empty');continue;}
       const lus=parseLineupHTML(html);
       let n=0;
@@ -1200,7 +1197,6 @@ async function loadLineups(){
         if(lus[g.away]){g.awayLineup=lus[g.away];n++;}
         if(lus[g.home]){g.homeLineup=lus[g.home];n++;}
       }
-      console.log('Lineup teams matched:',n,'of',games.length,'games');
       if(n>0)return n;
     }catch(e){console.warn('Lineup error:',e.message);}
   }
@@ -1227,7 +1223,6 @@ async function loadStatcast(){
   statReady=true;
   const nb=Object.keys(BATTER).length;
   const np=Object.keys(PITCHER).length;
-  console.log(`Statcast: ${nb} batters, ${np} pitchers`);
 
   // Re-enrich game pitcher objects now that PITCHER has real Statcast data
   for (const g of games) {
@@ -1526,7 +1521,6 @@ function buildParlayLegs() {
   const seasonStart = new Date('2026-03-26');
   const gamesPlayed = Math.max(0, Math.floor((Date.now() - seasonStart) / (864e5 * 1.05))); // ~1.05 days per game-day
   const dynamicMin = Math.min(150, Math.max(20, Math.floor(gamesPlayed * 3.8 * 0.25)));
-  console.log(`Parlay PA min: ${dynamicMin} (based on ~${gamesPlayed} game-days into season)`);
 
   // Use top players by signal count + probability, no book odds required
   const seen = new Map();
@@ -1544,7 +1538,6 @@ function buildParlayLegs() {
       return sb - sa;
     })
     .slice(0,25);
-  console.log(`Parlay candidates: ${legs.length} (PA min: ${dynamicMin})`);
   return legs;
 }
 
@@ -1700,7 +1693,6 @@ let historyLoaded  = false;
 // Save today's predictions to /api/history
 async function saveToHistory() {
   if (allRows.length < 10) {
-    console.log('saveToHistory: allRows not ready yet, retrying in 5s…');
     setTimeout(saveToHistory, 5000);
     return;
   }
@@ -1710,7 +1702,6 @@ async function saveToHistory() {
   // Don't overwrite if today's predictions already saved with actual data
   const alreadySaved = historyRecords.find(r => r.date === today && r.predictions?.length > 0);
   if (alreadySaved) {
-    console.log('saveToHistory: predictions already locked for', today, '— skipping');
     return;
   }
 
@@ -1784,7 +1775,6 @@ async function saveToHistory() {
       })
     });
     const d = await r.json();
-    console.log('Predictions saved:', d);
   } catch(e) {
     console.warn('History save failed:', e.message);
   }
@@ -1798,7 +1788,6 @@ async function loadHistory() {
     const d = await r.json();
     historyRecords = d.records || [];
     historyLoaded = true;
-    console.log('History loaded:', historyRecords.length, 'days');
 
     // Restore signal lock from DB — single source of truth for all devices
     const etStr0 = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
@@ -1815,13 +1804,10 @@ async function loadHistory() {
         Object.assign(SIGNAL_LOCK, todayRecord.signalLock);
         _signalLockDate = todayET;
         _lockRestoredFromDB = true;
-        console.log('Signal lock restored from DB:', Object.keys(SIGNAL_LOCK).length, 'players');
       } else {
-        console.log('Signal lock already fresh — skipping DB restore');
       }
     } else {
       // No DB lock yet — will be built fresh after statcast loads
-      console.log('No DB signal lock for today — will build fresh');
     }
     // Update yesterday banner whenever it exists in DOM
     const bannerEl = document.getElementById('yesterday-banner');
@@ -1842,7 +1828,6 @@ async function autoFetchResults() {
   const missing = historyRecords.filter(r => r.date < today && !r.resultsAdded);
   if (!missing.length) return;
 
-  console.log('Auto-fetching results for', missing.length, 'days:', missing.map(r=>r.date).join(', '));
   let anyUpdated = false;
   for (const record of missing) {
     try {
@@ -1853,11 +1838,9 @@ async function autoFetchResults() {
       });
       const d = await r.json();
       if (d.ok || d.alreadyAdded) {
-        console.log('Results fetched:', record.date, d.summary || d.record?.summary || 'ok');
         anyUpdated = true;
       } else if (r.status === 404) {
         // No record in DB — create empty stub so it stops retrying
-        console.log('No DB record for', record.date, '— creating stub');
         await fetch('/api/history', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
@@ -2799,7 +2782,6 @@ function lockSignals() {
   // Lock is DB-only — localStorage removed to ensure all devices share same state
   // DB restore happens in loadHistory() — if already restored, skip rebuild
   if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
-    console.log('Signal lock already active:', Object.keys(SIGNAL_LOCK).length, 'players');
     return;
   }
 
@@ -2807,13 +2789,10 @@ function lockSignals() {
   if (etHour >= 13) {
     // After 1pm: if DB has a lock, use it; otherwise build once and save
     if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
-      console.log('Signal lock: already active post-1pm, not rebuilding');
       return;
     }
-    console.log('Signal lock: post-1pm but no lock exists, building once from current data');
     // Double-check DB restore hasn't happened yet — wait briefly if history not loaded
     if (!historyLoaded) {
-      console.log('Signal lock: waiting for history to load before building...');
       setTimeout(lockSignals, 2000);
       return;
     }
@@ -2833,7 +2812,6 @@ function lockSignals() {
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify({ action: 'save_lock', date: today, signalLock: SIGNAL_LOCK })
     }).then(r=>r.json()).then(d=>{
-      console.log('Signal lock saved to DB:', d.ok);
       // Reload history so DB state is fresh for this device too
       loadHistory();
     });
@@ -2951,7 +2929,6 @@ function rebuild(){
     tsel.innerHTML='<option value="">All Teams</option>'+teams.map(t=>`<option value="${t}">${t}</option>`).join('');
     if(tprev)tsel.value=tprev;
   }
-  console.log(`rebuild: ${allRows.length} rows, batters:${Object.keys(BATTER).length}`);
 }
 
 // ── RENDER PLAYERS ──
@@ -3083,7 +3060,6 @@ async function prefetchAllH2H() {
     seen.add(k); return true;
   });
 
-  console.log(`Prefetching H2H for ${uniquePairs.length} matchups…`);
   
   // Batch in groups of 5 to avoid rate limiting
   const BATCH = 5;
@@ -3094,7 +3070,6 @@ async function prefetchAllH2H() {
     fetched += batch.length;
   }
   
-  console.log(`H2H prefetch complete: ${fetched} matchups cached`);
   // Rebuild rows with H2H now available
   rebuild(); renderAll();
   if(true) renderTodayDebounced();
@@ -3129,7 +3104,6 @@ async function loadBullpenData() {
     const d = await r.json();
     if (d.bullpen) {
       Object.assign(BULLPEN, d.bullpen);
-      console.log('Bullpen data loaded:', Object.keys(BULLPEN).length, 'teams');
     }
   } catch(e) {
     console.warn('Bullpen fetch failed:', e.message);
@@ -3145,7 +3119,6 @@ async function loadStreakData() {
   if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
   // Fetch streaks for all confirmed lineup players — 220 covers full slates
   const streakPlayers = allPlayers.slice(0, 220);
-  console.log(`Fetching streaks for ${streakPlayers.length} of ${allPlayers.length} players…`);
 
   try {
     const ctrl = new AbortController();
@@ -3169,10 +3142,8 @@ async function loadStreakData() {
         for (const [name, id] of Object.entries(d.playerIds)) {
           STREAK_ID_CACHE[name] = id;
         }
-        console.log(`Headshot IDs cached: ${Object.keys(d.playerIds).length} players`);
       }
       const withFlame = Object.values(STREAK).filter(s=>s.flame).length;
-      console.log(`Streaks loaded: ${Object.keys(STREAK).length} players, ${withFlame} with flame`);
       _dataReady.streaks = true;
       if (_dataReady.splits) { const _b=document.getElementById('tab-loading-bar'); if(_b) _b.style.display='none'; }
       rebuild(); renderAll();
@@ -3238,7 +3209,6 @@ async function loadSplitsData() {
   // Also send today's starting pitchers for platoon split fetching
   const pitcherNames = [...new Set(games.flatMap(g => [g.ap?.name, g.hp?.name]).filter(Boolean))];
 
-  console.log(`Fetching platoon splits for ${allPlayers.length} batters + ${pitcherNames.length} pitchers…`);
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 90000); // more time for full slate
@@ -3269,7 +3239,6 @@ async function loadSplitsData() {
         if (normN !== name) SPLITS[name] = splits;
       }
       const withBoth = Object.values(SPLITS).filter(s=>s.vsRHP&&s.vsLHP).length;
-      console.log(`Batter splits loaded: ${Object.keys(SPLITS).length} players, ${withBoth} with both sides`);
       for (const r of allRows) {
         if (SPLITS[r.name]?.batSide) r.bats = SPLITS[r.name].batSide;
       }
@@ -3281,7 +3250,6 @@ async function loadSplitsData() {
         if (pitNorm !== name) PITCHER_SPLITS[name] = splits;
       }
       const pitWithBoth = Object.values(PITCHER_SPLITS).filter(s=>s.vsLHB&&s.vsRHB).length;
-      console.log(`Pitcher splits loaded: ${Object.keys(PITCHER_SPLITS).length} pitchers, ${pitWithBoth} with both sides`);
     }
     if (d.parkSplits) {
       for (const [name, ps] of Object.entries(d.parkSplits)) {
@@ -3289,7 +3257,6 @@ async function loadSplitsData() {
         PARK_SPLITS[psNorm] = ps;
         if (psNorm !== name) PARK_SPLITS[name] = ps;
       }
-      console.log(`Park splits loaded: ${Object.keys(PARK_SPLITS).length} players`);
       _dataReady.splits = true;
       if (_dataReady.streaks) { const _b=document.getElementById('tab-loading-bar'); if(_b) _b.style.display='none'; }
       const _bar2=document.getElementById('tab-loading-bar');if(_bar2&&_dataReady.streaks)_bar2.style.display='none';
@@ -7574,11 +7541,9 @@ async function init(){
           // Only clear lock if date genuinely changed AND lock wasn't restored from DB
           // _lockRestoredFromDB flag prevents wiping a good DB lock on first page load
           if (SLATE.date && SLATE.date !== slate.date && !_lockRestoredFromDB) {
-            console.log('New slate date detected — clearing signal lock for fresh build');
             Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
             _signalLockDate = null;
           } else if (SLATE.date && SLATE.date !== slate.date && _lockRestoredFromDB) {
-            console.log('Date changed but lock was DB-restored — keeping lock, will rebuild tomorrow');
             _lockRestoredFromDB = false; // reset for genuine future date changes
           }
           SLATE.date = slate.date;
@@ -7597,7 +7562,6 @@ async function init(){
           hp: {name:g.homePitcher||'TBD', ...(PITCHER[g.homePitcher]||{}), hand:PITCHER_SPLITS[g.homePitcher]?.pitHand||g.homePitcherHand||'R', era:g.homePitcherEra||4.50},
           awayLineup: [], homeLineup: [],
         })).filter(g => getPark(g.home)||getPark(g.away));
-        console.log('Games built:', games.length, '| Sample GAME_ODDS key:', games[0]?.pk, '| Match:', !!GAME_ODDS[games[0]?.pk]);
         // Populate pitcher IDs for H2H lookups
         populatePitcherIds(slate.pitchers);
 
@@ -7606,7 +7570,6 @@ async function init(){
           for (const [team, players] of Object.entries(slate.rosters)) {
             ROSTERS[team] = players.map(p=>({...p, name: normName(p.name)||p.name}));
           }
-          console.log('Active rosters:', Object.keys(slate.rosters).length, 'teams');
         }
 
         // Merge lineups
@@ -7646,7 +7609,6 @@ async function init(){
               };
             }
           }
-          console.log(`Live venue overrides: ${Object.keys(VENUE_OVERRIDES).length} parks`);
         }
 
         if (slate.weather) {
@@ -7663,7 +7625,6 @@ async function init(){
         }
 
         apiSlateLoaded = true;
-        console.log(`/api/slate OK: ${games.length} games, ${Object.keys(slate.lineups||{}).length} lineups, ${Object.keys(slate.weather||{}).length} wx parks`);
       } else {
         console.warn('/api/slate returned no pitchers — using baked SLATE');
       }
@@ -7677,7 +7638,6 @@ async function init(){
   // Always ensure games is populated (baked SLATE as fallback)
   if (!games.length) {
     games = SLATE.games.map(g => ({...g, awayLineup:[], homeLineup:[]}));
-    console.log('Using baked SLATE:', games.length, 'games');
   }
 
   // ── Show UI immediately ─────────────────────────────────────
@@ -7733,7 +7693,6 @@ async function init(){
               PITCHER_ARSENAL[name] = arsenal;
               if (norm !== name) PITCHER_ARSENAL[norm] = arsenal;
             }
-            console.log('Pitcher arsenal loaded:', Object.keys(PITCHER_ARSENAL).length, 'pitchers');
           }
           // Store batter vs pitch data — runs once
           if (d.batterVsPitch) {
@@ -7742,7 +7701,6 @@ async function init(){
               BATTER_VS_PITCH[name] = bvp;
               if (norm !== name) BATTER_VS_PITCH[norm] = bvp;
             }
-            console.log('Batter vs pitch loaded:', Object.keys(BATTER_VS_PITCH).length, 'batters');
           }
           // Store L7 rolling data
           if (d.batterL7) {
@@ -7751,9 +7709,7 @@ async function init(){
               BATTER_L7[name] = l7;
               if (norm !== name) BATTER_L7[norm] = l7;
             }
-            console.log('Batter L7 loaded:', Object.keys(BATTER_L7).length, 'batters');
           }
-          console.log('/api/statcast batters:', Object.keys(d.batters).length);
         }
         if (d.pitchers) {
           for (const [name,s] of Object.entries(d.pitchers)) {
@@ -7769,7 +7725,6 @@ async function init(){
               fb_pct: s.fb_pct||null,
             };
           }
-          console.log('/api/statcast pitchers:', Object.keys(d.pitchers).length);
           // Re-enrich game pitcher objects with real Statcast
           for (const g of games) {
             if (g.ap?.name && PITCHER[g.ap.name]) {
@@ -7787,7 +7742,7 @@ async function init(){
         }
         if (d.batters) return true;
       }
-    } catch(e) { console.log('No /api/statcast, trying browser proxy'); }
+    } catch(e) {}
     // Fall back to browser proxy
     await loadStatcast();
     return false;
@@ -7834,7 +7789,6 @@ async function init(){
           if (_loadState.statcast && _loadState.streaks && _loadState.splits) {
             lockSignals();
           } else {
-            console.log('Lock delayed — waiting for Statcast to complete');
             setTimeout(() => lockSignals(), 3000);
           }
         }, 3000);
