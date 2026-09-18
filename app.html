@@ -305,7 +305,12 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .pit-nrfi-fill{height:100%;border-radius:3px;transition:width .5s}
 @media(max-width:768px){.pit-cards{grid-template-columns:1fr}.pit-grid{padding:10px}}
 
-#player-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:1000;overflow-y:auto;padding:20px}
+/* Player modal is a slide-over drawer, not a centered dialog — the list/table
+   behind it stays visible and fully interactive (no dimming backdrop, no
+   body-scroll lock). Clicking a different row just re-renders the drawer's
+   content in place. Pitcher modal (below) stays a centered dialog. */
+#player-modal{display:none;position:fixed;top:0;right:0;bottom:0;width:440px;max-width:92vw;background:#0a0c10;border-left:0.5px solid rgba(255,255,255,0.14);box-shadow:-24px 0 48px rgba(0,0,0,.5);z-index:1000;overflow-y:auto}
+#player-modal .pm-box{width:100%;max-width:none;margin:0;border:none;border-radius:0;background:transparent}
 .pm-box{background:#0a0c10;border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;max-width:820px;margin:0 auto;overflow:hidden}
 .pm-header{padding:16px 20px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-bottom:1px solid var(--teal)}
 .pm-name{flex:1}
@@ -328,7 +333,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 @media(max-width:600px){
   .pm-kpis{grid-template-columns:repeat(2,1fr)}
   .pm-grid{grid-template-columns:1fr}
-  #player-modal{padding:10px}
+  #player-modal{width:100%;max-width:100%;border-left:none}
 }
 
 .game-strip{display:flex;gap:8px;overflow-x:auto;padding:0 0 8px 0;margin-bottom:14px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent}
@@ -4323,6 +4328,7 @@ function renderPulse() {
 // ── PROPS TAB — H+R+RBI Parlay Board + Pitcher K Props ──────
 let _propsGame = null;
 let _propsView = 'hrr'; // 'hrr' or 'kprop'
+let _pmTab = 'matchup'; // player modal detail tab: 'matchup' | 'contact' | 'environment'
 
 
 
@@ -5641,85 +5647,184 @@ function openPlayerModal(name) {
     ? `<span style="font-size:9px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">K ${kPct.toFixed(0)}% rate</span>`
     : '';
 
+  // Percentiles vs today's slate — real ranks from the actual field, not
+  // invented numbers, so a raw stat like "14.2%" reads itself without the
+  // viewer needing to already know what's good.
+  const cmpRows = [...seen.values()];
+  const pctOf = (val, getter) => {
+    if (val == null || isNaN(val)) return null;
+    const pool = cmpRows.map(getter).filter(v => v != null && !isNaN(v));
+    if (pool.length < 8) return null;
+    return Math.round((pool.filter(v => v < val).length / pool.length) * 100);
+  };
+  const hrpPct    = pctOf(r.hrp, x => x.hrp);
+  const barrelPct = pctOf(b.ba, x => getBatter(x.name)?.ba);
+  const isoPct    = pctOf(b.iso, x => getBatter(x.name)?.iso);
+  const l20Pct    = pctOf(streak.hr, x => STREAK[x.name]?.hr);
+
+  // Pitcher matchup verdict — isolate the pitcher's own marginal effect by
+  // comparing hrProb() with this pitcher against hrProb() with a
+  // league-average one, same batter/park/weather/order both times. This is
+  // the actual model's own sensitivity, not a separately-invented score.
+  const pitDelta = hrProb(b, pk, w, pit, r.order) - hrProb(b, pk, w, {}, r.order);
+  const VULN_MIN = -2, VULN_MAX = 3;
+  const vulnPct = Math.max(0, Math.min(100, Math.round(((pitDelta - VULN_MIN) / (VULN_MAX - VULN_MIN)) * 100)));
+  const vulnVerdict = pitDelta >= 1.0 ? '✓ Favorable matchup' : pitDelta <= -0.5 ? '⚠ Tough matchup' : '~ Neutral matchup';
+  const vulnColor   = pitDelta >= 1.0 ? 'var(--green)' : pitDelta <= -0.5 ? 'var(--red)' : 'var(--t2)';
+
+  // Plain-language "why" line from the same signals already computed above
+  const REASON_TEXT = {
+    park: 'Hitter-friendly park', weather: 'Wind blowing out', pitcher: 'Weak pitcher matchup',
+    streak: streak?.flame === '🔥🔥' ? 'Scorching hot streak' : 'Hot streak',
+    conf: (ci.label || 'High') + ' confidence sample', pulledge: 'Pull vs fly-ball pitcher',
+    pitchedge: 'Pitch-type edge', hotcontact: 'Hot contact quality',
+  };
+  const whyReasons = signals.filter(s => s.active).map(s => `${s.icon} ${REASON_TEXT[s.key] || s.label}`);
+  const whyStr = whyReasons.length ? whyReasons.join(' · ') : 'No signals firing — base rate matchup only';
+
+  // Batted-ball pull tendency note (same logic as before, just reused below)
+  const pullNote = (() => {
+    const gb = b.gb_pct, fb = b.fb_pct, pull = b.pull_pct;
+    if (!pull || pull < 40) return '';
+    const isGB = gb !== null && gb >= 50;
+    const isMixed = gb !== null && fb !== null && gb > fb;
+    const label = pull >= 44 ? 'Elite' : 'Above avg';
+    const qualifier = isGB ? 'ground ball pull' : isMixed ? 'pull tendency' : 'pull air tendency';
+    const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
+    return ` — <span style="color:${color}">${label} ${qualifier}</span>`;
+  })();
+
+  const escName = r.name.replace(/'/g, "\\'");
+  const tabBtnStyle = (key) => {
+    const isOn = _pmTab === key;
+    return `padding:7px 14px;border-radius:20px 20px 0 0;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;border:0.5px solid ${isOn?'rgba(45,212,191,0.35)':'transparent'};border-bottom:none;background:${isOn?'rgba(45,212,191,0.12)':'transparent'};color:${isOn?'var(--teal)':'var(--t3)'}`;
+  };
+
   document.getElementById('pm-body').innerHTML = `
-    <!-- KPIs -->
-    <div class="pm-kpis">
-      <div class="pm-kpi">
-        <div class="pm-kpi-val" style="color:${hc}">${r.hrp.toFixed(1)}%</div>
-        <div class="pm-kpi-lbl">HR Probability</div>
-        <div class="pm-kpi-sub">${ciBadge(r.hrp, b.pa||0)}</div>
+    <!-- Hero: HR probability + percentile vs today's slate + plain-language why -->
+    <div style="padding:16px 16px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+      <div style="flex-shrink:0">
+        <div style="font-size:34px;font-weight:700;font-family:var(--mono);color:${hc};line-height:1">${r.hrp.toFixed(1)}%</div>
+        <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>
+        <div style="margin-top:6px">${ciBadge(r.hrp, b.pa||0)}</div>
       </div>
-      <div class="pm-kpi">
-        <div class="pm-kpi-val" style="color:var(--t1)">${r.barrel?.toFixed(1)||'—'}%</div>
-        <div class="pm-kpi-lbl">Barrel %</div>
-        <div class="pm-kpi-sub">EV ${r.ev?.toFixed(1)||'—'} mph</div>
-      </div>
-      <div class="pm-kpi">
-        <div class="pm-kpi-val" style="color:var(--t1)">${r.iso?.toFixed(3)||'—'}</div>
-        <div class="pm-kpi-lbl">ISO</div>
-        <div class="pm-kpi-sub">xwOBA ${r.xwoba?.toFixed(3)||'—'}</div>
-      </div>
-      <div class="pm-kpi">
-        <div class="pm-kpi-val" style="color:${streak.flame?'var(--amber)':'var(--t2)'}">${streak.hr||0} HR</div>
-        <div class="pm-kpi-lbl">Last 20 PA</div>
-        <div class="pm-kpi-sub">${streak.flame||'—'} ${streak.avg?'.'+Math.round(streak.avg*1000).toString().padStart(3,'0'):''}</div>
+      <div style="flex-grow:1;min-width:180px">
+        ${hrpPct===null ? '' : `
+        <div style="display:flex;justify-content:space-between;font-size:9px;font-family:var(--mono);color:var(--t3);margin-bottom:4px">
+          <span>vs today's slate</span>
+          <span style="color:${hc};font-weight:700">Top ${100-hrpPct}%</span>
+        </div>
+        <div style="height:6px;background:var(--bd);border-radius:3px;overflow:hidden">
+          <div style="width:${hrpPct}%;height:100%;background:linear-gradient(90deg,var(--teal),${hc})"></div>
+        </div>`}
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t2);margin-top:8px;line-height:1.6">${whyStr}</div>
       </div>
     </div>
 
-    <!-- Signal panel -->
+    <!-- KPI row — real percentiles vs today's field, not bare numbers -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bd)">
+      <div style="background:var(--bg2);padding:11px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${r.barrel?.toFixed(1)||'—'}%</div>
+          ${barrelPct===null?'':`<div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${barrelPct}th pct</div>`}
+        </div>
+        ${barrelPct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${barrelPct}%;height:100%;background:var(--teal)"></div></div>`}
+        <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:5px">Barrel % · EV ${r.ev?.toFixed(1)||'—'}</div>
+      </div>
+      <div style="background:var(--bg2);padding:11px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${r.iso?.toFixed(3)||'—'}</div>
+          ${isoPct===null?'':`<div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${isoPct}th pct</div>`}
+        </div>
+        ${isoPct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${isoPct}%;height:100%;background:var(--teal)"></div></div>`}
+        <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:5px">ISO · xwOBA ${r.xwoba?.toFixed(3)||'—'}</div>
+      </div>
+      <div style="background:var(--bg2);padding:11px 12px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline">
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${streak.flame?'var(--amber)':'var(--t1)'}">${streak.hr||0} HR</div>
+          ${l20Pct===null?'':`<div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${l20Pct}th pct</div>`}
+        </div>
+        ${l20Pct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${l20Pct}%;height:100%;background:var(--amber)"></div></div>`}
+        <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:5px">Last 20 PA${streak.avg?' · .'+Math.round(streak.avg*1000).toString().padStart(3,'0'):''}</div>
+      </div>
+    </div>
+
+    <!-- Signal icons — kept as a compact strip -->
     <div class="pm-signals">
       ${signalPanel(r, false)}
       ${kHTML}
       ${parkBadge(r.name, false)}
     </div>
 
-    <!-- Detail grid -->
-    <div class="pm-grid">
-      <div class="pm-cell">
-        <div class="pm-cell-title">Pitcher</div>
-        <div class="pm-cell-val">${r.pitName||'—'}</div>
-        <div class="pm-cell-sub">
-          xERA ${(pit.xera||pit.era||4.5).toFixed(2)} · HR/9 ${(pit.hr9||1.2).toFixed(2)} · Whiff ${(pit.whiff||22).toFixed(1)}%<br>
-          ${pitSplitHTML}
+    <!-- Tabs replace the flat 6-cell grid — one section visible at a time -->
+    <div style="padding:10px 14px 0;display:flex;gap:6px;border-bottom:0.5px solid var(--bd)">
+      <button onclick="_pmTab='matchup';openPlayerModal('${escName}')" style="${tabBtnStyle('matchup')}">Matchup</button>
+      <button onclick="_pmTab='contact';openPlayerModal('${escName}')" style="${tabBtnStyle('contact')}">Contact Profile</button>
+      <button onclick="_pmTab='environment';openPlayerModal('${escName}')" style="${tabBtnStyle('environment')}">Environment</button>
+    </div>
+
+    <div style="display:${_pmTab==='matchup'?'block':'none'}">
+      <div style="padding:14px 16px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:8px">
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">vs ${r.pitName||'—'} (${pitHand}HP)</div>
+          <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:${vulnColor};white-space:nowrap">${vulnVerdict}</div>
+        </div>
+        <div style="height:6px;border-radius:3px;background:linear-gradient(90deg,var(--red),var(--amber),var(--green));position:relative">
+          <div style="position:absolute;top:-3px;left:${vulnPct}%;width:3px;height:12px;background:var(--t1);border-radius:2px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:4px;margin-bottom:12px">
+          <span>Tough (ace)</span><span>Favorable (vulnerable)</span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+          <span style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:10px;color:var(--t2)">xERA <strong style="color:var(--t1)">${(pit.xera||pit.era||4.5).toFixed(2)}</strong></span>
+          <span style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:10px;color:var(--t2)">HR/9 <strong style="color:var(--t1)">${(pit.hr9||1.2).toFixed(2)}</strong></span>
+          <span style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:10px;color:var(--t2)">Whiff <strong style="color:var(--t1)">${(pit.whiff||22).toFixed(1)}%</strong></span>
+        </div>
+        <div style="font-size:10px;font-family:var(--mono);color:var(--t3);border-top:0.5px dashed rgba(255,255,255,0.12);padding-top:8px;line-height:1.6">
+          <span style="color:${platoonColor}">${platoon}</span> · ${r.bats||'R'} vs ${pitHand}HP: ${platoonDetail}<br>
+          ${pitSplitHTML}${parkHistHTML}
+        </div>
+        <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--bd)">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">H2H vs ${r.pitName||'—'} (Career)</div>
+          <div id="pm-h2h-inline" style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</div>
         </div>
       </div>
-      <div class="pm-cell">
-        <div class="pm-cell-title">Matchup Split · ${r.bats||'R'} vs ${pitHand}HP</div>
-        <div class="pm-cell-val" style="color:${platoonColor}">${platoon}</div>
-        <div class="pm-cell-sub">${platoonDetail}</div>
-      </div>
-      <div class="pm-cell">
-        <div class="pm-cell-title">Park</div>
-        <div class="pm-cell-val">${parkEdge}</div>
-        <div class="pm-cell-sub">${pk.name||'—'} · ${pk.elev||0}ft elev${parkHistHTML}</div>
-      </div>
-      <div class="pm-cell">
-        <div class="pm-cell-title">Batted Ball Profile</div>
-        <div class="pm-cell-val" style="font-size:13px">${b.pull_pct?'🏏 '+b.pull_pct.toFixed(0)+'% Pull':'—'}</div>
-        <div class="pm-cell-sub">
-          ${b.fb_pct?'FB '+b.fb_pct.toFixed(0)+'%':'—'} · ${b.gb_pct?'GB '+b.gb_pct.toFixed(0)+'%':'—'}
-          ${b.sweet_spot_pct?'<br>Sweet Spot <span style="color:'+(b.sweet_spot_pct>=38?'var(--green)':b.sweet_spot_pct<=28?'var(--red)':'var(--t2)')+'">'+b.sweet_spot_pct.toFixed(0)+'%</span>':''}
-          ${b.ev50?'· EV50 <span style="color:'+(b.ev50>=98?'var(--green)':b.ev50<=89?'var(--red)':'var(--t2)')+'">'+b.ev50.toFixed(1)+'</span>':''}
-          ${(() => {
-            const gb = b.gb_pct, fb = b.fb_pct, pull = b.pull_pct;
-            if (!pull || pull < 40) return '';
-            const isGB = gb !== null && gb >= 50;
-            const isMixed = gb !== null && fb !== null && gb > fb;
-            const label = pull >= 44 ? 'Elite' : 'Above avg';
-            const qualifier = isGB ? 'ground ball pull' : isMixed ? 'pull tendency' : 'pull air tendency';
-            const color = pull >= 44 ? 'var(--amber)' : 'var(--teal)';
-            return '<br><span style="color:'+color+'">'+label+' '+qualifier+'</span>';
-          })()}
+    </div>
+
+    <div style="display:${_pmTab==='contact'?'block':'none'}">
+      <div style="padding:14px 16px">
+        <div style="display:flex;gap:24px;margin-bottom:12px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--teal)">${b.pull_pct?b.pull_pct.toFixed(0)+'%':'—'}</div>
+            <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:2px">🏏 Pull rate</div>
+          </div>
+          <div>
+            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${b.sweet_spot_pct>=38?'var(--green)':b.sweet_spot_pct<=28?'var(--red)':'var(--t1)'}">${b.sweet_spot_pct?b.sweet_spot_pct.toFixed(0)+'%':'—'}</div>
+            <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:2px">Sweet spot</div>
+          </div>
+          <div>
+            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${b.ev50>=98?'var(--green)':b.ev50<=89?'var(--red)':'var(--t1)'}">${b.ev50?.toFixed(1)||'—'}</div>
+            <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:2px">EV50</div>
+          </div>
+        </div>
+        <div style="font-size:11px;font-family:var(--mono);color:var(--t2);line-height:1.6">
+          FB ${b.fb_pct?.toFixed(0)||'—'}% · GB ${b.gb_pct?.toFixed(0)||'—'}%${pullNote}
         </div>
       </div>
-      <div class="pm-cell">
-        <div class="pm-cell-title">Weather</div>
-        <div class="pm-cell-val">${windEdge}</div>
-        <div class="pm-cell-sub">${w.t?Math.round(w.t)+'°F':'—'} · ${pk.roof==='dome'?'Dome':'Open air'}</div>
-      </div>
-      <div class="pm-cell">
-        <div class="pm-cell-title">H2H vs ${r.pitName||'—'} (Career)</div>
-        <div id="pm-h2h-inline" style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:6px">Loading…</div>
+    </div>
+
+    <div style="display:${_pmTab==='environment'?'block':'none'}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)">
+        <div style="background:var(--bg2);padding:14px 16px">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Park</div>
+          <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:${(pk.f||1)>=1.05?'var(--green)':(pk.f||1)<=0.95?'var(--red)':'var(--t1)'};margin-bottom:6px">${parkEdge}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">${pk.name||'—'} · ${pk.elev||0}ft elev${parkHistHTML}</div>
+        </div>
+        <div style="background:var(--bg2);padding:14px 16px">
+          <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Weather</div>
+          <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:${windOut?'var(--teal)':'var(--t1)'};margin-bottom:6px">${windEdge}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:var(--t3);line-height:1.6">${w.t?Math.round(w.t)+'°F':'—'} · ${pk.roof==='dome'?'Dome':'Open air'}</div>
+        </div>
       </div>
     </div>
 
@@ -5752,7 +5857,8 @@ function openPlayerModal(name) {
 
   document.getElementById('player-modal').style.display = 'block';
   document.getElementById('player-modal').scrollTop = 0;
-  document.body.style.overflow = 'hidden';
+  // No body-scroll lock — this is a slide-over drawer, the page behind it
+  // (whatever table/tab it was opened from) stays fully visible and usable.
 
   // Populate prop probabilities
   const props = calcBatterProps(r);
@@ -8000,7 +8106,7 @@ init();
   </div>
 </div>
 
-<div id="player-modal" onclick="if(event.target===this)closePlayerModal()">
+<div id="player-modal">
   <div class="pm-box">
     <div class="pm-header">
       <div>
