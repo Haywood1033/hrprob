@@ -4329,6 +4329,7 @@ function renderPulse() {
 let _propsGame = null;
 let _propsView = 'hrr'; // 'hrr' or 'kprop'
 let _pmTab = 'matchup'; // player modal detail tab: 'matchup' | 'contact' | 'environment'
+let _pmOpenedAt = 0; // guards the click-outside-closes listener against the same click that opened/swapped the drawer
 
 
 
@@ -5539,6 +5540,17 @@ function closePlayerModal() {
   document.body.style.overflow = '';
 }
 
+// Click anywhere outside the drawer to close it. Registered once at load —
+// the 50ms guard skips the very click that just opened (or swapped) the
+// drawer, since that click is still bubbling up to document when this
+// fires, and would otherwise close what it just opened.
+document.addEventListener('click', (e) => {
+  const modal = document.getElementById('player-modal');
+  if (!modal || modal.style.display !== 'block') return;
+  if (Date.now() - _pmOpenedAt < 50) return;
+  if (!modal.contains(e.target)) closePlayerModal();
+});
+
 function openPlayerModal(name) {
   // Find best row for this player
   // View toggle pills
@@ -5565,7 +5577,7 @@ function openPlayerModal(name) {
   const pk    = getPark(r.game?.home||r.team) || {};
   const w     = r.wx || {};
   const streak = STREAK[r.name] || {};
-  const { signals, badge, ci } = getSignalsLocked(r);
+  const { badge } = getSignalsLocked(r);
 
   // Header
   // Get batter ID for headshot
@@ -5600,22 +5612,17 @@ function openPlayerModal(name) {
   const oppKey     = pitHand==='L'?'vsRHP':'vsLHP';
   const realSplit  = SPLITS[r.name]?.[splitKey];
   const oppSplit   = SPLITS[r.name]?.[oppKey];
-  const ps         = PITCHER_SPLITS[r.pitName] || {};
-
-  let platoon, platoonDetail;
+  let platoon;
   if (realSplit?.ab >= 15 && oppSplit?.ab >= 15) {
     const thisHrpa = realSplit.hrpa || realSplit.hr/Math.max(realSplit.ab,1);
     const oppHrpa  = oppSplit.hrpa  || oppSplit.hr /Math.max(oppSplit.ab,1);
     const isMuchWorse = thisHrpa < oppHrpa * 0.7;
     const hasAdv = thisHrpa >= oppHrpa * 0.9;
     platoon = r.bats==='S'?'— Switch hitter':isMuchWorse?'⚠ Split disadvantage':hasAdv&&!isSameHand?'✓ Platoon adv':hasAdv&&isSameHand?'~ Same side (no penalty)':'⚠ Same side';
-    platoonDetail = `vs ${pitHand==='L'?'LHP':'RHP'}: ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr}HR/${realSplit.ab}AB<br>vs ${pitHand==='L'?'RHP':'LHP'}: SLG .${Math.round(oppSplit.slg*1000).toString().padStart(3,'0')} · ${oppSplit.hr}HR/${oppSplit.ab}AB`;
   } else if (realSplit?.ab >= 15) {
     platoon = isSameHand ? '⚠ Same side' : '✓ Platoon adv';
-    platoonDetail = `vs ${pitHand==='L'?'LHP':'RHP'}: ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} · SLG .${Math.round(realSplit.slg*1000).toString().padStart(3,'0')} · ${realSplit.hr}HR/${realSplit.ab}AB`;
   } else {
     platoon = isSameHand ? '⚠ Same side' : '✓ Platoon adv';
-    platoonDetail = 'Loading splits…';
   }
 
   const platoonColor = platoon.includes('✓')?'var(--green)':platoon.includes('⚠')?'var(--red)':'var(--t3)';
@@ -5632,14 +5639,6 @@ function openPlayerModal(name) {
   const parkHistHTML = ps2?.ab >= 10
     ? `<br><span style="color:${ps2.flag==='boost'?'var(--green)':ps2.flag==='suppressed'?'var(--red)':'var(--t3)'}">Career at ${ps2.venue}: SLG .${Math.round(ps2.slg*1000).toString().padStart(3,'0')} · ${ps2.hr}HR/${ps2.ab}AB</span>`
     : '';
-
-  // Pitcher platoon splits
-  const pitSplitKey = r.bats==='L'?'vsLHB':'vsRHB';
-  const pitSplit = ps[pitSplitKey];
-  const pitOppSplit = ps[r.bats==='L'?'vsRHB':'vsLHB'];
-  const pitSplitHTML = pitSplit?.bf >= 20
-    ? `vs ${r.bats==='L'?'L':'R'}HB: FIP <span style="color:${pitSplit.fip>(pitOppSplit?.fip||4.5)?'var(--red)':'var(--green)'}">${pitSplit.fip}</span> · HR/9 ${pitSplit.hr9} · ${pitSplit.bf}BF<br>vs ${r.bats==='L'?'R':'L'}HB: FIP ${pitOppSplit?.fip||'—'}`
-    : 'Loading pitcher splits…';
 
   // K rate flag
   const kPct = b.k_pct;
@@ -5672,15 +5671,13 @@ function openPlayerModal(name) {
   const vulnVerdict = pitDelta >= 1.0 ? '✓ Favorable matchup' : pitDelta <= -0.5 ? '⚠ Tough matchup' : '~ Neutral matchup';
   const vulnColor   = pitDelta >= 1.0 ? 'var(--green)' : pitDelta <= -0.5 ? 'var(--red)' : 'var(--t2)';
 
-  // Plain-language "why" line from the same signals already computed above
-  const REASON_TEXT = {
-    park: 'Hitter-friendly park', weather: 'Wind blowing out', pitcher: 'Weak pitcher matchup',
-    streak: streak?.flame === '🔥🔥' ? 'Scorching hot streak' : 'Hot streak',
-    conf: (ci.label || 'High') + ' confidence sample', pulledge: 'Pull vs fly-ball pitcher',
-    pitchedge: 'Pitch-type edge', hotcontact: 'Hot contact quality',
-  };
-  const whyReasons = signals.filter(s => s.active).map(s => `${s.icon} ${REASON_TEXT[s.key] || s.label}`);
-  const whyStr = whyReasons.length ? whyReasons.join(' · ') : 'No signals firing — base rate matchup only';
+  // Platoon split as a compact chip instead of a two-hand comparison paragraph
+  const platoonChips = (realSplit && realSplit.ab >= 15)
+    ? [
+        `ISO .${Math.round(realSplit.iso*1000).toString().padStart(3,'0')} vs ${pitHand}HP`,
+        `${realSplit.hr} HR/${realSplit.ab} AB`,
+      ]
+    : null;
 
   // Batted-ball pull tendency note (same logic as before, just reused below)
   const pullNote = (() => {
@@ -5701,7 +5698,7 @@ function openPlayerModal(name) {
   };
 
   document.getElementById('pm-body').innerHTML = `
-    <!-- Hero: HR probability + percentile vs today's slate + plain-language why -->
+    <!-- Hero: HR probability + percentile vs today's slate -->
     <div style="padding:16px 16px 14px;border-bottom:0.5px solid var(--bd);display:flex;align-items:center;gap:18px;flex-wrap:wrap">
       <div style="flex-shrink:0">
         <div style="font-size:34px;font-weight:700;font-family:var(--mono);color:${hc};line-height:1">${r.hrp.toFixed(1)}%</div>
@@ -5717,7 +5714,6 @@ function openPlayerModal(name) {
         <div style="height:6px;background:var(--bd);border-radius:3px;overflow:hidden">
           <div style="width:${hrpPct}%;height:100%;background:linear-gradient(90deg,var(--teal),${hc})"></div>
         </div>`}
-        <div style="font-size:10px;font-family:var(--mono);color:var(--t2);margin-top:8px;line-height:1.6">${whyStr}</div>
       </div>
     </div>
 
@@ -5780,9 +5776,9 @@ function openPlayerModal(name) {
           <span style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:10px;color:var(--t2)">HR/9 <strong style="color:var(--t1)">${(pit.hr9||1.2).toFixed(2)}</strong></span>
           <span style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:10px;color:var(--t2)">Whiff <strong style="color:var(--t1)">${(pit.whiff||22).toFixed(1)}%</strong></span>
         </div>
-        <div style="font-size:10px;font-family:var(--mono);color:var(--t3);border-top:0.5px dashed rgba(255,255,255,0.12);padding-top:8px;line-height:1.6">
-          <span style="color:${platoonColor}">${platoon}</span> · ${r.bats||'R'} vs ${pitHand}HP: ${platoonDetail}<br>
-          ${pitSplitHTML}${parkHistHTML}
+        <div style="border-top:0.5px dashed rgba(255,255,255,0.12);padding-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+          <span style="font-size:10px;font-weight:700;font-family:var(--mono);padding:3px 9px;border-radius:4px;background:${platoonColor==='var(--green)'?'rgba(74,222,128,.10)':platoonColor==='var(--red)'?'rgba(248,113,113,.10)':'var(--bg3)'};color:${platoonColor};border:0.5px solid ${platoonColor==='var(--green)'?'rgba(74,222,128,.25)':platoonColor==='var(--red)'?'rgba(248,113,113,.25)':'rgba(255,255,255,0.11)'}">${platoon}</span>
+          ${platoonChips ? platoonChips.map(c=>`<span style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:4px;padding:3px 8px;font-family:var(--mono);font-size:9px;color:var(--t2)">${c}</span>`).join('') : `<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">Loading splits…</span>`}
         </div>
         <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--bd)">
           <div style="font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:6px">H2H vs ${r.pitName||'—'} (Career)</div>
@@ -5857,6 +5853,7 @@ function openPlayerModal(name) {
 
   document.getElementById('player-modal').style.display = 'block';
   document.getElementById('player-modal').scrollTop = 0;
+  _pmOpenedAt = Date.now();
   // No body-scroll lock — this is a slide-over drawer, the page behind it
   // (whatever table/tab it was opened from) stays fully visible and usable.
 
