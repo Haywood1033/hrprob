@@ -3110,12 +3110,25 @@ async function loadBullpenData() {
 }
 
 async function loadStreakData() {
-  const seen = new Set();
-  const allPlayers = [];
-  for (const r of [...allRows].sort((a,b)=>b.hrp-a.hrp)) {
-    if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
+  const buildNames = () => {
+    const seen = new Set(), names = [];
+    for (const r of [...allRows].sort((a,b)=>b.hrp-a.hrp)) {
+      if (!seen.has(r.name)) { seen.add(r.name); names.push(r.name); }
+    }
+    return names;
+  };
+  let allPlayers = buildNames();
+  if (!allPlayers.length) {
+    // allRows may not be populated yet — this fires alongside statcast now
+    // instead of after it. Give lineups/rosters a moment, then retry once.
+    await new Promise(res => setTimeout(res, 2000));
+    allPlayers = buildNames();
   }
-  if (!allPlayers.length) { console.warn('Streak: allRows empty, skipping'); return; }
+  if (!allPlayers.length) {
+    console.warn('Streak: allRows empty, skipping');
+    _dataReady.streaks = true; // don't leave the tab-loading bar spinning forever
+    return;
+  }
   // Fetch streaks for all confirmed lineup players — 220 covers full slates
   const streakPlayers = allPlayers.slice(0, 220);
 
@@ -3198,12 +3211,24 @@ async function fetchStreakForPlayer(name, playerId) {
 
 // ── REAL PLATOON SPLITS (MLB Stats API via /api/splits) ──────────
 async function loadSplitsData() {
-  const seen = new Set();
-  const allPlayers = [];
-  for (const r of [...allRows].sort((a,b)=>b.hrp-a.hrp)) {
-    if (!seen.has(r.name)) { seen.add(r.name); allPlayers.push(r.name); }
+  const buildNames = () => {
+    const seen = new Set(), names = [];
+    for (const r of [...allRows].sort((a,b)=>b.hrp-a.hrp)) {
+      if (!seen.has(r.name)) { seen.add(r.name); names.push(r.name); }
+    }
+    return names;
+  };
+  let allPlayers = buildNames();
+  if (!allPlayers.length) {
+    // allRows may not be populated yet — this fires alongside statcast now
+    // instead of after it. Give lineups/rosters a moment, then retry once.
+    await new Promise(res => setTimeout(res, 2000));
+    allPlayers = buildNames();
   }
-  if (!allPlayers.length) return;
+  if (!allPlayers.length) {
+    _dataReady.splits = true; // don't leave the tab-loading bar spinning forever
+    return;
+  }
 
   // Also send today's starting pitchers for platoon split fetching
   const pitcherNames = [...new Set(games.flatMap(g => [g.ap?.name, g.hp?.name]).filter(Boolean))];
@@ -7418,8 +7443,11 @@ function showTabLoading(v) {
   }
   bar.style.display = 'block';
   if (window._loadBarInterval) clearInterval(window._loadBarInterval);
+  const startedAt = Date.now();
   window._loadBarInterval = setInterval(() => {
-    if (_dataReady.streaks && _dataReady.splits) {
+    // Hard backstop — never let this spin forever even if a fetch hangs
+    // or errors somewhere that doesn't flip _dataReady.
+    if ((_dataReady.streaks && _dataReady.splits) || Date.now() - startedAt > 45000) {
       bar.style.display = 'none';
       clearInterval(window._loadBarInterval);
       window._loadBarInterval = null;
