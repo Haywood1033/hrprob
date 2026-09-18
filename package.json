@@ -1,6 +1,10 @@
 {
   "name": "hrprob",
   "version": "1.0.0",
+  "scripts": {
+    "test": "node --test",
+    "check": "node -e \"const fs=require('fs');const m=fs.readFileSync('app.html','utf8').match(/<script>([\\s\\S]*?)<\\/script>/);fs.writeFileSync('/tmp/app-script-check.js', m[1]);\" && node --check /tmp/app-script-check.js"
+  },
   "dependencies": {
     "pg": "^8.11.0"
   }
