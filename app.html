@@ -6246,7 +6246,17 @@ function renderToday() {
   const yesterdayHTML = buildYesterdayBanner();
 
 
-  const bestHTML = !best ? '' : (()=>{
+  // Until SIGNAL_LOCK is built, getSignalsLocked() falls back to live
+  // signals/hrp that shift as statcast/streaks/splits land — which made
+  // "best" (and this card) visibly cycle through different players across
+  // the handful of renders that happen while data is still loading. Show
+  // a placeholder instead of a pick that isn't final yet; once the lock
+  // exists it's immutable for the day, so the real pick renders once and
+  // stays put.
+  const lockReady = Object.keys(SIGNAL_LOCK).length > 0;
+  const bestHTML = !best ? '' : !lockReady ? (
+    '<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>⚡ Best Play Today</span></div><div class="today-section-body"><div class="empty" style="padding:24px 20px;text-align:center"><div style="font-size:24px;margin-bottom:8px">⏳</div><div style="font-size:12px;color:var(--t3)">Finalizing signals — best play locks in shortly…</div></div></div></div>'
+  ) : (()=>{
     const {signals,badge,ci}=getSignalsLocked(best);
     const lockedHrp = getSignalsLocked(best).hrp || best.hrp;
     const streak=STREAK[best.name];const ps=PARK_SPLITS[best.name];const pit=best.pit||{};
