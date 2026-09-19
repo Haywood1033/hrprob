@@ -94,8 +94,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vpulse,#vderby,#vedge,#vlive,#vparks,#vsimulate{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vpulse.on,#vderby.on,#vedge.on,#vlive.on,#vparks.on,#vsimulate.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks,#vsimulate{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on,#vsimulate.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -486,8 +486,6 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('pitchers',this)">⚾ Pitchers</div>
   <div class="tab" onclick="setView('targets',this)">🎯 Best Plays</div>
   <div class="tab" onclick="setView('derby',this)">📋 Props</div>
-  <div class="tab" onclick="setView('pulse',this)">🔍 Pulse</div>
-  <div class="tab" onclick="setView('edge',this)">⚔️ Edge</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>renderParks())">🏟 Parks</div>
@@ -521,12 +519,10 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <th onclick="sortBy('barrel')">Brl%</th>
   <th onclick="sortBy('ev')">EV</th>
 </tr></thead><tbody id="ptbody"></tbody></table></div></div>
-<div id="vpulse" class="view"><div id="pulse-grid"></div></div>
 <div id="vderby" class="view"><div id="derby-grid"></div></div>
 <div id="vlive" class="view"><div id="live-grid" style="padding:14px 20px"></div></div>
 <div id="vparks" class="view"><div id="parks-grid" style="padding:14px 20px"></div></div>
 <div id="vsimulate" class="view"><div id="sim-grid" style="padding:0"></div></div>
-<div id="vedge" class="view"><div id="edge-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets" class="view"><div id="tgrid" style="display:block;padding:0;width:100%;overflow-x:auto"></div></div>
@@ -3964,7 +3960,6 @@ function setTodayPill(pill, btn) {
   if (pill === 'forecast') renderForecast();
   if (pill === 'fg') renderFullGame();
   if (pill === 'builder') renderBuilder();
-  if (pill === 'edge') renderEdge();
   if (pill === 'f1') {
     if (!F1_CACHE.length) {
       renderForecast(true);
@@ -4275,185 +4270,6 @@ function renderFullGame() {
       }).join('')
     + '</div>';
 }
-
-
-// ── PULSE TAB ─────────────────────────────────────────────────
-let _pulseGame = 'all';
-
-function renderPulse() {
-  const el = document.getElementById('pulse-grid');
-  if (!el) return;
-  if (!allRows.length || !games.length) {
-    el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return;
-  }
-
-  const formBlock = (game) => {
-    if (!game) return '';
-    const hasHR  = game.hr > 0;
-    const multi  = game.h >= 2;
-    const hasHit = game.h === 1;
-    const isCold = game.ab >= 3 && game.h === 0;
-    const bg = hasHR  ? 'var(--green)'
-             : multi  ? 'var(--teal)'
-             : hasHit ? 'rgba(45,212,191,.3)'
-             : isCold ? 'rgba(239,68,68,.3)'
-             : 'var(--bg3)';
-    const label = hasHR ? 'HR' : game.h > 0 ? game.h+'H' : game.ab > 0 ? '0' : '—';
-    const tc = hasHR ? '#000' : 'var(--t1)';
-    const tip = `${game.date||''} vs ${game.opponent||'?'}: ${game.h}/${game.ab}${game.hr>0?' HR':''}`;
-    return `<div title="${tip}" style="min-width:26px;height:26px;border-radius:4px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;font-family:var(--mono);color:${tc};flex-shrink:0">${label}</div>`;
-  };
-
-  const scoreR = (r) => {
-    const {count,ci} = getSignalsLocked(r);
-    const sb = SIGNAL_LOCK[r.name]?.signals?.[3] ? (STREAK[r.name]?.flame==='🔥🔥'?3:1.5) : 0;
-    const ps = PARK_SPLITS[r.name];
-    return r.hrp*3 + count*5 + sb + (ps?.flag==='boost'?2:0) + (ci.tier==='high'?2:ci.tier==='mid'?1:0);
-  };
-
-  // Game pills
-  const gamePills = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
-    <button onclick="_pulseGame='all';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:5px 12px;border-radius:20px;border:1px solid ${_pulseGame==='all'?'var(--teal)':'var(--bd)'};background:${_pulseGame==='all'?'rgba(45,212,191,.1)':'transparent'};color:${_pulseGame==='all'?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">All Games</button>
-    ${[...games].sort(gameTimeSort).map(g=>`<button onclick="_pulseGame='${g.pk}';renderPulse()" style="font-size:10px;font-family:var(--mono);padding:5px 12px;border-radius:20px;border:1px solid ${_pulseGame==g.pk?'var(--teal)':'var(--bd)'};background:${_pulseGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_pulseGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away} @ ${g.home}</button>`).join('')}
-  </div>`;
-
-  // Legend
-  const legend = `<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
-    ${[['var(--green)','HR'],['var(--teal)','2+H'],['rgba(45,212,191,.3)','1H'],['rgba(239,68,68,.3)','0/3+'],['var(--bg3)','—']]
-      .map(([bg,lbl])=>`<div style="display:flex;align-items:center;gap:3px"><div style="width:10px;height:10px;border-radius:2px;background:${bg}"></div><span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${lbl}</span></div>`).join('')}
-  </div>`;
-
-  // ── ALL GAMES VIEW ────────────────────────────────────────────
-  if (_pulseGame === 'all') {
-    const ranked = [...allRows].sort((a,b)=>scoreR(b)-scoreR(a)).slice(0,25);
-    el.innerHTML = `<div style="padding:12px 0">
-      ${gamePills}${legend}
-      <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;overflow:hidden">
-        ${ranked.map(r => {
-          const {count,badge} = getSignalsLocked(r);
-          const streak  = STREAK[r.name];
-          const gameLog = streak?.gameLog || [];
-          const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-          const badgeHtml = badge
-            ? `<span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color};white-space:nowrap">${badge.label.replace(' Play','')}</span>`
-            : `<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">${count}sig</span>`;
-          return `<div onclick="openPlayerModal(this.dataset.name,this.dataset.team,+this.dataset.pk)" data-name="${r.name}" data-team="${r.team}" data-pk="${r.gamePk}"
-            style="padding:10px 14px;border-bottom:1px solid var(--bg3);cursor:pointer"
-            onmouseover="this.style.background='rgba(255,255,255,.02)'" 
-            onmouseout="this.style.background=''">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <div>
-                <span style="font-size:13px;font-weight:700;color:var(--t1)">${r.name}</span>
-                <span style="font-size:12px;margin-left:4px">${streak?.flame||''}</span>
-                <div style="font-size:9px;font-family:var(--mono);color:var(--t3);margin-top:1px">${r.team} · ${r.pit?.name||r.pitName||'—'} · Bat ${r.order} · ${r.time}</div>
-              </div>
-              <div style="text-align:right;flex-shrink:0;margin-left:10px">
-                <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
-                ${badgeHtml}
-              </div>
-            </div>
-            <div style="display:flex;gap:3px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
-              ${gameLog.length ? gameLog.slice(0,10).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">Streak data loading…</span>'}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
-    return;
-  }
-
-  // ── SINGLE GAME VIEW ─────────────────────────────────────────
-  const g = games.find(gm => gm.pk == _pulseGame);
-  if (!g) { el.innerHTML = '<div class="empty"><p>Game not found</p></div>'; return; }
-
-  const park = getPark(g.home)||{};
-  const wx   = WX[g.home]||{};
-  const pf   = park.f||1.0;
-  const pfLabel = pf>=1.10?`+${Math.round((pf-1)*100)}% hitter park`:pf<=0.95?`${Math.round((pf-1)*100)}% pitcher park`:'Neutral park';
-  const pfColor = pf>=1.10?'var(--green)':pf<=0.95?'var(--red)':'var(--t3)';
-  const orient = park.orient||180;
-  const wdiff  = wx.wd!==undefined?((wx.wd-orient)%360+360)%360:180;
-  const windDir = wdiff<45||wdiff>315?'out':wdiff>135&&wdiff<225?'in':'cross';
-  const windColor = windDir==='out'?'var(--green)':windDir==='in'?'var(--red)':'var(--t2)';
-
-  const playerRow = (r) => {
-    const {count,badge,signals} = getSignalsLocked(r);
-    const streak  = STREAK[r.name];
-    const gameLog = streak?.gameLog||[];
-    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-    const icons = signals.filter(s=>s.active).map(s=>s.icon).join('');
-    const badgeInitial = badge ? (badge.label.includes('Elite')?'🏆':badge.label.includes('All')?'⭐':'💡') : '';
-    return `<div onclick="openPlayerModal(this.dataset.name,this.dataset.team,+this.dataset.pk)" data-name="${r.name}" data-team="${r.team}" data-pk="${r.gamePk}"
-      style="padding:8px 12px;border-bottom:1px solid var(--bg3);cursor:pointer"
-      onmouseover="this.style.background='rgba(255,255,255,.02)'"
-      onmouseout="this.style.background=''">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
-        <div style="display:flex;gap:6px;align-items:center">
-          <span style="font-size:9px;font-family:var(--mono);color:var(--t3);width:12px">${r.order}</span>
-          <div>
-            <span style="font-size:12px;font-weight:700;color:var(--t1)">${r.name}</span>
-            <span style="font-size:11px;margin-left:3px">${streak?.flame||''}</span>
-            ${icons?`<span style="font-size:10px;margin-left:4px">${icons}</span>`:''}
-          </div>
-        </div>
-        <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
-          ${badgeInitial?`<span style="font-size:10px">${badgeInitial}</span>`:''}
-          <span style="font-size:13px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</span>
-        </div>
-      </div>
-      <div style="display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px;padding-left:18px">
-        ${gameLog.length ? gameLog.slice(0,7).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">—</span>'}
-      </div>
-    </div>`;
-  };
-
-  const awayPlayers = allRows.filter(r=>r.team===g.away).sort((a,b)=>a.order-b.order);
-  const homePlayers = allRows.filter(r=>r.team===g.home).sort((a,b)=>a.order-b.order);
-  const hasLineups  = awayPlayers.length > 0 || homePlayers.length > 0;
-
-  el.innerHTML = `<div style="padding:12px 0">
-    ${gamePills}${legend}
-
-    <!-- Game header -->
-    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:12px 14px;margin-bottom:12px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-        <div style="font-size:15px;font-weight:700;color:var(--t1)">${g.away} @ ${g.home}</div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${g.time}</div>
-      </div>
-      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:8px">
-        ${g.away}: <span style="color:var(--t2)">${g.ap.name}</span> · xERA ${g.ap.xera||g.ap.era||'—'} · HR/9 ${g.ap.hr9||'—'} &nbsp;|&nbsp;
-        ${g.home}: <span style="color:var(--t2)">${g.hp.name}</span> · xERA ${g.hp.xera||g.hp.era||'—'} · HR/9 ${g.hp.hr9||'—'}
-      </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:${pfColor}">${pfLabel}</span>
-        ${wx.ws?`<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:${windColor}">💨 ${wx.ws}mph ${windDir}</span>`:''}
-        ${park.elev>2000?`<span style="font-size:9px;font-family:var(--mono);padding:2px 7px;border-radius:4px;background:var(--bg3);color:var(--amber)">⛰ ${park.elev.toLocaleString()}ft</span>`:''}
-      </div>
-    </div>
-
-    ${!hasLineups
-      ? '<div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:20px;text-align:center;font-size:11px;font-family:var(--mono);color:var(--t3)">Lineups not yet posted</div>'
-      : `<!-- Lineups — stacked on mobile, side by side on desktop -->
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px">
-        <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;overflow:hidden">
-          <div style="padding:8px 12px;background:var(--bg3);border-bottom:0.5px solid var(--bd)">
-            <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.away}</div>
-            <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.hp.name} · ${g.hp.hand||'R'}HP</div>
-          </div>
-          ${awayPlayers.length ? awayPlayers.map(playerRow).join('') : '<div style="padding:12px;font-size:10px;font-family:var(--mono);color:var(--t3)">Lineup pending</div>'}
-        </div>
-        <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;overflow:hidden">
-          <div style="padding:8px 12px;background:var(--bg3);border-bottom:0.5px solid var(--bd)">
-            <div style="font-size:11px;font-weight:700;color:var(--t1)">${g.home}</div>
-            <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">vs ${g.ap.name} · ${g.ap.hand||'R'}HP</div>
-          </div>
-          ${homePlayers.length ? homePlayers.map(playerRow).join('') : '<div style="padding:12px;font-size:10px;font-family:var(--mono);color:var(--t3)">Lineup pending</div>'}
-        </div>
-      </div>`
-    }
-  </div>`;
-}
-
 
 // ── PROPS TAB — H+R+RBI Parlay Board + Pitcher K Props ──────
 let _propsGame = null;
@@ -5526,145 +5342,25 @@ function renderLive() {
   `;
 }
 
-let _edgeGame = null;
-
-function renderEdge() {
-  const el = document.getElementById('edge-grid');
-  if (!el) return;
-
-  const hasPitchData = Object.keys(PITCHER_ARSENAL).length > 0;
-  if (!hasPitchData) {
-    el.innerHTML = '<div class="empty"><h3>Loading pitch data…</h3><p style="font-size:11px;font-family:var(--mono);color:var(--t3)">Pitch arsenal data loads with Statcast</p></div>';
-    return;
-  }
-
-  const PITCH_NAMES = {
-    FF:'4-Seam FB', SI:'2-Seam FB', SL:'Slider', CU:'Curveball',
-    CH:'Changeup', CT:'Cutter', FS:'Splitter', ST:'Sweeper',
-    KC:'Knuckle Curve', SV:'Slurve', FA:'Fastball'
-  };
-
-  const xwobaColor = (v) => v >= .400?'var(--green)':v >= .360?'var(--teal)':v >= .310?'var(--t2)':'var(--red)';
-
-  // Build matchups
-  const matchups = [];
-  const seen = new Map();
-  for (const r of allRows) {
-    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
-  }
-
-  for (const r of seen.values()) {
-    const pitName = r.pitName || r.pit?.name;
-    if (!pitName) continue;
-    const arsenal = PITCHER_ARSENAL[pitName] || PITCHER_ARSENAL[normName(pitName)];
-    const bvp     = BATTER_VS_PITCH[r.name] || BATTER_VS_PITCH[normName(r.name)];
-    if (!arsenal) continue;
-
-    const primaryPitches = Object.entries(arsenal)
-      .filter(([,d]) => (d.pct||0) >= 5)
-      .sort(([,a],[,b]) => (b.pct||0)-(a.pct||0))
-      .slice(0, 6);
-
-    let bestEdge = null;
-    const pitchBreakdown = [];
-
-    for (const [type, pitchData] of primaryPitches) {
-      const batterData = bvp?.[type];
-      const xwoba = batterData?.xwoba ?? null;
-      const whiff = batterData?.whiff ?? null;
-      const barrel= batterData?.barrel ?? null;
-      const pa    = batterData?.pa ?? null;
-      if (pa !== null && pa < 10) continue;
-
-      const pitchName = PITCH_NAMES[type] || type;
-      const pitchUsage = pitchData.pct || 0;
-      const pitchWhiff = pitchData.whiff;
-      const edgeScore = xwoba !== null ? (xwoba - 0.310) * (pitchUsage/100) * 100 : 0;
-
-      pitchBreakdown.push({ type, pitchName, pitchUsage, pitchWhiff, xwoba, whiff, barrel, pa: pa||0, noData: !batterData, edgeScore });
-
-      if (xwoba !== null && xwoba >= 0.360 && (!bestEdge || xwoba > bestEdge.xwoba)) {
-        bestEdge = { type, pitchName, xwoba, whiff, pitchUsage, edgeScore };
-      }
-    }
-
-    if (pitchBreakdown.length > 0) matchups.push({ r, pitName, arsenal, pitchBreakdown, bestEdge });
-  }
-
-  // Sort by best edge
-  const edgePlays = matchups.filter(m => m.bestEdge).sort((a,b) => (b.bestEdge?.edgeScore||0)-(a.bestEdge?.edgeScore||0)).slice(0,20);
-  const filtered  = _edgeGame ? matchups.filter(m => m.r.gamePk == _edgeGame) : edgePlays;
-
-  // Game pills
-  const gamePills = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">'
-    + `<button onclick="_edgeGame=null;renderEdge()" style="font-size:10px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid ${!_edgeGame?'var(--teal)':'var(--bd)'};background:${!_edgeGame?'rgba(45,212,191,.1)':'transparent'};color:${!_edgeGame?'var(--teal)':'var(--t3)'};cursor:pointer">All Games</button>`
-    + [...games].sort(gameTimeSort).map(g=>`<button onclick="_edgeGame='${g.pk}';renderEdge()" style="font-size:10px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:1px solid ${_edgeGame==g.pk?'var(--teal)':'var(--bd)'};background:${_edgeGame==g.pk?'rgba(45,212,191,.1)':'transparent'};color:${_edgeGame==g.pk?'var(--teal)':'var(--t3)'};cursor:pointer;white-space:nowrap">${g.away} @ ${g.home}</button>`).join('')
-    + '</div>';
-
-  const legend = `<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;font-size:9px;font-family:var(--mono);color:var(--t3)">
-    Bar = batter xwOBA vs that pitch &nbsp;·&nbsp;
-    <span style="color:var(--green)">✅ Batter edge (.360+)</span> &nbsp;
-    <span style="color:var(--t3)">➖ Neutral</span> &nbsp;
-    <span style="color:var(--red)">❌ Pitcher advantage (.260−)</span>
-  </div>`;
-
-  const cards = filtered.map(({r, pitName, pitchBreakdown, bestEdge}) => {
-    const {count, badge, signals} = getSignalsLocked(r);
-    const streak = STREAK[r.name];
-    const hrpColor = r.hrp>=20?'var(--green)':r.hrp>=15?'var(--teal)':r.hrp>=10?'var(--amber)':'var(--t2)';
-    const hasEdgeSignal = getSignalsLocked(r).signals[6]?.active;
-
-    const pitchRows = pitchBreakdown.map(p => {
-      const xwoba = p.xwoba;
-      const barPct = xwoba !== null ? Math.min(100, Math.max(0, ((xwoba-0.200)/0.250)*100)) : null;
-      const isEdge = xwoba !== null && xwoba >= 0.360;
-      const isWeak = xwoba !== null && xwoba <= 0.260;
-      const barColor = isEdge?'var(--green)':isWeak?'var(--red)':'var(--bd)';
-      const icon = p.noData?'❓':isEdge?'✅':isWeak?'❌':'➖';
-      const xwobaDisplay = xwoba !== null ? '.'+Math.round(xwoba*1000).toString().padStart(3,'0') : 'N/A';
-      const xwobaC = p.noData?'var(--t3)':isEdge?'var(--green)':isWeak?'var(--red)':'var(--t3)';
-      return `<div style="display:grid;grid-template-columns:90px 30px 1fr 50px 20px;gap:8px;align-items:center;margin-bottom:5px">
-        <div>
-          <div style="font-size:10px;font-weight:700;font-family:var(--mono);color:var(--t2)">${p.pitchName}</div>
-          <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">${p.pitchUsage?.toFixed(0)}% ${p.noData?'· no data':p.pa<20?'· small sample':''}</div>
-        </div>
-        <div style="font-size:12px;text-align:center">${icon}</div>
-        <div style="background:var(--bg3);border-radius:3px;height:8px;overflow:hidden">
-          ${barPct!==null?`<div style="height:8px;border-radius:3px;background:${barColor};width:${barPct}%"></div>`:'<div style="height:8px;background:var(--bg3);width:50%"></div>'}
-        </div>
-        <div style="font-size:11px;font-weight:700;font-family:var(--mono);color:${xwobaC};text-align:right">${xwobaDisplay}</div>
-        <div style="font-size:8px;font-family:var(--mono);color:var(--t3)">xwOBA</div>
-      </div>`;
-    }).join('');
-
-    return `<div style="background:var(--bg2);border:1px solid ${hasEdgeSignal?'rgba(255,200,0,.3)':'var(--bd)'};border-radius:10px;padding:14px 16px;margin-bottom:10px;cursor:pointer" onclick="openPlayerModal(this.dataset.name)" data-name="${r.name}">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-        <div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span style="font-size:14px;font-weight:700;color:var(--t1)">${r.name}</span>
-            <span style="font-size:12px">${streak?.flame||''}</span>
-            ${hasEdgeSignal?'<span style="font-size:11px">⚔️</span>':''}
-            ${badge?`<span style="font-size:8px;font-family:var(--mono);padding:1px 5px;border-radius:3px;background:${badge.bg};color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}
-          </div>
-          <div style="font-size:10px;font-family:var(--mono);color:var(--t3)">${r.team} · vs ${pitName} · Bat ${r.order} · ${r.time}</div>
-        </div>
-        <div style="font-size:20px;font-weight:700;font-family:var(--mono);color:${hrpColor}">${r.hrp.toFixed(1)}%</div>
-      </div>
-      ${bestEdge?`<div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:6px;padding:8px 10px;margin-bottom:10px">
-        <div style="font-size:9px;font-family:var(--mono);color:var(--green);margin-bottom:2px">⚔️ ${bestEdge.pitchName} (${bestEdge.pitchUsage?.toFixed(0)}% usage)</div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t1)">xwOBA <strong style="color:var(--green)">.${Math.round(bestEdge.xwoba*1000)}</strong> vs ${bestEdge.pitchName}</div>
-      </div>`:''}
-      ${pitchRows}
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `<div style="padding:12px 0">
-    <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">
-      ${_edgeGame ? 'Showing full pitch breakdown for selected game' : 'Top 20 pitch edge plays · ranked by batter xwOBA vs pitcher primary pitch × usage weight'}
-    </div>
-    ${gamePills}${legend}
-    ${cards || '<div class="empty"><p>No pitch matchup data available</p></div>'}
-  </div>`;
+// One colored block per recent game — HR/multi-hit/hit/cold/no-game —
+// used in the player drawer's Recent Form strip. Ported from the old
+// standalone Pulse tab, which this replaced (form context now lives right
+// on the player card instead of a separate cross-player browsing tab).
+function formBlock(game) {
+  if (!game) return '';
+  const hasHR  = game.hr > 0;
+  const multi  = game.h >= 2;
+  const hasHit = game.h === 1;
+  const isCold = game.ab >= 3 && game.h === 0;
+  const bg = hasHR  ? 'var(--green)'
+           : multi  ? 'var(--teal)'
+           : hasHit ? 'rgba(45,212,191,.3)'
+           : isCold ? 'rgba(239,68,68,.3)'
+           : 'var(--bg3)';
+  const label = hasHR ? 'HR' : game.h > 0 ? game.h+'H' : game.ab > 0 ? '0' : '—';
+  const tc = hasHR ? '#000' : 'var(--t1)';
+  const tip = `${game.date||''} vs ${game.opponent||'?'}: ${game.h}/${game.ab}${game.hr>0?' HR':''}`;
+  return `<div title="${tip}" style="min-width:22px;height:22px;border-radius:4px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;font-family:var(--mono);color:${tc};flex-shrink:0">${label}</div>`;
 }
 
 function closePlayerModal() {
@@ -5811,8 +5507,8 @@ function openPlayerModal(name) {
       ]
     : null;
 
-  // Pitch-type edge — the same data the ⚔️ Edge tab shows, scoped to this
-  // matchup so it's not a separate place to check for the same player.
+  // Pitch-type edge — was previously duplicated on a standalone Edge tab;
+  // now lives only here, scoped to this matchup.
   const PITCH_NAMES = {
     FF:'4-Seam FB', SI:'2-Seam FB', SL:'Slider', CU:'Curveball', CH:'Changeup',
     CT:'Cutter', FS:'Splitter', ST:'Sweeper', KC:'Knuckle Curve', SV:'Slurve', FA:'Fastball',
@@ -5899,6 +5595,12 @@ function openPlayerModal(name) {
         ${l20Pct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${l20Pct}%;height:100%;background:var(--amber)"></div></div>`}
         <div style="font-size:8px;font-family:var(--mono);color:var(--t3);margin-top:5px">Last 20 PA${streak.avg?' · .'+Math.round(streak.avg*1000).toString().padStart(3,'0'):''}</div>
       </div>
+    </div>
+
+    <!-- Recent form — last 8 games at a glance -->
+    <div style="padding:10px 14px 0;display:flex;align-items:center;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <span style="font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;flex-shrink:0;margin-right:2px">Form</span>
+      ${streak.gameLog?.length ? streak.gameLog.slice(0,8).map(g=>formBlock(g)).join('') : '<span style="font-size:9px;font-family:var(--mono);color:var(--t3)">Loading…</span>'}
     </div>
 
     <!-- Signal icons — kept as a compact strip -->
@@ -7708,9 +7410,7 @@ function renderAll(){
   else if(curView==='tomorrow') renderTomorrow();
   else if(curView==='pitchers') renderPitchers();
   else if(curView==='history') renderHistory();
-  else if(curView==='pulse')   renderPulse();
   else if(curView==='derby')   renderDerby();
-  else if(curView==='edge')    renderEdge();
   else if(curView==='live')    renderLive();
   else if(curView==='parks')   renderParks();
   else if(curView==='simulate') renderSimulate();
@@ -7721,7 +7421,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','pulse','edge','parlay','tomorrow','pitchers','history','derby','live','parks','simulate'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','simulate'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
@@ -7731,7 +7431,7 @@ function setView(v,el){
 }
 
 function showTabLoading(v) {
-  const tabsNeedingData = ['players','targets','pitchers','today','pulse'];
+  const tabsNeedingData = ['players','targets','pitchers','today'];
   if (!tabsNeedingData.includes(v)) return;
   if (_dataReady.streaks && _dataReady.splits) return;
   let bar = document.getElementById('tab-loading-bar');
@@ -8167,8 +7867,6 @@ init();
     <div class="guide-row"><span class="guide-tag teal">☰ Players</span><div class="guide-text">Full ranked table of every batter in today's lineups. Filter by Signal Plays chip to see only high-conviction plays. Click any row to expand.</div></div>
     <div class="guide-row"><span class="guide-tag teal">⚾ Pitchers</span><div class="guide-text">Today's starters ranked by HR vulnerability — xERA, HR/9, Whiff%, platoon splits. Identifies pitchers to target.</div></div>
     <div class="guide-row"><span class="guide-tag teal">🎯 Best Plays</span><div class="guide-text">Curated picks bucketed by badge tier — 🏆 Elite (6 signals), ⭐ All-Star (5 signals), 💡 Value (4 signals), 📊 Top Probability (15%+). Max 3 per game per section.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">🔍 Pulse</span><div class="guide-text">Recent form research. All Games view shows top 25 players with last 10 game form blocks. Click any game pill to see both full lineups — great for pre-game research.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">⚔️ Edge</span><div class="guide-text">Pitch type matchup research. Shows how each batter performs vs their pitcher's specific arsenal — bar fill = batter edge ✅, vulnerability ❌, or neutral ➖. Filter by game to drill in.</div></div>
     <div class="guide-row"><span class="guide-tag teal">🎰 Parlays</span><div class="guide-text">Best 2, 3, and 4-leg HR parlays built from today's top signal plays.</div></div>
     <div class="guide-row"><span class="guide-tag teal">📅 Tomorrow</span><div class="guide-text">Early look at tomorrow's slate with projected lineups and park/weather context.</div></div>
     <div class="guide-row"><span class="guide-tag teal">🔮 Forecast</span><div class="guide-text">Expected HR total, hot batters, pitcher K props, and NRFI/YRFI targets.</div></div>
@@ -8199,7 +7897,7 @@ init();
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">🔍 Pulse — Form Blocks</div>
+    <div class="guide-h2">Player Card — Recent Form</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px">
       <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:var(--green)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">HR</span></div>
       <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:var(--teal)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">2+ hits</span></div>
@@ -8207,15 +7905,15 @@ init();
       <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:rgba(239,68,68,.3)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">0 for 3+</span></div>
       <div style="display:flex;align-items:center;gap:4px"><div style="width:16px;height:16px;border-radius:3px;background:var(--bg3)"></div><span style="font-size:10px;font-family:var(--mono);color:var(--t3)">no game</span></div>
     </div>
-    <div class="guide-text">Click any game pill to see both full lineups with form blocks. Use for pre-game research before lineups lock.</div>
+    <div class="guide-text">Click any player to open their card — the Recent Form strip shows their last 8 games at a glance, right above the signal icons.</div>
   </div>
 
   <div class="guide-section">
-    <div class="guide-h2">⚔️ Edge — Pitch Matchup</div>
+    <div class="guide-h2">Player Card — Pitch Edge Tab</div>
     <div class="guide-row"><span class="guide-tag green">✅</span><div class="guide-text">Batter xwOBA ≥.360 vs this pitch. Bar full green — batter damages this pitch.</div></div>
     <div class="guide-row"><span class="guide-tag gray">➖</span><div class="guide-text">xwOBA .260-.360. Neither side has a clear advantage.</div></div>
     <div class="guide-row"><span class="guide-tag red">❌</span><div class="guide-text">Batter xwOBA ≤.260. Pitcher's weapon — batter struggles here.</div></div>
-    <div class="guide-tip">💡 Best setup: player in Best Plays + ⚔️ signal firing + Edge tab shows green on pitcher's primary pitch = highest conviction play available.</div>
+    <div class="guide-tip">💡 Best setup: player in Best Plays + ⚔️ signal firing + Pitch Edge tab shows green on pitcher's primary pitch = highest conviction play available.</div>
   </div>
 
   <div class="guide-section">
@@ -8265,10 +7963,9 @@ init();
       1. Open app — schedule, lineups, Statcast, weather load automatically<br>
       2. Wait ~30s for streak and split data to finish loading<br>
       3. Check <strong>Best Plays</strong> for today's top bucketed picks<br>
-      4. Use <strong>Pulse</strong> to research recent form before lineups lock<br>
-      5. Use <strong>Edge</strong> to verify pitch matchup advantages on your targets<br>
-      6. Check <strong>Forecast</strong> for K props and NRFI/YRFI targets<br>
-      7. Confirmed lineups post automatically 2-3 hrs before first pitch
+      4. Open a player's card to check Recent Form and the Pitch Edge tab before locking in a target<br>
+      5. Check <strong>Forecast</strong> for K props and NRFI/YRFI targets<br>
+      6. Confirmed lineups post automatically 2-3 hrs before first pitch
     </div>
     <div class="guide-tip">💡 ~ badge = projected lineup. ✓ badge = confirmed batting order. Always wait for confirmed lineups before placing bets.</div>
   </div>
