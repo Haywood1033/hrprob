@@ -2830,6 +2830,45 @@ function lockSignals() {
   } catch(e) {}
 }
 
+// Fills in SIGNAL_LOCK for players who weren't yet in allRows when
+// lockSignals() made its one-time pass — e.g. a confirmed lineup posted
+// late and replaced the model's projected starter. Without this, such a
+// player has no SIGNAL_LOCK entry at all, so getSignalsLocked() falls back
+// to fully-live signals for them for the rest of the day: their signal
+// count and HR% keep recalculating off real-time stats, so a HR they've
+// already hit can retroactively surface them in Sharp Plays / Best Play /
+// badges — exactly the in-game inflation the lock exists to prevent.
+//
+// Only locks a player whose game hasn't started yet (per the live-poll
+// status in _liveGames). If their game is already Live or Final there's no
+// safe pre-game snapshot left to take — locking them now would just freeze
+// in-game stats instead, which doesn't fix anything. That case is rare
+// (it means someone entered a lineup for the first time after first pitch)
+// and is left live/unlocked rather than pretending to solve it.
+function lockStragglers() {
+  if (!_signalLockDate || Object.keys(SIGNAL_LOCK).length === 0) return; // main lock not built yet
+  let added = false;
+  for (const r of allRows) {
+    const already = SIGNAL_LOCK[r.name] || SIGNAL_LOCK[normName(r.name)] ||
+      Object.entries(SIGNAL_LOCK).find(([k]) => normName(k) === normName(r.name))?.[1];
+    if (already) continue;
+    const liveStatus = _liveGames[String(r.gamePk)]?.status;
+    if (liveStatus === 'Live' || liveStatus === 'Final') continue;
+    const {signals, count, badge, ci} = getSignals(r);
+    SIGNAL_LOCK[r.name] = { signals: signals.map(s=>s.active), count, badge, ci, hrp: r.hrp };
+    added = true;
+  }
+  if (added) {
+    try {
+      fetch('/api/history', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: 'save_lock', date: _signalLockDate, signalLock: SIGNAL_LOCK })
+      }).catch(()=>{});
+    } catch(e) {}
+  }
+}
+
 function getSignalsLocked(r) {
   if (!r?.name) return { signals:[], count:0, badge:null, ci:{}, hrp:null };
   // Try exact name first, then normalized (handles Jr./Sr. mismatches)
@@ -2922,6 +2961,7 @@ function rebuild(){
     });
   }
   allRows.sort((a,b)=>sortAsc?a[sortKey]-b[sortKey]:b[sortKey]-a[sortKey]);
+  lockStragglers(); // catch late lineup adds the main lock missed — see definition
   // game selector — populate with today's matchups
   const sel=document.getElementById('gsel');
   if(sel){
