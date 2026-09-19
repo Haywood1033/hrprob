@@ -2877,11 +2877,19 @@ function getSignalsLocked(r) {
   if (locked) {
     const isRealRow = r.hrp !== undefined;
     const live = isRealRow ? getSignals(r) : null;
+    const icons  = ['🏟','💨','🎯','🔥','🔒','🏏','⚔️','💥'];
+    const labels = ['Hitter Park','Wind Out','Pitcher Matchup','Hot Streak','Confidence','Pull Air Edge','Pitch Edge','Hot Contact'];
     return {
-      signals: live ? live.signals : (locked.signals||[]).map((a,i)=>{
-        const icons=['🏟','💨','🎯','🔥','🔒','🏏','⚔️','💥'];
-        return {icon:icons[i]||'?',active:!!a,key:'sig'+i,label:'',dim:'opacity:0.2'};
-      }),
+      // Icons must come from the SAME frozen snapshot as count/badge below.
+      // This used to recompute live here, so the icon row could show more
+      // (or fewer) signals lit than the locked count/badge reflected —
+      // e.g. wind turning on or a hot streak building mid-game would light
+      // up icons while count/badge stayed pinned at the pre-game number,
+      // making a player look "flagged enough" for Signal Plays when the
+      // lock — correctly — says otherwise.
+      signals: (locked.signals||[]).map((a,i)=>(
+        {icon:icons[i]||'?',active:!!a,key:'sig'+i,label:labels[i]||'',dim:'opacity:0.2'}
+      )),
       count:  locked.count,
       badge:  locked.badge,
       ci:     live ? live.ci : (locked.ci||{}),
