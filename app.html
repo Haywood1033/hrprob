@@ -2830,35 +2830,50 @@ function lockSignals() {
   } catch(e) {}
 }
 
-// Fills in SIGNAL_LOCK for players who weren't yet in allRows when
-// lockSignals() made its one-time pass — e.g. a confirmed lineup posted
-// late and replaced the model's projected starter. Without this, such a
-// player has no SIGNAL_LOCK entry at all, so getSignalsLocked() falls back
-// to fully-live signals for them for the rest of the day: their signal
-// count and HR% keep recalculating off real-time stats, so a HR they've
-// already hit can retroactively surface them in Sharp Plays / Best Play /
-// badges — exactly the in-game inflation the lock exists to prevent.
+// Keeps SIGNAL_LOCK in sync for every player whose game hasn't started yet.
+// Handles two related gaps in the one-time lockSignals() pass:
 //
-// Only locks a player whose game hasn't started yet (per the live-poll
-// status in _liveGames). If their game is already Live or Final there's no
-// safe pre-game snapshot left to take — locking them now would just freeze
-// in-game stats instead, which doesn't fix anything. That case is rare
-// (it means someone entered a lineup for the first time after first pitch)
-// and is left live/unlocked rather than pretending to solve it.
-function lockStragglers() {
+// 1. Missing entirely — a player wasn't in allRows yet when lockSignals()
+//    ran (e.g. a confirmed lineup posted late, replacing a projected
+//    starter). Without an entry, getSignalsLocked() falls back to fully
+//    live signals for them all day.
+// 2. Present but stale — a player WAS locked, but an upstream data source
+//    (most often the once-per-load STREAK fetch, which depends on MLB's
+//    Stats API having finished processing their most recent completed
+//    game) hadn't caught up yet, so their locked signals reflect an
+//    incomplete picture of their entering-today form. A later page load
+//    sees the corrected data live, but the lock — restored from Supabase —
+//    never revisits it, so the displayed "hot" stats and the frozen signal
+//    icons/badge visibly disagree for the rest of the day.
+//
+// Both are safe to fix as long as the player's game hasn't gone Live/Final
+// (per _liveGames): nothing about their own game action could be inflating
+// the numbers pre-game, so refreezing from newer pre-game data isn't the
+// in-game inflation the lock exists to prevent — it's just correcting an
+// early, incomplete snapshot. Once a game goes Live, that player's entry
+// is left exactly as it was locked; that case (a player's first allRows
+// appearance coming after their game is already live) has no safe
+// pre-game snapshot left to take and is left live/unlocked rather than
+// pretending to solve it.
+function syncPregameSignals() {
   if (!_signalLockDate || Object.keys(SIGNAL_LOCK).length === 0) return; // main lock not built yet
-  let added = false;
+  let changed = false;
   for (const r of allRows) {
-    const already = SIGNAL_LOCK[r.name] || SIGNAL_LOCK[normName(r.name)] ||
-      Object.entries(SIGNAL_LOCK).find(([k]) => normName(k) === normName(r.name))?.[1];
-    if (already) continue;
     const liveStatus = _liveGames[String(r.gamePk)]?.status;
-    if (liveStatus === 'Live' || liveStatus === 'Final') continue;
+    if (liveStatus === 'Live' || liveStatus === 'Final') continue; // frozen for good once the game starts
+    const existingKey = SIGNAL_LOCK[r.name] ? r.name
+      : SIGNAL_LOCK[normName(r.name)] ? normName(r.name)
+      : Object.entries(SIGNAL_LOCK).find(([k]) => normName(k) === normName(r.name))?.[0];
+    const existing = existingKey ? SIGNAL_LOCK[existingKey] : null;
     const {signals, count, badge, ci} = getSignals(r);
-    SIGNAL_LOCK[r.name] = { signals: signals.map(s=>s.active), count, badge, ci, hrp: r.hrp };
-    added = true;
+    const fresh = { signals: signals.map(s=>s.active), count, badge, ci, hrp: r.hrp };
+    if (existing && existing.count === fresh.count && JSON.stringify(existing.signals) === JSON.stringify(fresh.signals)) {
+      continue; // nothing changed — avoid needless writes/DB saves
+    }
+    SIGNAL_LOCK[existingKey || r.name] = fresh;
+    changed = true;
   }
-  if (added) {
+  if (changed) {
     try {
       fetch('/api/history', {
         method: 'POST',
@@ -2969,7 +2984,7 @@ function rebuild(){
     });
   }
   allRows.sort((a,b)=>sortAsc?a[sortKey]-b[sortKey]:b[sortKey]-a[sortKey]);
-  lockStragglers(); // catch late lineup adds the main lock missed — see definition
+  syncPregameSignals(); // catch late lineup adds + stale pre-game data — see definition
   // game selector — populate with today's matchups
   const sel=document.getElementById('gsel');
   if(sel){
