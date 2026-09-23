@@ -488,7 +488,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('derby',this)">📋 Props</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
-  <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>renderParks())">🏟 Parks</div>
+  <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})">🏟 Parks</div>
   <div class="tab" onclick="setView('simulate',this)">🎯 Sharp Plays</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
@@ -1133,20 +1133,52 @@ async function loadWeather(silent=false){
     updateLoadingStep('statcast','active');
     setLoadingStatus('Fetching Statcast data…');
   }
-  const outdoor=games.map(g=>g.home).filter(t=>{const p=getPark(t);return p&&p.lat&&p.roof!=='dome';});
-  await Promise.allSettled(outdoor.map(async t=>{
+  const outdoor=games.filter(g=>{const p=getPark(g.home);return p&&p.lat&&p.roof!=='dome';});
+  const CARDS=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+  await Promise.allSettled(outdoor.map(async g=>{
+    const t=g.home;
     const p=getPark(t);
     try{
-      const r=await safeFetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,windspeed_10m,winddirection_10m,surface_pressure,relative_humidity_2m,weather_code&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=America%2FNew_York&forecast_days=1`,8000);
+      // timezone=auto (not a hardcoded zone) so the hourly index below
+      // lines up with this park's own local clock, same as lib/weather.js.
+      const r=await safeFetch(`https://api.open-meteo.com/v1/forecast?latitude=${p.lat}&longitude=${p.lon}&hourly=temperature_2m,windspeed_10m,winddirection_10m,surface_pressure,relative_humidity_2m,weather_code&temperature_unit=fahrenheit&windspeed_unit=mph&timezone=auto&forecast_days=2`,8000);
       if(!r.ok)return;
       const d=await r.json();
-      const i=Math.floor((d.hourly?.time?.length||24)/2);
-      const pres = d.hourly.surface_pressure ? Math.round(d.hourly.surface_pressure[i]) : null;
-      const hum  = d.hourly.relative_humidity_2m ? Math.round(d.hourly.relative_humidity_2m[i]) : null;
-      const CARDS=['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
-      const wd = d.hourly.winddirection_10m[i];
-      const compass = CARDS[Math.round(wd/22.5)%16];
-      WX[t]={t:Math.round(d.hourly.temperature_2m[i]),ws:Math.round(d.hourly.windspeed_10m[i]),wd,dome:false,pres,hum,c:compass};
+      const times=d.hourly?.time||[];
+      if(!times.length)return;
+      // Find the hourly slot at this game's actual start time — a fixed
+      // "middle of the day" snapshot doesn't represent conditions at
+      // first pitch, and was the source of the parks-tab/player-drawer
+      // mismatch (this function used to always overwrite WX with that
+      // rough snapshot just to backfill pressure/humidity).
+      let hi=-1;
+      const match=g.time&&g.time.match(/(\d+):(\d+)\s*(AM|PM)/i);
+      if(match){
+        let hour=parseInt(match[1]);
+        const isPM=match[3].toUpperCase()==='PM';
+        if(isPM&&hour!==12)hour+=12;
+        if(!isPM&&hour===12)hour=0;
+        const datePrefix=times[0].slice(0,10);
+        hi=times.findIndex(x=>x===`${datePrefix}T${String(hour).padStart(2,'0')}:00`);
+      }
+      if(hi<0)hi=Math.floor(times.length/2); // fallback: mid-array
+      const pres=d.hourly.surface_pressure?Math.round(d.hourly.surface_pressure[hi]):null;
+      const hum =d.hourly.relative_humidity_2m?Math.round(d.hourly.relative_humidity_2m[hi]):null;
+      const wd=d.hourly.winddirection_10m[hi];
+      const compass=CARDS[Math.round(wd/22.5)%16];
+      // Backfill only what's missing — don't replace an already-accurate
+      // game-time reading (from /api/slate) with this rougher one just
+      // because pres/hum weren't set on it.
+      const existing=WX[t]||{};
+      WX[t]={
+        t:    existing.t    ?? Math.round(d.hourly.temperature_2m[hi]),
+        ws:   existing.ws   ?? Math.round(d.hourly.windspeed_10m[hi]),
+        wd:   existing.wd   ?? wd,
+        dome: false,
+        pres: existing.pres ?? pres,
+        hum:  existing.hum  ?? hum,
+        c:    existing.c    ?? compass,
+      };
     }catch(e){}
   }));
 }
@@ -4992,7 +5024,15 @@ function renderParks() {
   if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading\u2026</h3></div>'; return; }
 
   const hasPres = Object.values(WX).some(w=>!w.dome && w.pres != null);
-  if (!hasPres) loadWeather(true).then(()=>renderParks());
+  // Try the backfill once per page load, not on every render — renderParks()
+  // re-runs on nearly every data event while the app is loading, and without
+  // this guard each one would re-fire loadWeather() for as long as pressure
+  // stayed missing, hammering Open-Meteo and re-showing a rough snapshot on
+  // top of whatever's there each time.
+  if (!hasPres && !renderParks._weatherBackfillTried) {
+    renderParks._weatherBackfillTried = true;
+    loadWeather(true).then(()=>{ rebuild(); renderParks(); });
+  }
 
   const parkData = games.map(g => {
     const wx   = WX[g.home] || {};
@@ -7646,6 +7686,14 @@ async function init(){
               dome: wx.dome || false,
               label: wx.l || '',
               sky:  wx.s  || '',
+              // pres/hum were being silently dropped here, which made every
+              // slate-sourced entry look incomplete and triggered the
+              // loadWeather() browser fallback below to "fix" it — clobbering
+              // this accurate, game-time-specific backend reading with a
+              // rough same-day approximation. Keep them so that fallback
+              // only fires for entries that are genuinely missing data.
+              pres: wx.pres ?? null,
+              hum:  wx.hum ?? null,
             };
           }
         }
