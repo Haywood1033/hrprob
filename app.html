@@ -25,6 +25,34 @@ body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:14px
 .tab{padding:7px 15px;font-size:12px;font-weight:600;cursor:pointer;border-radius:20px;color:rgba(255,255,255,0.55);transition:all .15s;white-space:nowrap;border:0.5px solid transparent;font-family:var(--sans)}
 .tab:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.06)}
 .tab.active{color:#1a0e04;background:var(--accent);border-color:var(--accent);font-weight:700}
+
+/* Mobile bottom nav — replaces the scrollable top tab row below 768px with
+   a fixed 5-icon bar (Today/Players/Best Plays/Parks/More) plus a slide-up
+   sheet for the rest of the tabs, matching a native app nav pattern instead
+   of a horizontally-scrolling desktop tab strip shrunk down. */
+.bottom-nav{display:none}
+@media(max-width:768px){
+  .tabs{display:none}
+  .bottom-nav{display:flex;position:fixed;left:0;right:0;bottom:0;background:var(--bg2);border-top:0.5px solid rgba(255,255,255,0.1);padding:6px 4px calc(6px + env(safe-area-inset-bottom));z-index:200}
+  body{padding-bottom:calc(60px + env(safe-area-inset-bottom))}
+}
+.bn-btn{flex:1;background:none;border:none;color:rgba(255,255,255,.45);display:flex;flex-direction:column;align-items:center;gap:3px;font-family:var(--sans);font-weight:600;font-size:9px;cursor:pointer;padding:6px 0}
+.bn-btn .bn-icon{font-size:18px;line-height:1}
+.bn-btn.on{color:var(--accent)}
+
+.more-sheet-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:500}
+.more-sheet-overlay.on{display:flex;align-items:flex-end}
+.more-sheet{width:100%;max-height:80vh;background:var(--bg2);border-radius:20px 20px 0 0;padding:18px 18px calc(18px + env(safe-area-inset-bottom));overflow-y:auto}
+.more-sheet-hdr{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.more-sheet-title{font-family:var(--head);font-weight:800;font-size:18px;color:var(--t1)}
+.more-sheet-close{margin-left:auto;background:rgba(255,255,255,.08);border:none;color:var(--t1);width:30px;height:30px;border-radius:50%;font-size:14px;cursor:pointer}
+.more-sheet-sub{font-size:11px;color:var(--t3);margin-bottom:14px}
+.more-item{display:flex;align-items:center;gap:14px;padding:14px 4px;border-bottom:0.5px solid rgba(255,255,255,0.08);color:var(--t1);background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;cursor:pointer;font-family:var(--sans)}
+.more-item:last-child{border-bottom:none}
+.mi-icon{font-size:18px}
+.mi-label{font-size:14px;font-weight:600;flex-grow:1}
+.mi-arrow{font-size:12px;color:var(--t3)}
+
 .fbar{display:flex;gap:8px;padding:10px 20px;border-bottom:0.5px solid var(--bd);background:var(--bg);flex-wrap:wrap;align-items:center;overflow-x:auto}
 .fbar input,.fbar select{background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px;outline:none}
 .fbar input:focus,.fbar select:focus{border-color:var(--teal)}
@@ -239,9 +267,13 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .gm-pname{font-size:12px;font-weight:600;color:var(--t1);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gm-hrp{font-size:12px;font-family:var(--mono);font-weight:700;flex-shrink:0}
 .gm-footer{padding:12px 18px;display:flex;gap:16px;align-items:center;flex-wrap:wrap;font-size:11px;font-family:var(--mono);color:var(--t3)}
+.sp-split{display:grid;grid-template-columns:1fr 1fr}
+.sp-split-a{border-right:0.5px solid rgba(255,255,255,0.08)}
 @media(max-width:600px){
   .gm-pits,.gm-lineups{grid-template-columns:1fr}
   .gm-pit+.gm-pit,.gm-lineup+.gm-lineup{border-left:none;border-top:0.5px solid rgba(255,255,255,0.10)}
+  .sp-split{grid-template-columns:1fr}
+  .sp-split-a{border-right:none;border-bottom:0.5px solid rgba(255,255,255,0.08)}
 }
 
 .today-wrap{max-width:900px;margin:0 auto;padding:16px}
@@ -492,6 +524,34 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})">🏟 Parks</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
+
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bn-btn on" data-bn="today" onclick="setView('today',document.querySelector('.tab[onclick*=today]'))"><span class="bn-icon">⚡</span><span>Today</span></button>
+  <button class="bn-btn" data-bn="players" onclick="setView('players',document.querySelector('.tab[onclick*=players]'))"><span class="bn-icon">☰</span><span>Players</span></button>
+  <button class="bn-btn" data-bn="targets" onclick="setView('targets',document.querySelector('.tab[onclick*=targets]'))"><span class="bn-icon">🎯</span><span>Plays</span></button>
+  <button class="bn-btn" data-bn="parks" onclick="setView('parks',document.querySelector('.tab[onclick*=parks]'));if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})"><span class="bn-icon">🏟</span><span>Parks</span></button>
+  <button class="bn-btn" data-bn="more" onclick="openMoreSheet()"><span class="bn-icon">⋯</span><span>More</span></button>
+</nav>
+
+<div class="more-sheet-overlay" id="more-sheet" onclick="if(event.target===this)closeMoreSheet()">
+  <div class="more-sheet">
+    <div class="more-sheet-hdr">
+      <div class="more-sheet-title">More</div>
+      <button class="more-sheet-close" onclick="closeMoreSheet()" aria-label="Close">✕</button>
+    </div>
+    <div class="more-sheet-sub">The rest of HRProb's tabs, one tap away</div>
+    <div class="more-sheet-list">
+      <button class="more-item" onclick="closeMoreSheet();setView('live',document.querySelector('.tab[onclick*=live]'))"><span class="mi-icon">🔴</span><span class="mi-label">Live</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('pitchers',document.querySelector('.tab[onclick*=pitchers]'))"><span class="mi-icon">⚾</span><span class="mi-label">Pitchers</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('derby',document.querySelector('.tab[onclick*=derby]'))"><span class="mi-icon">📋</span><span class="mi-label">Props</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('parlay',document.querySelector('.tab[onclick*=parlay]'))"><span class="mi-icon">🎰</span><span class="mi-label">Parlays</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('gamelines',document.querySelector('.tab[onclick*=gamelines]'))"><span class="mi-icon">🎲</span><span class="mi-label">Game Lines</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('tomorrow',document.querySelector('.tab[onclick*=tomorrow]'))"><span class="mi-icon">📅</span><span class="mi-label">Tomorrow</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('history',document.querySelector('.tab[onclick*=history]'))"><span class="mi-icon">📊</span><span class="mi-label">Accuracy</span><span class="mi-arrow">›</span></button>
+    </div>
+  </div>
+</div>
+
 <div class="fbar" id="fbar">
   <input type="text" id="srch" placeholder="Search player…" oninput="renderPlayers()">
   <select id="gsel" onchange="filterByGame(this.value)" style="min-width:160px"><option value="">All Games</option></select>
@@ -4963,8 +5023,8 @@ function buildSharpPlaysHTML() {
             <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4);margin-top:3px">${ci?.label||''} confidence</div>
           </div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:0.5px solid rgba(255,255,255,0.08)">
-          <div style="padding:12px 16px;border-right:0.5px solid rgba(255,255,255,0.08)">
+        <div class="sp-split" style="border-bottom:0.5px solid rgba(255,255,255,0.08)">
+          <div class="sp-split-a" style="padding:12px 16px">
             <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Why it's sharp</div>
             ${reasons.slice(0,5).map(reason=>`<div style="font-size:11px;color:rgba(255,255,255,0.75);padding:2px 0;display:flex;gap:6px"><span style="flex-shrink:0">${reason.slice(0,2)}</span><span style="color:rgba(255,255,255,0.65)">${reason.slice(2)}</span></div>`).join('')||'<div style="font-size:11px;color:rgba(255,255,255,0.4)">Signal details loading…</div>'}
           </div>
@@ -7328,16 +7388,29 @@ function renderAll(){
 }
 
 // ── UI ──
+// Views with a direct bottom-nav icon; everything else falls under "more"
+const BOTTOM_NAV_DIRECT = {today:'today', players:'players', targets:'targets', parks:'parks'};
+
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
   ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','gamelines'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
+  const bnActive = BOTTOM_NAV_DIRECT[v] || 'more';
+  document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('on', b.dataset.bn===bnActive));
+  closeMoreSheet();
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
     showTabLoading(v);
   }
   renderAll();
+}
+
+function openMoreSheet(){
+  document.getElementById('more-sheet').classList.add('on');
+}
+function closeMoreSheet(){
+  document.getElementById('more-sheet')?.classList.remove('on');
 }
 
 function showTabLoading(v) {
