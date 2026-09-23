@@ -2845,10 +2845,29 @@ function lockSignals() {
   const etDate = new Date(etStr);
   const today = etDate.toLocaleDateString('en-CA');
 
+  // Sanity check for "is the current SIGNAL_LOCK a real full-slate build,
+  // or a broken partial snapshot" — e.g. only one game's rows had loaded
+  // into allRows (a transient partial /api/slate response, or one game
+  // resolving before the rest) at the moment something locked. Without
+  // this, that snapshot gets frozen for the entire day (and POSTed to the
+  // DB, so it can outlive the page that built it) with nothing to correct
+  // it even once the rest of the slate loads fine seconds later. Only
+  // judge this once allRows actually has data to check coverage against;
+  // a single-game slate (games.length<=1) has nothing to be incomplete
+  // relative to.
+  const gamesCovered = allRows.length ? new Set(allRows.map(r => r.gamePk)).size : 0;
+  const looksComplete = !allRows.length || games.length <= 1 || gamesCovered >= Math.ceil(games.length / 2);
+
   // Lock is DB-only — localStorage removed to ensure all devices share same state
   // DB restore happens in loadHistory() — if already restored, skip rebuild
   if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
-    return;
+    if (looksComplete) return;
+    // Existing lock (built earlier this session, or restored from the DB)
+    // covers less than half of today's games while allRows now has fuller
+    // data available — clear it and fall through to rebuild a real one
+    // instead of keeping a broken snapshot for the rest of the day.
+    Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
+    _signalLockDate = null;
   }
 
   // Never build a fresh local lock before the DB restore attempt
@@ -2866,7 +2885,8 @@ function lockSignals() {
     return;
   }
   // historyLoaded is true — loadHistory() already restored a DB lock into
-  // SIGNAL_LOCK if one existed for today; re-check before building fresh.
+  // SIGNAL_LOCK if one existed for today; re-check before building fresh
+  // (the completeness check above already cleared it out if it looked broken).
   if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
     return;
   }
@@ -2875,6 +2895,13 @@ function lockSignals() {
   // (pre-game state before 1pm ET; a same-day fallback after that if
   // no DB record ever got saved).
   if (!allRows.length) return;
+  if (!looksComplete) {
+    // allRows is non-empty but doesn't yet cover most of today's games —
+    // wait for the rest of the slate to load rather than lock in a
+    // partial snapshot.
+    setTimeout(lockSignals, 3000);
+    return;
+  }
   _signalLockDate = today;
   for (const r of allRows) {
     const {signals, count, badge, ci} = getSignals(r);
