@@ -6,25 +6,25 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HRProb · MLB Home Run Probability</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600;700&display=swap');
-:root{--bg:#0a0e1a;--bg2:#0e1422;--bg3:#141e2e;--bd:rgba(255,255,255,0.10);--bd2:rgba(255,255,255,0.16);--t1:rgba(255,255,255,0.92);--t2:rgba(255,255,255,0.62);--t3:rgba(255,255,255,0.45);--teal:#2dd4bf;--green:#4ade80;--amber:#f59e0b;--red:#f87171;--purple:#a78bfa;--blue:#60a5fa;--mono:'Space Mono',monospace;--sans:'DM Sans',system-ui,sans-serif;--r:8px}
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Sora:wght@600;700;800&family=Manrope:wght@400;500;600;700&display=swap');
+:root{--bg:#0b0f1a;--bg2:#131a2b;--bg3:#1a2340;--bd:rgba(255,255,255,0.08);--bd2:rgba(255,255,255,0.16);--t1:#f5f6fa;--t2:rgba(255,255,255,0.62);--t3:rgba(255,255,255,0.45);--teal:#22d3c5;--green:#4ade80;--amber:#ffb454;--red:#f87171;--purple:#a78bfa;--blue:#60a5fa;--accent:#ff8a3d;--mono:'Space Mono',monospace;--sans:'Manrope',system-ui,sans-serif;--head:'Sora',var(--sans);--r:12px}
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--t1);font-family:var(--sans);font-size:14px;min-height:100vh;overflow-x:hidden}
 .hdr{display:flex;align-items:center;gap:12px;padding:12px 20px;border-bottom:0.5px solid var(--bd);background:var(--bg);position:sticky;top:0;z-index:100}
-.logo{font-family:var(--mono);font-size:15px;font-weight:500;color:var(--t1);letter-spacing:-0.3px}
+.logo{font-family:var(--head);font-size:17px;font-weight:800;color:var(--t1);letter-spacing:-0.02em}
 .hdr-date{font-family:var(--mono);font-size:11px;color:rgba(255,255,255,0.75);background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.18);padding:4px 10px;border-radius:20px;letter-spacing:0.02em}
 .status{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--t3);margin-left:auto;font-family:var(--mono)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
 .dot.live{background:var(--green);box-shadow:0 0 6px var(--green)}
 .dot.spin{background:var(--amber);animation:pulse 1s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
-.btn{background:transparent;border:0.5px solid rgba(255,255,255,0.11);color:var(--t2);padding:5px 12px;border-radius:4px;cursor:pointer;font-size:11px;font-family:var(--mono);transition:all .15s}
-.btn:hover{border-color:var(--teal);color:var(--teal)}
-.tabs{display:flex;gap:6px;padding:10px 18px;border-bottom:0.5px solid rgba(255,255,255,0.08);background:var(--bg);overflow-x:auto;scrollbar-width:none}
+.btn{background:transparent;border:0.5px solid rgba(255,255,255,0.11);color:var(--t2);padding:5px 12px;border-radius:8px;cursor:pointer;font-size:11px;font-family:var(--mono);transition:all .15s}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.tabs{display:flex;gap:4px;padding:10px 18px;border-bottom:0.5px solid rgba(255,255,255,0.08);background:var(--bg);overflow-x:auto;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{padding:6px 14px;font-size:11px;font-weight:500;cursor:pointer;border-radius:20px;color:rgba(255,255,255,0.45);transition:all .15s;white-space:nowrap;border:0.5px solid transparent;font-family:var(--mono)}
-.tab:hover{color:rgba(255,255,255,0.7);background:rgba(255,255,255,0.05)}
-.tab.active{color:var(--green);background:rgba(74,222,128,0.1);border-color:rgba(74,222,128,0.25)}
+.tab{padding:7px 15px;font-size:12px;font-weight:600;cursor:pointer;border-radius:20px;color:rgba(255,255,255,0.55);transition:all .15s;white-space:nowrap;border:0.5px solid transparent;font-family:var(--sans)}
+.tab:hover{color:rgba(255,255,255,0.85);background:rgba(255,255,255,0.06)}
+.tab.active{color:#1a0e04;background:var(--accent);border-color:var(--accent);font-weight:700}
 .fbar{display:flex;gap:8px;padding:10px 20px;border-bottom:0.5px solid var(--bd);background:var(--bg);flex-wrap:wrap;align-items:center;overflow-x:auto}
 .fbar input,.fbar select{background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);color:var(--t1);padding:6px 10px;border-radius:var(--r);font-size:12px;outline:none}
 .fbar input:focus,.fbar select:focus{border-color:var(--teal)}
@@ -94,8 +94,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vforecast,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks,#vsimulate{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vforecast.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on,#vsimulate.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vgamelines,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vgamelines.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -245,18 +245,18 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 }
 
 .today-wrap{max-width:900px;margin:0 auto;padding:16px}
-.today-hero{background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:10px;padding:20px 24px;margin-bottom:14px}
+.today-hero{background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:16px;padding:20px 24px;margin-bottom:14px}
 .today-hero-date{font-size:11px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px}
-.today-hero-title{font-size:22px;font-weight:700;color:var(--t1);margin-bottom:4px;letter-spacing:-.02em}
+.today-hero-title{font-family:var(--head);font-size:22px;font-weight:800;color:var(--t1);margin-bottom:4px;letter-spacing:-.02em}
 .today-hero-sub{font-size:12px;color:var(--t3);font-family:var(--mono)}
 .today-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-bottom:14px}
-.today-kpi{background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:8px;padding:14px 16px}
-.today-kpi-val{font-size:26px;font-weight:700;font-family:var(--mono);line-height:1;margin-bottom:4px}
+.today-kpi{background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:14px;padding:14px 16px}
+.today-kpi-val{font-family:var(--head);font-size:26px;font-weight:800;line-height:1;margin-bottom:4px}
 .today-kpi-lbl{font-size:9px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em}
 .today-two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 @media(max-width:600px){.today-two-col{grid-template-columns:1fr!important}}
-.today-section{background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:8px;margin-bottom:12px;overflow:hidden}
-.today-section-hdr{padding:12px 16px;border-bottom:0.5px solid var(--bd);font-size:10px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.1em;display:flex;justify-content:space-between;align-items:center}
+.today-section{background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:14px;margin-bottom:12px;overflow:hidden}
+.today-section-hdr{padding:12px 16px;border-bottom:0.5px solid var(--bd);font-size:11px;font-family:var(--sans);font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.06em;display:flex;justify-content:space-between;align-items:center}
 .today-section-body{padding:14px 16px}
 .today-target{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--bg3)}
 .today-target:last-child{border-bottom:none}
@@ -340,9 +340,9 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .game-strip::-webkit-scrollbar{height:4px}
 .game-strip::-webkit-scrollbar-track{background:transparent}
 .game-strip::-webkit-scrollbar-thumb{background:var(--bd);border-radius:2px}
-.gs-card{flex-shrink:0;width:170px;background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:8px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
+.gs-card{flex-shrink:0;width:170px;background:var(--bg2);border:0.5px solid rgba(255,255,255,0.11);border-radius:12px;padding:10px 12px;cursor:pointer;transition:border-color .15s}
 .gs-card:hover{border-color:var(--teal)}
-.gs-card.high-scoring{border-color:rgba(245,158,11,.3)}
+.gs-card.high-scoring{border-color:rgba(255,138,61,.4)}
 .gs-status{font-size:8px;font-family:var(--mono);color:var(--t3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
 .gs-team{display:flex;justify-content:space-between;align-items:center;padding:2px 0}
 .gs-team-name{font-size:12px;font-weight:600;color:var(--t1)}
@@ -430,8 +430,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 
 .today-pills{display:flex;gap:6px;padding:10px 16px;border-bottom:0.5px solid var(--bd);overflow-x:auto;scrollbar-width:none;flex-shrink:0}
 .today-pills::-webkit-scrollbar{display:none}
-.today-pill{font-size:11px;font-family:var(--mono);padding:5px 14px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.55);cursor:pointer;white-space:nowrap;transition:all .15s;background:transparent}
-.today-pill.on{background:rgba(74,222,128,0.1);color:var(--green);border-color:rgba(74,222,128,0.25);font-weight:500}
+.today-pill{font-size:11px;font-family:var(--sans);font-weight:600;padding:6px 14px;border-radius:20px;border:0.5px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.55);cursor:pointer;white-space:nowrap;transition:all .15s;background:transparent}
+.today-pill.on{background:rgba(255,138,61,0.15);color:var(--accent);border-color:rgba(255,138,61,0.4);font-weight:700}
 .today-pill:hover:not(.on){border-color:rgba(255,255,255,0.25);color:rgba(255,255,255,0.75);background:rgba(255,255,255,0.05)}
 .today-pane{display:none}.today-pane.on{display:block}
 
@@ -487,9 +487,9 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('targets',this)">🎯 Best Plays</div>
   <div class="tab" onclick="setView('derby',this)">📋 Props</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
+  <div class="tab" onclick="setView('gamelines',this)">🎲 Game Lines</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})">🏟 Parks</div>
-  <div class="tab" onclick="setView('simulate',this)">🎯 Sharp Plays</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
 <div class="fbar" id="fbar">
@@ -510,7 +510,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button class="chip" id="wxfilt" onclick="toggleWxFilter(this)" title="Hitter-friendly park + wind blowing out">⚡ Park+Wind Edge</button>
   <button class="chip" id="sigfilt" onclick="toggleSignalFilter(this)" title="Players with 3+ signals firing">🎯 Signal Plays</button>
 </div>
-<div id="vtoday"><span id="today-pill-active" data-pill="overview" style="display:none"></span><div id="today-grid"></div></div>
+<div id="vtoday"><div id="today-grid"></div></div>
 <div id="vplayers"><div class="twrap"><table><thead><tr>
   <th class="rk">#</th><th>Player</th><th>Team</th><th>vs Pitcher</th>
   <th>Park</th><th>Weather</th>
@@ -522,13 +522,19 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vderby" class="view"><div id="derby-grid"></div></div>
 <div id="vlive" class="view"><div id="live-grid" style="padding:14px 20px"></div></div>
 <div id="vparks" class="view"><div id="parks-grid" style="padding:14px 20px"></div></div>
-<div id="vsimulate" class="view"><div id="sim-grid" style="padding:0"></div></div>
+<div id="vgamelines" class="view"><div id="gamelines-grid"></div></div>
 <div id="vpitchers" class="view"><div id="pitchers-grid"></div></div>
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets" class="view"><div id="tgrid" style="display:block;padding:0;width:100%;overflow-x:auto"></div></div>
-<div id="vparlay" class="view"><div class="pgrid" id="pgrid"></div></div>
+<div id="vparlay" class="view"><span id="parlay-pill-active" data-pill="auto" style="display:none"></span>
+  <div class="today-pills" style="padding:10px 20px 0">
+    <button class="today-pill on" data-pill="auto" onclick="setParlayPill(this.dataset.pill,this)">Auto Parlays</button>
+    <button class="today-pill" data-pill="builder" onclick="setParlayPill(this.dataset.pill,this)">⚡ Builder</button>
+  </div>
+  <div class="today-pane on" id="pane-parlay-auto"><div class="pgrid" id="pgrid"></div></div>
+  <div class="today-pane" id="pane-parlay-builder"><div id="builder-grid"></div></div>
+</div>
 <div id="vtomorrow" class="view"><div id="tomorrow-grid"></div></div>
-<div id="vforecast" class="view"><div class="fcast-grid" id="fcast-grid"></div></div>
 <div id="vhistory" class="view"><div class="hgrid" id="hgrid"></div></div>
 
 <script>
@@ -1600,6 +1606,18 @@ function generateCombinations(arr, k) {
   return result;
 }
 
+function setParlayPill(pill, btn) {
+  document.querySelectorAll('#vparlay .today-pill').forEach(b => b.classList.remove('on'));
+  btn?.classList.add('on');
+  const marker = document.getElementById('parlay-pill-active');
+  if (marker) marker.dataset.pill = pill;
+  document.querySelectorAll('#vparlay .today-pane').forEach(p => p.classList.remove('on'));
+  const pane = document.getElementById('pane-parlay-'+pill);
+  if (pane) pane.classList.add('on');
+  if (pill === 'builder') renderBuilder();
+  else renderParlay();
+}
+
 function renderParlay() {
   const grid = document.getElementById('pgrid');
   const candidates = buildParlayLegs();
@@ -2031,7 +2049,7 @@ function toggleFcastHot(header) {
 }
 
 function renderForecast(silent=false) {
-  const grid = document.getElementById('fcast-grid') || document.getElementById('vforecast');
+  const grid = document.getElementById('fcast-grid');
   if (!allRows.length) { if (!silent && grid) grid.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
 
   // View toggle pills
@@ -3974,7 +3992,7 @@ function openPitcherModal(pitName, team, oppTeam, side, gamePk) {
 }
 
 
-let _todayPill = 'overview';
+let _gameLinesPill = 'f5';
 
 function goToTargets(){setView('targets',document.querySelector('.tab[onclick*=targets]'));}
 function goToSignals(){signalFilt=true;document.getElementById('sigfilt')?.classList.add('on');setView('players',document.querySelector('.tab[onclick*=players]'));}
@@ -3994,33 +4012,6 @@ function gameTimeSort(a, b) {
   };
   return parseTime(a.time) - parseTime(b.time);
 }
-
-function setTodayPill(pill, btn) {
-  _todayPill = pill;
-  // Update pill buttons
-  document.querySelectorAll('.today-pill').forEach(b => b.classList.remove('on'));
-  btn?.classList.add('on');
-  // Set active marker
-  const marker = document.getElementById('today-pill-active');
-  if (marker) marker.dataset.pill = pill;
-  // Show correct pane
-  document.querySelectorAll('.today-pane').forEach(p => p.classList.remove('on'));
-  const pane = document.getElementById('pane-'+pill);
-  if (pane) pane.classList.add('on');
-  if (pill === 'forecast') renderForecast();
-  if (pill === 'fg') renderFullGame();
-  if (pill === 'builder') renderBuilder();
-  if (pill === 'f1') {
-    if (!F1_CACHE.length) {
-      renderForecast(true);
-      // Re-render Today after short delay to pick up _nrfiGames
-      setTimeout(() => renderToday(), 300);
-    } else {
-      renderToday();
-    }
-  }
-}
-
 
 const _loadState = { slate: false, statcast: false, streaks: false, splits: false };
 const _dataReady = { streaks: false, splits: false };
@@ -4794,9 +4785,8 @@ let _simPlayers   = null;      // null = all, else Set of names
 let _simResults   = null;      // cached simulation results
 let _simN         = 10000;     // simulation runs
 
-function renderSimulate() {
-  const el = document.getElementById('sim-grid');
-  if (!el) return;
+function buildSharpPlaysHTML() {
+  if (!allRows.length) return '';
 
   // Build player pool
   const seen = new Map();
@@ -4837,9 +4827,6 @@ function renderSimulate() {
     return almostQual && hasRedFlag && !sharpPlays.find(s=>s.name===r.name);
   }).slice(0, 3);
 
-  const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
-  const dateStr = new Date(etStr).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-
   // ── Slate context for narrative ──────────────────────────────
   const openGames = games.filter(g => !WX[g.home]?.dome);
   const windOutGames = openGames.filter(g => {
@@ -4855,9 +4842,9 @@ function renderSimulate() {
   }).filter(p=>p.hrw?.score>5).sort((a,b)=>b.hrw.score-a.hrw.score).slice(0,3);
 
   // Color helpers
-  const tierColor    = l => l?.includes('Elite')?'#BA7517':l?.includes('All')?'#185FA5':'#533AB7';
-  const tierBg       = l => l?.includes('Elite')?'rgba(186,117,23,0.06)':l?.includes('All')?'rgba(24,95,165,0.06)':'rgba(83,58,183,0.06)';
-  const tierBadgeBg  = l => l?.includes('Elite')?'rgba(245,158,11,0.15)':l?.includes('All')?'rgba(96,165,250,0.12)':'rgba(167,139,250,0.12)';
+  const tierColor    = l => l?.includes('Elite')?'#ff8a3d':l?.includes('All')?'#22d3c5':'#a78bfa';
+  const tierBg       = l => l?.includes('Elite')?'rgba(255,138,61,0.08)':l?.includes('All')?'rgba(34,211,197,0.06)':'rgba(167,139,250,0.06)';
+  const tierBadgeBg  = l => l?.includes('Elite')?'rgba(255,138,61,0.15)':l?.includes('All')?'rgba(34,211,197,0.12)':'rgba(167,139,250,0.12)';
   const probColor    = p => p>=20?'var(--green)':p>=15?'var(--teal)':p>=10?'var(--amber)':'rgba(255,255,255,0.6)';
   const xeraColor    = v => v>=5.00?'var(--red)':v>=4.50?'var(--amber)':v<4.00?'var(--green)':'rgba(255,255,255,0.6)';
   const hr9Color     = v => v>=1.50?'var(--red)':v>=1.20?'var(--amber)':v<1.00?'var(--green)':'rgba(255,255,255,0.6)';
@@ -4865,34 +4852,27 @@ function renderSimulate() {
   const whiffColor   = v => v>=30?'var(--green)':v>=24?'var(--teal)':'rgba(255,255,255,0.6)';
 
   // ── Section 1: Slate Narrative (data-driven) ────────────────
-  // ── Render full view ────────────────────────────────────────
-  el.innerHTML = `
-  <div style="background:var(--bg2);border-bottom:0.5px solid rgba(255,255,255,0.10);padding:14px 16px;display:flex;justify-content:space-between;align-items:center">
-    <div>
-      <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92)">🎯 Sharp Plays</div>
-      <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:2px;display:flex;align-items:center;gap:6px">
-        <span style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block"></span>
-        ${dateStr} · ${sharpPlays.length} sharp plays · 5+ signals · 14%+ HR · vulnerable pitcher
-      </div>
-    </div>
-    <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.3);text-align:right">Triple convergence filter</div>
-  </div>
+  const narrativeText = `${games.length}-game slate with ${openGames.length} open-air parks. ${windOutGames.length ? windOutGames.length+' game'+(windOutGames.length>1?'s':'')+' with wind carrying out — '+topParks.map(p=>p.name).join(', ')+' stand out.' : 'No significant wind advantage today.'} ${vulnPitchers.length ? 'Pitcher vulnerability is elevated — '+[...new Set(vulnPitchers.map(p=>p.name||''))].slice(0,3).join(', ')+' projecting at xERA 5.00+.' : 'Pitcher quality is solid across the board — no standout vulnerabilities.'} ${sharpPlays.length ? sharpPlays.length+' play'+(sharpPlays.length>1?'s where the full model converges':'where the full model converges')+' — focus there.' : 'No plays meet the sharp threshold today — consider waiting for a better setup.'}`;
 
-  <div style="padding:14px 16px">
+  // ── Render section (embedded on Today) ──────────────────────
+  return `
+  <div class="today-section" style="margin-bottom:12px;background:transparent;border:none">
+    <div class="today-section-hdr" style="padding:0 0 12px;border-bottom:none">
+      <span style="font-family:var(--head);font-size:17px;font-weight:800;color:var(--t1);text-transform:none;letter-spacing:0">🎯 Sharp Plays</span>
+      <span style="color:var(--t3);font-size:9px">Triple convergence · 5+ signals · 14%+ HR · vulnerable pitcher</span>
+    </div>
 
     <!-- Section 1: Slate Narrative -->
-    <div style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.10);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+    <div style="background:var(--bg2);border:0.5px solid rgba(255,255,255,0.10);border-radius:14px;padding:14px 16px;margin-bottom:16px">
       <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;gap:6px">
-        <span style="width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block"></span>
+        <span style="width:5px;height:5px;border-radius:50%;background:var(--teal);display:inline-block"></span>
         Today's slate read
       </div>
-      <div id="sharp-narrative" style="font-size:13px;line-height:1.7;color:rgba(255,255,255,0.80)">
-        <span style="color:rgba(255,255,255,0.3);font-family:var(--mono);font-size:11px">Generating slate briefing…</span>
-      </div>
+      <div style="font-size:13px;line-height:1.7;color:rgba(255,255,255,0.80)">${narrativeText}</div>
     </div>
 
     <!-- Section 2: Sharp Plays -->
-    <div style="font-size:11px;font-weight:500;color:rgba(255,255,255,0.75);margin-bottom:10px;display:flex;align-items:center;gap:8px">
+    <div style="font-size:11px;font-weight:700;color:rgba(255,255,255,0.75);margin-bottom:10px;display:flex;align-items:center;gap:8px">
       <span>The plays</span>
       <span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.4)">${sharpPlays.length} targets where everything aligns</span>
     </div>
@@ -5002,13 +4982,6 @@ function renderSimulate() {
     </div>` : ''}
 
   </div>`;
-
-  // Build narrative from data — no API call needed
-  const envScore = topParks.length >= 2 ? 'favorable' : topParks.length === 1 ? 'mixed' : 'neutral';
-  const narrativeEl = document.getElementById('sharp-narrative');
-  if (narrativeEl) {
-    narrativeEl.innerHTML = `${games.length}-game slate with ${openGames.length} open-air parks. ${windOutGames.length ? windOutGames.length+' game'+(windOutGames.length>1?'s':'')+' with wind carrying out — '+topParks.map(p=>p.name).join(', ')+' stand out.' : 'No significant wind advantage today.'} ${vulnPitchers.length ? 'Pitcher vulnerability is elevated — '+[...new Set(vulnPitchers.map(p=>p.name||''))].slice(0,3).join(', ')+' projecting at xERA 5.00+.' : 'Pitcher quality is solid across the board — no standout vulnerabilities.'} ${sharpPlays.length ? sharpPlays.length+' play'+(sharpPlays.length>1?'s where the full model converges':'where the full model converges')+' — focus there.' : 'No plays meet the sharp threshold today — consider waiting for a better setup.'}`;
-  }
 }
 
 function calcHRWeather(team, wx, park) {
@@ -6159,23 +6132,12 @@ function renderToday() {
   const confirmed = games.reduce((n,g) => n + (g.awayLineup.length?1:0) + (g.homeLineup.length?1:0), 0);
   const signalCount = players.filter(r=>{const {count}=getSignalsLocked(r);return count>=4;}).length;
 
-  const top5 = players.slice(0,5);
-
   const kpiHTML = '<div class="today-kpis">'
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--teal)">'+expHR.toFixed(1)+'</div><div class="today-kpi-lbl">Expected HRs</div></div>'
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--green)">'+confirmed+'</div><div class="today-kpi-lbl">Lineups In</div></div>'
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--amber)">'+hotPlayers.length+'</div><div class="today-kpi-lbl">Hot Batters</div></div>'
     + '<div class="today-kpi"><div class="today-kpi-val" style="color:var(--purple)">'+signalCount+'</div><div class="today-kpi-lbl">Signal Plays</div></div>'
     + '</div>';
-
-  // Top signal plays
-  const signalPlays = [...players]
-    .filter(r => { const {count}=getSignalsLocked(r); return count>=4; })
-    .sort((a,b) => {
-      const ra=getSignalsLocked(a),rb=getSignalsLocked(b);
-      return rb.count!==ra.count ? rb.count-ra.count : b.hrp-a.hrp;
-    })
-    .slice(0,5);
 
   // Park ranking
   const parkRanked = games.map(g => {
@@ -6207,87 +6169,6 @@ function renderToday() {
   };
   const best = [...players].sort((a,b)=>scorePlayer(b)-scorePlayer(a))[0];
 
-  // Hidden edge
-  const fringe = players
-    .filter(r => r.hrp>=6 && r.hrp<15)
-    .filter(r => {
-      const pa=getBatter(r.name)?.pa||0;const ci=getCI(r.hrp,pa);
-      if(ci.tier==='low')return false;
-      const barrel=getBatter(r.name)?.ba||r.barrel;const streak=STREAK[r.name];
-      const park=getPark(r.game?.home||r.team)||{};const wx=WX[r.game?.home||r.team]||{};
-      const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
-      const windOut=diff>135&&diff<225;const pit=r.pit||{};
-      return barrel>=12||streak?.flame==='\uD83D\uDD25\uD83D\uDD25'||streak?.flame==='\uD83D\uDD25'||(park.f||1)>=1.08||(windOut&&(wx.ws||0)>=10)||(pit.xera||pit.era||4.5)>=5.0||(pit.hr9||1.2)>=1.6;
-    })
-    .sort((a,b)=>scorePlayer(b)-scorePlayer(a))
-    .slice(0,8);
-
-  const top5HTML = top5.map((r,i)=>{
-    const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-    const flame=STREAK[r.name]?.flame||'';
-    return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
-      +'<div class="today-target-rank">'+(i+1)+'</div>'
-      +'<div><div class="today-target-name">'+r.name+' '+flame+' '+parkBadge(r.name,true)+'</div>'
-      +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div>'
-      +'<div style="margin-top:4px">'+signalPanel(r,true)+'</div></div>'
-      +'<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div></div>'
-      +'</div>';
-  }).join('');
-
-  const signalHTML = signalPlays.length ? signalPlays.map(r=>{
-    const {badge}=getSignalsLocked(r);const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-    return '<div class="today-target" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')">'
-      +'<div style="flex:1"><div class="today-target-name">'+r.name+'</div>'
-      +'<div class="today-target-sub">'+r.team+' vs '+r.pitName+'</div>'
-      +'<div style="margin-top:4px">'+signalPanel(r,true)+'</div></div>'
-      +'<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+hc+'">'+r.hrp.toFixed(1)+'%</div>'
-      +(badge?'<div style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+';margin-top:3px">'+badge.label+'</div>':'')
-      +'</div></div>';
-  }).join('') : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading signal data…</div>';
-
-  // Hot Contact board — season barrel% + recent game log SLG as recency proxy
-  const hotContactPlays = [...players]
-    .map(r => {
-      const b = getBatter(r.name);
-      if (!b || !b.ba) return null;
-      const streak = STREAK[r.name];
-      const gameLog = streak?.gameLog || [];
-      const recent = gameLog.slice(0, 7);
-      const recentAB = recent.reduce((s,g) => s + (g.ab||0), 0);
-      const recentTB = recent.reduce((s,g) => s + (g.tb||0), 0);
-      const recentSLG = recentAB >= 8 ? recentTB / recentAB : null;
-      const barrel = b.ba || 0;
-      const hh     = b.hh || 0;
-      const ev     = b.ev || 0;
-      const score  = barrel * 1.5 + hh * 0.3 + (recentSLG !== null ? recentSLG * 20 : 0);
-      return { r, b, barrel, hh, ev, recentSLG, score };
-    })
-    .filter(Boolean)
-    .sort((a,b) => b.score - a.score)
-    .slice(0, 10);
-
-  const hotContactHTML = hotContactPlays.length ? hotContactPlays.map(({r, barrel, hh, ev, recentSLG}) => {
-    const brlColor = barrel >= 18 ? 'var(--green)' : barrel >= 12 ? 'var(--teal)' : 'var(--amber)';
-    const hhColor  = hh >= 55 ? 'var(--green)' : hh >= 45 ? 'var(--teal)' : 'var(--t2)';
-    const slgColor = recentSLG !== null ? (recentSLG >= 0.600 ? 'var(--green)' : recentSLG >= 0.450 ? 'var(--teal)' : 'var(--amber)') : 'var(--t3)';
-    const pit = getPitcher(r.pitName) || {};
-    const hrBBE = pit.hrBBE ? 'HR/BBE '+(pit.hrBBE*100).toFixed(1)+'%' : 'HR/9 '+(pit.hr9||1.2).toFixed(2);
-    return '<div class="today-target" onclick="goToPlayer(this.dataset.name)" data-name="'+r.name+'">'+
-      '<div style="flex:1">'+
-      '<div class="today-target-name">'+r.name+(STREAK[r.name]?.flame?' '+STREAK[r.name].flame:'')+'</div>'+
-      '<div class="today-target-sub">'+r.team+' vs '+r.pitName+' · '+hrBBE+'</div>'+
-      '<div style="display:flex;gap:10px;margin-top:4px;font-size:10px;font-family:var(--mono)">'+
-      '<span>Brl <strong style="color:'+brlColor+'">'+barrel.toFixed(1)+'%</strong></span>'+
-      '<span>HH <strong style="color:'+hhColor+'">'+hh.toFixed(0)+'%</strong></span>'+
-      '<span>EV <strong style="color:var(--t2)">'+ev.toFixed(1)+'</strong></span>'+
-      (recentSLG !== null ? '<span>L10 SLG <strong style="color:'+slgColor+'">'+recentSLG.toFixed(3)+'</strong></span>' : '')+
-      '</div></div>'+
-      '<div style="text-align:right;flex-shrink:0"><div class="today-target-hrp" style="color:'+(r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)')+'">'+r.hrp.toFixed(1)+'%</div></div>'+
-      '</div>';
-  }).join('')
-  : '<div style="font-size:12px;color:var(--t3);padding:8px 0">Loading contact data…</div>';
-
-
   // ── YESTERDAY'S RESULTS BANNER ───────────────────────────────
   const yesterdayHTML = buildYesterdayBanner();
 
@@ -6316,115 +6197,6 @@ function renderToday() {
     if(signals.find(s=>s.key==='conf')?.active)reasons.push(ci.label+' confidence sample');
     return '<div class="today-section" style="margin-bottom:12px;background:linear-gradient(135deg,var(--bg2) 0%,var(--bg3) 100%);border-color:'+(badge?.bd||'var(--bd)')+'"><div class="today-section-hdr" style="border-bottom-color:'+(badge?.bd||'var(--bd)')+'"><span>\u26A1 Best Play Today</span><span style="color:var(--t3);font-size:9px">Composite signal + probability score</span></div><div class="today-section-body"><div style="display:flex;gap:16px;align-items:flex-start" onclick="goToPlayer(\''+best.name.replace(/'/g,"\\'")+'\')" style="cursor:pointer"><div style="flex:1"><div style="font-size:18px;font-weight:700;color:var(--t1);margin-bottom:2px">'+best.name+'</div><div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">'+best.team+' vs '+best.pitName+' · '+best.time+'</div><div style="margin-bottom:10px">'+signalPanel(best,false)+'</div><div style="display:flex;flex-direction:column;gap:4px">'+reasons.map(r=>'<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">· '+r+'</div>').join('')+'</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:36px;font-weight:700;font-family:var(--mono);color:'+hc+';line-height:1">'+lockedHrp.toFixed(1)+'%</div><div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>'+(badge?'<div style="margin-top:8px"><span style="font-size:10px;font-family:var(--mono);font-weight:700;padding:3px 8px;border-radius:4px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')+'<div style="margin-top:8px">'+ciBadge(lockedHrp,getBatter(best.name)?.pa||0)+'</div></div></div></div></div>';
   })();
-
-  const fringeHTML = fringe.length ? '<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Hidden Edge</span><span style="color:var(--t3);font-size:9px">Model signals · 6-15% HR probability</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;max-width:100%">'+fringe.map(r=>{
-    const barrel=getBatter(r.name)?.ba||r.barrel;const streak=STREAK[r.name];const ci=getCI(r.hrp,getBatter(r.name)?.pa||0);
-    return '<div style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" onclick="goToPlayer(\''+r.name.replace(/'/g,"\\'")+'\')" onmouseover="this.style.borderColor=\'var(--teal)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">'
-      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px"><div style="font-size:12px;font-weight:600;color:var(--t1)">'+r.name+'</div><div style="font-size:13px;font-family:var(--mono);font-weight:700;color:var(--teal)">'+r.hrp.toFixed(1)+'%</div></div>'
-      +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">'+r.team+' vs '+r.pitName+' · '+r.time+'</div>'
-      +'<div style="margin-top:2px">'+signalPanel(r,true)+'</div>'
-      +'<div style="margin-top:6px"><span style="font-size:9px;font-family:var(--mono);padding:1px 4px;border-radius:2px;background:'+(ci.tier==='high'?'rgba(52,211,153,.1)':ci.tier==='mid'?'rgba(245,158,11,.1)':'rgba(248,113,113,.1)')+';color:'+ci.color+';border:1px solid '+(ci.tier==='high'?'rgba(52,211,153,.25)':ci.tier==='mid'?'rgba(245,158,11,.25)':'rgba(248,113,113,.2)')+'">'+ci.label+'</span></div>'
-      +'</div>';
-  }).join('')+'</div></div></div>' : '';
-
-  const multiPropHTML = (()=>{
-    const multiProps = players
-      .filter(r => { const ci=getCI(r.hrp,getBatter(r.name)?.pa||0); return ci.tier!=='low'&&r.hrp>=6; })
-      .map(r => { const p=calcBatterProps(r); const score=p.p_hit*0.35+p.p_2tb*0.30+p.p_rbi*0.20+p.p_run*0.15; return {r,p,score}; })
-      .sort((a,b)=>b.score-a.score).slice(0,6);
-    if (!multiProps.length) return '';
-    return '<div class="today-section" style="margin-bottom:12px">'
-      +'<div class="today-section-hdr"><span>Best Multi-Prop Targets</span><span style="color:var(--t3);font-size:9px">Hit · Total Bases · RBI · Run probabilities</span></div>'
-      +'<div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px">'
-      +multiProps.map(({r,p})=>{
-        const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
-        const {badge}=getSignalsLocked(r);
-        return '<div style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:6px;padding:10px 12px;cursor:pointer;transition:border-color .15s" '
-          +'onclick="openPlayerModal(this.dataset.name)" data-name="'+r.name+'" '
-          +'onmouseover="this.style.borderColor=\'var(--teal)\'" onmouseout="this.style.borderColor=\'var(--bd)\'">'
-          +'<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">'
-          +'<div><div style="font-size:13px;font-weight:600;color:var(--t1)">'+r.name+'</div>'
-          +'<div style="font-size:10px;font-family:var(--mono);color:var(--t3)">'+r.team+' vs '+r.pitName+'</div></div>'
-          +'<div style="font-size:11px;font-family:var(--mono);font-weight:700;color:'+hc+'">'+r.hrp.toFixed(1)+'% HR</div>'
-          +'</div>'
-          +'<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:6px">'
-          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--green)">'+p.p_hit+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+H</div></div>'
-          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--teal)">'+p.p_2tb+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">2+TB</div></div>'
-          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--amber)">'+p.p_rbi+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+RBI</div></div>'
-          +'<div style="text-align:center"><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--purple)">'+p.p_run+'%</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">1+R</div></div>'
-          +'</div>'
-          +(badge?'<div style="margin-top:6px"><span style="font-size:8px;font-family:var(--mono);font-weight:700;padding:1px 5px;border-radius:3px;background:'+badge.bg+';color:'+badge.color+';border:1px solid '+badge.bd+'">'+badge.label+'</span></div>':'')
-          +'</div>';
-      }).join('')+'</div></div></div>';
-  })();
-
-  // Highest scoring projected game
-  const runProjections = [...games].sort(gameTimeSort).map(g => ({g, rp: calcGameRunProjection(g)}))
-    .sort((a,b) => b.rp.total - a.rp.total);
-  const topGame = runProjections[0];
-  const topGameHTML = topGame ? (()=>{
-    const {g, rp} = topGame;
-    const park = getPark(g.home)||{};
-    const tc = rp.total>=9?'var(--green)':rp.total>=7.5?'var(--teal)':'var(--amber)';
-    const leanHtml = rp.lean
-      ? `<span style="font-size:9px;font-family:var(--mono);padding:2px 6px;border-radius:3px;background:${rp.lean==='over'?'rgba(52,211,153,.1)':'rgba(248,113,113,.1)'};color:${rp.lean==='over'?'var(--green)':'var(--red)'};border:1px solid ${rp.lean==='over'?'rgba(52,211,153,.25)':'rgba(248,113,113,.25)'}">Model ${rp.lean==='over'?'▲ OVER':'▼ UNDER'} ${rp.leanAmt>0?'+':''}${rp.leanAmt}</span>`
-      : '';
-    return '<div class="today-section" style="margin-bottom:12px;cursor:pointer" onclick="openGameModal('+g.pk+')">'
-      + '<div class="today-section-hdr"><span>🔥 Highest Scoring Game</span><span style="color:var(--t3);font-size:9px">Projected run total</span></div>'
-      + '<div class="today-section-body">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
-      + '<div><div style="font-size:15px;font-weight:700;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
-      + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">'+g.time+' · '+park.name+'</div></div>'
-      + '<div style="font-size:32px;font-weight:700;font-family:var(--mono);color:'+tc+'">'+rp.total+'</div>'
-      + '</div>'
-      + '<div style="display:flex;justify-content:space-between;align-items:center">'
-      + '<div style="font-family:var(--mono);font-size:11px;color:var(--t3)">'+g.away+' <span style="color:var(--t1);font-weight:600">'+rp.awayRuns+'</span> · '+g.home+' <span style="color:var(--t1);font-weight:600">'+rp.homeRuns+'</span>'+(rp.ou?' · O/U '+rp.ou:'')+'</div>'
-      + leanHtml
-      + '</div>'
-      + '</div></div>';
-  })() : '';
-
-  // ── F5 LEANS ─────────────────────────────────────────────────
-  const f5Leans = [...games].sort(gameTimeSort).map(g => {
-    const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
-    const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
-    const awayF5 = calcF5Projection(hp,'home',g,g.away);
-    const homeF5 = calcF5Projection(ap,'away',g,g.home);
-    const f5Total = +(awayF5.runsAllowed + homeF5.runsAllowed).toFixed(1);
-    const edge = +(awayF5.runsAllowed - homeF5.runsAllowed).toFixed(1);
-    const mlLean = edge > 0.3 ? g.away : edge < -0.3 ? g.home : null; // away scores more when edge>0
-    const ou = GAME_ODDS[g.away+'@'+g.home]?.ou;
-    const f5Ou = ou ? +(ou * 0.55).toFixed(1) : null;
-    const totalLean = f5Ou ? (f5Total > f5Ou + 0.3 ? 'over' : f5Total < f5Ou - 0.3 ? 'under' : null) : null;
-    const confidence = Math.abs(edge); // higher = stronger ML lean
-    return { g, ap, hp, awayF5, homeF5, f5Total, edge, mlLean, ou, f5Ou, totalLean, confidence };
-  })
-  .filter(d => d.mlLean || d.totalLean) // only games with a clear lean
-  .sort((a,b) => b.confidence - a.confidence)
-  .slice(0,5);
-
-  const f5HTML = f5Leans.length ? '<div class="today-section" style="margin-bottom:12px">'
-    + '<div class="today-section-hdr"><span>⚡ F5 Leans</span><span style="color:var(--t3);font-size:9px">First 5 innings · ML · RL · Total</span></div>'
-    + '<div class="today-section-body">'
-    + f5Leans.map(({g,ap,hp,awayF5,homeF5,f5Total,edge,mlLean,ou,f5Ou,totalLean})=>{
-        const tcTotal = f5Total>=7?'var(--red)':f5Total>=5.5?'var(--amber)':'var(--green)';
-        const mlColor = 'var(--teal)';
-        const totalColor = totalLean==='over'?'var(--red)':'var(--green)';
-        const rlEdge = Math.abs(edge)>=0.75;
-        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg3);cursor:pointer" onclick="openPitcherModal(\''+hp.name+'\',\''+g.away+'\',\''+g.home+'\',\'away\','+g.pk+')">'
-          + '<div style="flex:1">'
-          + '<div style="font-size:12px;font-weight:600;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
-          + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px">'+hp.name+' vs '+ap.name+'</div>'
-          + '</div>'
-          + '<div style="display:flex;gap:12px;align-items:center;flex-shrink:0">'
-          + (mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">ML</div></div>':'')
-          + (rlEdge&&mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+' -0.5</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">RL</div></div>':'')
-          + (totalLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+totalColor+'">'+(totalLean==='over'?'OVER':'UNDER')+(f5Ou?' '+f5Ou:'')+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">F5 Total</div></div>':'')
-          + '<div style="text-align:right"><div style="font-size:13px;font-weight:700;font-family:var(--mono);color:'+tcTotal+'">'+f5Total+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">proj</div></div>'
-          + '</div>'
-          + '</div>';
-      }).join('')
-    + '</div></div>' : '';
 
   const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
@@ -6494,9 +6266,92 @@ function renderToday() {
     + '</div>';
 
 
-  // ── FIRST INNING LEANS — mirrors Forecast pill exactly ─────────
-  const todayPill = document.getElementById('today-pill-active')?.dataset.pill || 'overview';
+  grid.innerHTML = '<div class="today-wrap">'
+    + stripHTML
+    + '<div class="today-hero">'
+    + kpiHTML
+    + '</div>'
+    + bestHTML
+    + buildSharpPlaysHTML()
+    + envHTML
+    + '<div id="yesterday-banner" style="margin-top:12px">'+yesterdayHTML+'</div>'
+    + '</div>';
+}
 
+function setGameLinesPill(pill, btn) {
+  _gameLinesPill = pill;
+  document.querySelectorAll('#gamelines-grid .today-pill').forEach(b => b.classList.remove('on'));
+  btn?.classList.add('on');
+  const marker = document.getElementById('gamelines-pill-active');
+  if (marker) marker.dataset.pill = pill;
+  document.querySelectorAll('#gamelines-grid .today-pane').forEach(p => p.classList.remove('on'));
+  const pane = document.getElementById('pane-gl-'+pill);
+  if (pane) pane.classList.add('on');
+  if (pill === 'forecast') renderForecast();
+  if (pill === 'fg') renderFullGame();
+  if (pill === 'f1') {
+    if (!F1_CACHE.length) {
+      renderForecast(true);
+      setTimeout(() => renderGameLines(), 300);
+    } else {
+      renderGameLines();
+    }
+  }
+}
+
+function renderGameLines() {
+  const grid = document.getElementById('gamelines-grid');
+  if (!grid) return;
+  if (!allRows.length || !games.length) {
+    grid.innerHTML = '<div class="empty" style="padding:60px 20px"><div style="font-size:32px;margin-bottom:12px">🎲</div><h3>Loading game lines…</h3></div>';
+    return;
+  }
+
+  const glPill = document.getElementById('gamelines-pill-active')?.dataset.pill || 'f5';
+
+  // ── F5 LEANS ─────────────────────────────────────────────────
+  const f5Leans = [...games].sort(gameTimeSort).map(g => {
+    const ap = {...g.ap,...(getPitcher(g.ap.name)||{})};
+    const hp = {...g.hp,...(getPitcher(g.hp.name)||{})};
+    const awayF5 = calcF5Projection(hp,'home',g,g.away);
+    const homeF5 = calcF5Projection(ap,'away',g,g.home);
+    const f5Total = +(awayF5.runsAllowed + homeF5.runsAllowed).toFixed(1);
+    const edge = +(awayF5.runsAllowed - homeF5.runsAllowed).toFixed(1);
+    const mlLean = edge > 0.3 ? g.away : edge < -0.3 ? g.home : null; // away scores more when edge>0
+    const ou = GAME_ODDS[g.away+'@'+g.home]?.ou;
+    const f5Ou = ou ? +(ou * 0.55).toFixed(1) : null;
+    const totalLean = f5Ou ? (f5Total > f5Ou + 0.3 ? 'over' : f5Total < f5Ou - 0.3 ? 'under' : null) : null;
+    const confidence = Math.abs(edge); // higher = stronger ML lean
+    return { g, ap, hp, awayF5, homeF5, f5Total, edge, mlLean, ou, f5Ou, totalLean, confidence };
+  })
+  .filter(d => d.mlLean || d.totalLean) // only games with a clear lean
+  .sort((a,b) => b.confidence - a.confidence)
+  .slice(0,5);
+
+  const f5HTML = f5Leans.length ? '<div class="today-section" style="margin-bottom:12px">'
+    + '<div class="today-section-hdr"><span>⚡ F5 Leans</span><span style="color:var(--t3);font-size:9px">First 5 innings · ML · RL · Total</span></div>'
+    + '<div class="today-section-body">'
+    + f5Leans.map(({g,ap,hp,awayF5,homeF5,f5Total,edge,mlLean,ou,f5Ou,totalLean})=>{
+        const tcTotal = f5Total>=7?'var(--red)':f5Total>=5.5?'var(--amber)':'var(--green)';
+        const mlColor = 'var(--teal)';
+        const totalColor = totalLean==='over'?'var(--red)':'var(--green)';
+        const rlEdge = Math.abs(edge)>=0.75;
+        return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg3);cursor:pointer" onclick="openPitcherModal(\''+hp.name+'\',\''+g.away+'\',\''+g.home+'\',\'away\','+g.pk+')">'
+          + '<div style="flex:1">'
+          + '<div style="font-size:12px;font-weight:600;color:var(--t1)">'+g.away+' @ '+g.home+'</div>'
+          + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:1px">'+hp.name+' vs '+ap.name+'</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:12px;align-items:center;flex-shrink:0">'
+          + (mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">ML</div></div>':'')
+          + (rlEdge&&mlLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+mlColor+'">'+mlLean+' -0.5</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">RL</div></div>':'')
+          + (totalLean?'<div style="text-align:center"><div style="font-size:11px;font-weight:700;font-family:var(--mono);color:'+totalColor+'">'+(totalLean==='over'?'OVER':'UNDER')+(f5Ou?' '+f5Ou:'')+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">F5 Total</div></div>':'')
+          + '<div style="text-align:right"><div style="font-size:13px;font-weight:700;font-family:var(--mono);color:'+tcTotal+'">'+f5Total+'</div><div style="font-size:8px;font-family:var(--mono);color:var(--t3)">proj</div></div>'
+          + '</div>'
+          + '</div>';
+      }).join('')
+    + '</div></div>' : '<div class="empty" style="padding:32px"><h3>No clear F5 leans yet</h3></div>';
+
+  // ── FIRST INNING LEANS — mirrors Forecast calc exactly ─────────
   const _nrfi = window._nrfiGames || [];
   const _yrfi = window._yrfiGames || [];
 
@@ -6531,60 +6386,26 @@ function renderToday() {
       + '</div></div>';
   };
 
-  const f1HTML = '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id=\"pane-f1\">'
-    + (_nrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🔒 NRFI Leans ('+_nrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px">'+_nrfi.map(mkF1PillCard).join('')+'</div>' : '')
+  const f1HTML = (_nrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--green);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">🔒 NRFI Leans ('+_nrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px;margin-bottom:16px">'+_nrfi.map(mkF1PillCard).join('')+'</div>' : '')
     + (_yrfi.length ? '<div style="font-size:9px;font-family:var(--mono);color:var(--red);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">💥 YRFI Leans ('+_yrfi.length+')</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'+_yrfi.map(mkF1PillCard).join('')+'</div>' : '')
-    + (!_nrfi.length&&!_yrfi.length ? '<div class="empty" style="padding:40px"><h3>Open Forecast pill first</h3><p style="color:var(--t3)">1st inning data loads when Forecast is calculated</p></div>' : '')
-    + '</div>';
+    + (!_nrfi.length&&!_yrfi.length ? '<div class="empty" style="padding:40px"><h3>Open the 1st Inning pill first</h3><p style="color:var(--t3)">1st inning data loads when Forecast is calculated</p></div>' : '');
 
   grid.innerHTML = '<div class="today-wrap">'
-    + stripHTML
-    + '<div class="today-hero">'
-    + kpiHTML
+    + '<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">'
+    + '<div class="today-hero-title" style="margin-bottom:0">🎲 Game Lines</div>'
+    + '<div style="color:var(--t3);font-size:10px;font-family:var(--mono)">Moneyline · Run Line · Totals · NRFI</div>'
     + '</div>'
-    + '<div class="today-pills" id="today-pills">'
-    + ['overview','signals','hotcontact','props','f5','fg','f1','forecast','envs','builder'].map(p=>{
-        const labels={overview:'Overview',signals:'Signal Plays',hotcontact:'💥 Hot Contact',props:'Props',f5:'F5',fg:'Full Game',f1:'1st Inning',forecast:'Forecast',envs:'Environments',builder:'⚡ Builder'};
-        return '<button class="today-pill'+(todayPill===p?' on':'')+'" data-pill="'+p+'" onclick="setTodayPill(this.dataset.pill,this)">'+labels[p]+'</button>';
+    + '<span id="gamelines-pill-active" data-pill="'+glPill+'" style="display:none"></span>'
+    + '<div class="today-pills">'
+    + ['f5','fg','f1','forecast'].map(p=>{
+        const labels={f5:'F5',fg:'Full Game',f1:'1st Inning',forecast:'Forecast'};
+        return '<button class="today-pill'+(glPill===p?' on':'')+'" data-pill="'+p+'" onclick="setGameLinesPill(this.dataset.pill,this)">'+labels[p]+'</button>';
       }).join('')
     + '</div>'
-    + '<div class="today-pane'+(todayPill==='overview'?' on':'')+'" id="pane-overview">'
-    + bestHTML
-    + '<div class="today-two-col">'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="cursor:pointer;color:var(--teal)" onclick="goToTargets()">See all →</span></div><div class="today-section-body">'+top5HTML+'</div></div>'
-    + '<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="cursor:pointer;color:var(--teal)" onclick="goToSignals()">See all →</span></div><div class="today-section-body">'+signalHTML+'</div></div>'
-    + '</div>'
-    + topGameHTML
-    + '<div id="yesterday-banner">'+yesterdayHTML+'</div>'
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='signals'?' on':'')+'" id="pane-signals">'
-    + fringeHTML
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='hotcontact'?' on':'')+'" id="pane-hotcontact" style="padding:14px 16px">'
-    + '<div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-bottom:12px">Ranked by L7 barrel% × hard hit% · minimum 5 PA last 7 days · pitcher HR/BBE shows home run rate per ball in play</div>'
-    + hotContactHTML
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='props'?' on':'')+'" id="pane-props">'
-    + multiPropHTML
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='f5'?' on':'')+'" id="pane-f5">'
-    + f5HTML
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='fg'?' on':'')+'" id="pane-fg">'
-    + '<div id="fg-content"></div>'
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='f1'?' on':'')+'" id="pane-f1">'
-    + f1HTML
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='envs'?' on':'')+'" id="pane-envs">'
-    + envHTML
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='forecast'?' on':'')+'" id="pane-forecast">'
-    + '<div id="fcast-grid" style="padding:0"></div>'
-    + '</div>'
-    + '<div class="today-pane'+(todayPill==='builder'?' on':'')+'" id="pane-builder">'
-    + '<div id="builder-grid"></div>'
-    + '</div>'
+    + '<div class="today-pane'+(glPill==='f5'?' on':'')+'" id="pane-gl-f5">'+f5HTML+'</div>'
+    + '<div class="today-pane'+(glPill==='fg'?' on':'')+'" id="pane-gl-fg"><div id="fg-content"></div></div>'
+    + '<div class="today-pane'+(glPill==='f1'?' on':'')+'" id="pane-gl-f1">'+f1HTML+'</div>'
+    + '<div class="today-pane'+(glPill==='forecast'?' on':'')+'" id="pane-gl-forecast"><div id="fcast-grid" style="padding:0"></div></div>'
     + '</div>';
 }
 
@@ -7467,7 +7288,7 @@ function renderAll(){
   else if(curView==='derby')   renderDerby();
   else if(curView==='live')    renderLive();
   else if(curView==='parks')   renderParks();
-  else if(curView==='simulate') renderSimulate();
+  else if(curView==='gamelines') renderGameLines();
   else renderTargets();
 }
 
@@ -7475,7 +7296,7 @@ function renderAll(){
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','simulate'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','gamelines'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   // Show tab loading spinner if splits/streaks still loading
   if (!_dataReady.streaks || !_dataReady.splits) {
