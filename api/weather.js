@@ -46,8 +46,13 @@ function windLabel(windDir, team) {
   const o = PARK_ORIENTATION[team];
   if (o === undefined) return 'crosswind';
   const diff = ((windDir - o) % 360 + 360) % 360;
-  if (diff < 45 || diff > 315) return 'blowing out';
-  if (diff > 135 && diff < 225) return 'blowing in';
+  // windDir is meteorological wind direction (where the wind comes FROM).
+  // diff near 0 means wind is sourced from near the park's own home-plate-
+  // to-center-field bearing, i.e. blowing FROM center field TOWARD home
+  // plate -- that's blowing in, not out. diff near 180 (sourced from
+  // behind home plate) is what carries fly balls OUT toward center field.
+  if (diff < 45 || diff > 315) return 'blowing in';
+  if (diff > 135 && diff < 225) return 'blowing out';
   return 'crosswind';
 }
 

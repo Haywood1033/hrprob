@@ -43,10 +43,15 @@ test('signal: Hitter Park fires at park factor >= 1.05, not below', () => {
 });
 
 test('signal: Wind Out requires non-dome, wind blowing out, and ws >= 6', () => {
-  const active = getSignals(makeRow({ wx: { ws: 6, wd: 180 } })); // orient defaults 180 -> diff=0 -> out
-  const tooLight = getSignals(makeRow({ wx: { ws: 5, wd: 180 } }));
-  const blowingIn = getSignals(makeRow({ wx: { ws: 15, wd: 0 } })); // diff=180 -> in
-  const domed = getSignals(makeRow({ park: { roof: 'dome' }, wx: { ws: 15, wd: 180 } }));
+  // wx.wd is meteorological wind direction (source, not travel direction).
+  // orient defaults to 180 -- wd:0 means wind sourced from the opposite
+  // bearing (behind home plate), diff=180, which carries the ball OUT.
+  // wd:180 (diff=0) means wind sourced from the park's own CF bearing,
+  // blowing FROM center field back toward home plate, i.e. blowing in.
+  const active = getSignals(makeRow({ wx: { ws: 6, wd: 0 } })); // diff=180 -> out
+  const tooLight = getSignals(makeRow({ wx: { ws: 5, wd: 0 } }));
+  const blowingIn = getSignals(makeRow({ wx: { ws: 15, wd: 180 } })); // diff=0 -> in
+  const domed = getSignals(makeRow({ park: { roof: 'dome' }, wx: { ws: 15, wd: 0 } }));
   assert.strictEqual(active.signals.find(s => s.key === 'weather').active, true);
   assert.strictEqual(tooLight.signals.find(s => s.key === 'weather').active, false, 'below 6mph should not fire');
   assert.strictEqual(blowingIn.signals.find(s => s.key === 'weather').active, false, 'wind blowing in should not fire');
@@ -103,11 +108,12 @@ test('signal: Hot Contact fires on barrel% >= 12 or hard-hit% >= 50, gated by la
 // ── Badge thresholds (CLAUDE.md: Elite=6+, All-Star=5, Value=4) ──────
 // Stack six independently-verified-above signals (park, weather, pitcher,
 // streak, confidence, hotcontact) and remove them one at a time to land
-// exactly on each documented badge boundary.
+// exactly on each documented badge boundary. wd:0 (not 180) is the
+// "blowing out" fixture here -- see the Wind Out signal test above for why.
 function sixSignalRow(overrides = {}) {
   return makeRow({
     park: { f: 1.10 },
-    wx: { ws: 10, wd: 180 },
+    wx: { ws: 10, wd: 0 },
     pit: { xera: 5.20, hr9: 1.50 },
     streak: { flame: '🔥' },
     batter: { pa: 200, ba: 15, hh: 55, xw: 0.320, la: 28 },
@@ -125,7 +131,7 @@ test('badge: 5 active signals -> All-Star Play', () => {
   // Drop the streak signal by not seeding STREAK for this player.
   const row = makeRow({
     park: { f: 1.10 },
-    wx: { ws: 10, wd: 180 },
+    wx: { ws: 10, wd: 0 },
     pit: { xera: 5.20, hr9: 1.50 },
     batter: { pa: 200, ba: 15, hh: 55, xw: 0.320, la: 28 },
   });
@@ -138,7 +144,7 @@ test('badge: 4 active signals -> Value Play', () => {
   // Drop streak and confidence (low pa).
   const row = makeRow({
     park: { f: 1.10 },
-    wx: { ws: 10, wd: 180 },
+    wx: { ws: 10, wd: 0 },
     pit: { xera: 5.20, hr9: 1.50 },
     batter: { pa: 10, ba: 15, hh: 55, xw: 0.320, la: 28 },
   });
@@ -150,7 +156,7 @@ test('badge: 4 active signals -> Value Play', () => {
 test('badge: 3 active signals -> no badge', () => {
   const row = makeRow({
     park: { f: 1.10 },
-    wx: { ws: 10, wd: 180 },
+    wx: { ws: 10, wd: 0 },
     pit: { xera: 5.20, hr9: 1.50 },
     batter: { pa: 10, ba: 5, hh: 30, xw: 0.310, la: 28 }, // hotcontact off too
   });
