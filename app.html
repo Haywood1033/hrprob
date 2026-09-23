@@ -4912,7 +4912,7 @@ function buildSharpPlaysHTML() {
       const sigIcons = signals.map(s=>`<span style="font-size:14px;opacity:${s.active?1:0.12}">${s.icon}</span>`).join('');
       const summaryText = count===8?'Everything aligned · maximum conviction':count>=6?`${count}/8 signals · elite convergence`:`${count}/8 signals`;
 
-      return `<div style="background:var(--bg2);border:1px solid ${tColor};border-radius:12px;overflow:hidden;margin-bottom:12px">
+      return `<div style="background:var(--bg2);border:1px solid ${tColor};border-radius:12px;overflow:hidden;margin-bottom:12px;cursor:pointer" onclick="openPlayerModal('${r.name.replace(/'/g,"\\'")}')">
         <div style="background:${tierBg(badgeLabel)};padding:14px 16px;display:flex;justify-content:space-between;align-items:flex-start;border-bottom:0.5px solid rgba(255,255,255,0.08)">
           <div style="flex:1;min-width:0">
             <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:3px">${r.name} ${streak?.flame||''}</div>
@@ -4967,7 +4967,7 @@ function buildSharpPlaysHTML() {
         if(consecHR>=3) flags.push(`Homered ${consecHR} straight days — possible regression`);
         if((pit.whiff||0)>=30) flags.push(`Pitcher whiff rate ${pit.whiff?.toFixed(0)}% — strikeout risk`);
         if((pit.xera||4.5)<4.00) flags.push(`Facing strong pitcher (xERA ${(pit.xera||4.5).toFixed(2)}) despite signals`);
-        return `<div style="background:rgba(248,113,113,0.04);border:0.5px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start">
+        return `<div style="background:rgba(248,113,113,0.04);border:0.5px solid rgba(248,113,113,0.2);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="openPlayerModal('${r.name.replace(/'/g,"\\'")}')">
           <div>
             <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.85);margin-bottom:3px">${r.name} ${streak?.flame||''}</div>
             <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:5px">${r.team} · vs ${r.pitName} · ${count} signals</div>
