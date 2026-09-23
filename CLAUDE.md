@@ -95,13 +95,30 @@ Lock is saved to Supabase `daily_predictions.signal_lock` and restored on page r
 ## Tab Structure
 ```
 ⚡ Today | 🔴 Live | ☰ Players | ⚾ Pitchers | 🎯 Best Plays | 📋 Props |
-🔍 Pulse | ⚔️ Edge | 🎰 Parlays | 📅 Tomorrow | 🏟 Parks | 🎯 Sharp Plays | 📊 Accuracy
+🎰 Parlays | 🎲 Game Lines | 📅 Tomorrow | 🏟 Parks | 📊 Accuracy
 ```
 
+Redesigned onto the "Sports" visual direction (dark navy/orange, Sora + Manrope
+type, filled pill nav) in the app-quality pass after the data/calibration work
+stabilized. Today is now a single-scroll page (no sub-tab pills): game strip →
+KPI strip → Best Play hero → full Sharp Plays section (narrative + cards +
+Risks & Fades, same content that used to live on its own tab) → Best
+Environments → yesterday's results banner. The standalone "🎯 Sharp Plays" tab
+was retired the same way Edge/Pulse were — its content moved onto Today, so a
+separate tab was redundant. F5 / Full Game / 1st Inning / Forecast (previously
+Today pills) moved to the new "🎲 Game Lines" tab, which has its own 4-pill
+sub-nav. The parlay/lineup "⚡ Builder" tool (previously a Today pill) moved to
+the "🎰 Parlays" tab as a second pill alongside the auto-generated combos.
+Hot Contact, the old "Top HR Targets"/"Top Signal Plays" mini-sections, and
+"Hidden Edge" were dropped from Today — redundant with player cards and with
+Sharp Plays' stricter, curated criteria.
+
 ### Key Render Functions
-- `renderToday()` — main Today tab with Best Play card, signal grid, environment section
+- `renderToday()` — Today tab: game strip, KPI strip, Best Play hero, Sharp Plays section, Best Environments, yesterday banner
+- `buildSharpPlaysHTML()` — builds the Sharp Plays section HTML (triple convergence filter + Risks & Fades); called from `renderToday()`, not a standalone view
+- `renderGameLines()` / `setGameLinesPill()` — 🎲 Game Lines tab: F5 / Full Game / 1st Inning / Forecast sub-pills
 - `renderTargets()` — Best Plays cheat sheet table (fixed-column, tier-sorted)
-- `renderSimulate()` — Sharp Plays daily briefing (triple convergence filter)
+- `renderParlay()` / `renderBuilder()` / `setParlayPill()` — 🎰 Parlays tab: auto-generated combos + manual Builder
 - `renderParks()` — Parks & Weather tab with HR Weather composite score
 - `renderLive()` — Live HR tracker with scorecard
 - `renderHistory()` / accuracy tab — 54-day backtest with tier breakdown
@@ -192,7 +209,7 @@ daily_predictions (
 
 ---
 
-## Sharp Plays Filter (renderSimulate)
+## Sharp Plays Filter (buildSharpPlaysHTML, rendered on Today)
 Triple convergence — all three must be true:
 - 5+ signals
 - 14%+ HR probability (locked)
