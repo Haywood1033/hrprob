@@ -852,9 +852,16 @@ function hrProb(b,park,wx,pit,order){
   if (!['dome','retractable'].includes(pk.roof) && wx.ws) {
     const o = pk.orient || 180;
     const d = ((wx.wd - o) % 360 + 360) % 360;
-    // Wind blowing out = +, blowing in = -
-    if      (d < 45  || d > 315) p += wx.ws * 0.0009;   // out
-    else if (d > 135 && d < 225) p -= wx.ws * 0.0007;   // in
+    // wx.wd is meteorological wind direction (where the wind comes FROM).
+    // orient is the home-plate-to-center-field bearing. Wind sourced from
+    // near that same bearing (d near 0) is blowing FROM center field
+    // TOWARD home plate — i.e. blowing IN, not out. Wind sourced from
+    // roughly the opposite bearing (d near 180, from behind home plate)
+    // is what carries fly balls OUT toward center field. This was
+    // inverted — d<45 was scored as "out" — since the wind feature was
+    // first added; see PR for the real-world case that surfaced it.
+    if      (d < 45  || d > 315) p -= wx.ws * 0.0007;   // in
+    else if (d > 135 && d < 225) p += wx.ws * 0.0009;   // out
     // Temperature: ball travels further in heat
     p += ((wx.t || 70) - 70) * 0.00022;
   }
@@ -2059,7 +2066,7 @@ function renderForecast(silent=false) {
     const park = getPark(g.home)||{};
     const wx   = WX[g.home]||{};
     const diff = wx.wd ? ((wx.wd-(park.orient||180))%360+360)%360 : 180;
-    const windOut = diff<45||diff>315;
+    const windOut = diff>135&&diff<225;
     const ou   = GAME_ODDS[g.away+'@'+g.home]?.ou||0;
     return { g, exp, park, windOut, ou, rows };
   }).sort((a,b) => b.exp-a.exp);
@@ -2129,8 +2136,8 @@ function renderForecast(silent=false) {
       if (park.roof!=='dome'&&park.roof!=='retractable'&&wx.ws) {
         const orient=park.orient||180;
         const diff=((wx.wd-orient)%360+360)%360;
-        if(diff<45||diff>315) p+=wx.ws*0.0006;
-        else if(diff>135&&diff<225) p-=wx.ws*0.0004;
+        if(diff>135&&diff<225) p+=wx.ws*0.0006;
+        else if(diff<45||diff>315) p-=wx.ws*0.0004;
         p+=((wx.t||70)-70)*0.0003;
       }
       p += Math.min(0.015,((park.elev||0)-500)/120000);
@@ -2668,10 +2675,14 @@ function getSignals(r) {
   const streak  = STREAK[r.name];
   const ps      = PARK_SPLITS[r.name];
 
-  // Orient/wind calc
+  // Orient/wind calc. wx.wd is meteorological wind direction (source, not
+  // travel direction) -- diff near 0 means wind is sourced from near the
+  // park's own CF bearing, i.e. blowing FROM center field TOWARD home
+  // plate (blowing in); diff near 180 (sourced from behind home plate) is
+  // what carries the ball OUT toward center field.
   const orient  = park.orient || 180;
   const diff    = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-  const windOut = diff<45 || diff>315;
+  const windOut = diff>135 && diff<225;
 
   // ── SIGNAL 1: Park (hitter park PF≥1.05 OR career park boost) ──
   const parkActive = (park.f||1) >= 1.05 || ps?.flag === 'boost';
@@ -3423,7 +3434,14 @@ function expand(i){
   const w=r.wx||{};
   const pk=getPark(r.game?.home||r.team)||{};
   const pit=r.pit||{};
-  const wxd=pk.roof==='dome'?'Dome (climate controlled)':w.ws?`${Math.round(w.ws)}mph · ${Math.round(w.t||70)}°F`:'—';
+  // windState drives windEdge below directly rather than string-sniffing
+  // wxd for "out"/"in" -- wxd never actually contained those substrings
+  // (just "12mph · 75°F"), so windEdge always fell through to "Neutral
+  // wind" regardless of real conditions.
+  const wOrient = pk.orient || 180;
+  const wDiff = w.wd ? ((w.wd - wOrient) % 360 + 360) % 360 : null;
+  const windState = wDiff===null ? null : (wDiff>135&&wDiff<225 ? 'out' : wDiff<45||wDiff>315 ? 'in' : 'cross');
+  const wxd=pk.roof==='dome'?'Dome (climate controlled)':w.ws?`${Math.round(w.ws)}mph${windState&&windState!=='cross'?' '+windState:''} · ${Math.round(w.t||70)}°F`:'—';
   const pitHand = pit.hand||'R';
   const isSameHand = r.bats !== 'S' && r.bats === pitHand;
   // splitKey: which of the batter's splits apply vs this pitcher
@@ -3461,7 +3479,7 @@ function expand(i){
     platoonDetail = 'Loading real splits…';
   }
   const parkEdge=(pk.f||1)>=1.05?`📈 +${(((pk.f||1)-1)*100).toFixed(0)}% hitter park`:(pk.f||1)<=0.95?`📉 ${(((pk.f||1)-1)*100).toFixed(0)}% pitcher park`:'— Neutral';
-  const windEdge=wxd.includes('out')?'💨 Wind blowing out':wxd.includes('in')?'🌬 Wind blowing in':wxd.includes('Dome')?'🏟 Dome':'— Neutral wind';
+  const windEdge=windState==='out'?'💨 Wind blowing out':windState==='in'?'🌬 Wind blowing in':pk.roof==='dome'?'🏟 Dome':'— Neutral wind';
   const evColor=r.evEdge>2?'var(--green)':r.evEdge<-2?'var(--red)':'var(--t1)';
   const evLabel=r.evEdge>2?`+EV +${r.evEdge}% edge`:r.evEdge<-2?`-EV ${r.evEdge}% edge`:`Fair value (${r.evEdge}%)`;
 
@@ -3604,7 +3622,7 @@ function wxStr(r){
   if(p.roof==='dome')return '🏟 Dome';
   const w=WX[homeTeam];if(!w)return '—';
   const d=((w.wd-(p.orient||180))%360+360)%360;
-  const dir=d<45||d>315?'↑ out':d>135&&d<225?'↓ in':'→ cross';
+  const dir=d>135&&d<225?'↑ out':d<45||d>315?'↓ in':'→ cross';
   return `${Math.round(w.ws)}mph ${dir} · ${Math.round(w.t||70)}°F`;
 }
 
@@ -4105,9 +4123,9 @@ function renderBuilder() {
         const pfLabel = pf >= 1.10 ? `🏟 +${Math.round((pf-1)*100)}% hitter` : pf <= 0.95 ? `🏟 ${Math.round((pf-1)*100)}% pitcher` : '🏟 Neutral';
         const pfColor = pf >= 1.10 ? 'var(--green)' : pf <= 0.95 ? 'var(--red)' : 'var(--t3)';
         const windOut = wx.wd !== undefined && park.orient !== undefined
-          ? (() => { const d=((wx.wd-park.orient)%360+360)%360; return d<45||d>315; })() : false;
-        const windIn = wx.wd !== undefined && park.orient !== undefined
           ? (() => { const d=((wx.wd-park.orient)%360+360)%360; return d>135&&d<225; })() : false;
+        const windIn = wx.wd !== undefined && park.orient !== undefined
+          ? (() => { const d=((wx.wd-park.orient)%360+360)%360; return d<45||d>315; })() : false;
         const windDir = windOut ? 'out' : windIn ? 'in' : 'cross';
         const windColor = windOut ? 'var(--green)' : windIn ? 'var(--red)' : 'var(--t2)';
         const wxBadge = park.roof==='dome' ? '🏠 Dome'
@@ -5004,7 +5022,12 @@ function calcHRWeather(team, wx, park) {
   const windDir   = wx.wd || wx.d || 180;
   if (orient !== undefined && windSpeed > 0) {
     const diff = ((windDir - orient) % 360 + 360) % 360;
-    windCarry = Math.cos((diff * Math.PI) / 180) * windSpeed * 0.45;
+    // diff near 0 means wind is sourced from near the park's own CF
+    // bearing -- i.e. blowing FROM center field TOWARD home plate
+    // (blowing in, should REDUCE carry). diff near 180 (sourced from
+    // behind home plate) is what carries the ball OUT. cos(diff) alone
+    // is +1 at diff=0, which had this backwards; negate it.
+    windCarry = -Math.cos((diff * Math.PI) / 180) * windSpeed * 0.45;
   }
   const parkBoost = park?.f ? (park.f - 1.0) * 100 : 0;
   const score = parkBoost + tempAdj + humAdj + presAdj + windCarry;
@@ -5498,7 +5521,7 @@ function openPlayerModal(name) {
   const wxd = pk.roof==='dome'?'Dome':w.ws?`${Math.round(w.ws)}mph`:null;
   const orient = pk.orient||180;
   const diff = w.wd ? ((w.wd-orient)%360+360)%360 : 180;
-  const windOut = diff<45||diff>315;
+  const windOut = diff>135&&diff<225;
   const windEdge = pk.roof==='dome'?'🏟 Dome':w.ws?(windOut?`💨 ${Math.round(w.ws)}mph out`:`${Math.round(w.ws)}mph cross/in`):'— No wind data';
   const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':r.hrp>=7?'var(--amber)':'var(--t2)';
 
@@ -5907,7 +5930,7 @@ function calcGameRunProjection(g) {
     // Wind blowing out — small bonus
     const orient = park.orient || 180;
     const diff   = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : 180;
-    const windOut = diff < 45 || diff > 315;
+    const windOut = diff > 135 && diff < 225;
     if (park.roof !== 'dome' && wx.ws && windOut && wx.ws >= 8) {
       runs += Math.min(0.3, wx.ws * 0.015); // max +0.3 for wind
     }
@@ -5948,7 +5971,7 @@ function openGameModal(gamePk) {
   const orient = park.orient || 180;
   const windDiff = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : null;
   const windDir = windDiff !== null
-    ? (windDiff < 45 || windDiff > 315 ? '↑ out' : windDiff > 135 && windDiff < 225 ? '↓ in' : '→ cross')
+    ? (windDiff > 135 && windDiff < 225 ? '↑ out' : windDiff < 45 || windDiff > 315 ? '↓ in' : '→ cross')
     : null;
   const wstr = park.roof === 'dome' ? '🏟 Dome'
     : wx.ws ? `${Math.round(wx.ws)}mph ${windDir} · ${Math.round(wx.t||70)}°F` : '—';
@@ -6167,7 +6190,7 @@ function renderToday() {
   const parkRanked = games.map(g => {
     const park=getPark(g.home)||{};const wx=WX[g.home]||{};
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
-    const windOut=diff<45||diff>315;
+    const windOut=diff>135&&diff<225;
     const score=(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0);
     return {g,park,wx,windOut,score};
   }).sort((a,b)=>b.score-a.score);
@@ -6202,7 +6225,7 @@ function renderToday() {
       const barrel=getBatter(r.name)?.ba||r.barrel;const streak=STREAK[r.name];
       const park=getPark(r.game?.home||r.team)||{};const wx=WX[r.game?.home||r.team]||{};
       const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
-      const windOut=diff<45||diff>315;const pit=r.pit||{};
+      const windOut=diff>135&&diff<225;const pit=r.pit||{};
       return barrel>=12||streak?.flame==='\uD83D\uDD25\uD83D\uDD25'||streak?.flame==='\uD83D\uDD25'||(park.f||1)>=1.08||(windOut&&(wx.ws||0)>=10)||(pit.xera||pit.era||4.5)>=5.0||(pit.hr9||1.2)>=1.6;
     })
     .sort((a,b)=>scorePlayer(b)-scorePlayer(a))
@@ -6415,7 +6438,7 @@ function renderToday() {
   const envHTML = '<div class="today-section"><div class="today-section-hdr"><span>Best Environments</span><span style="color:var(--t3);font-size:9px">Park factor + wind edge ranked</span></div><div class="today-section-body"><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px">'+parkRanked.slice(0,6).map(({g,park,wx,windOut,score},i)=>{
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
-    const wdir=diff<45||diff>315?'\u2191 out':diff>135&&diff<225?'\u2193 in':'\u2192 cross';
+    const wdir=diff>135&&diff<225?'\u2191 out':diff<45||diff>315?'\u2193 in':'\u2192 cross';
     const wstr=park.roof==='dome'?'\uD83C\uDFDF Dome':wx.ws?Math.round(wx.ws)+'mph '+wdir:'\u2014';
     const ou=GAME_ODDS[g.away+'@'+g.home];
     return '<div style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);border-radius:6px;padding:10px 12px;cursor:pointer" onclick="openGameModal('+g.pk+')">'
@@ -6446,7 +6469,7 @@ function renderToday() {
       // Park + weather icons
       const orient = park.orient||180;
       const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-      const windOut = diff<45||diff>315;
+      const windOut = diff>135&&diff<225;
       const icons  = [(park.f||1)>=1.05?'📈':'', park.roof==='dome'?'🏟':'', windOut&&(wx.ws||0)>=8?'💨':''].filter(Boolean).join('');
 
       const leanBadge = rp.lean
@@ -6669,7 +6692,7 @@ async function renderTomorrow() {
   const tSignalPlays=[...tPlayers].filter(r=>getSignalsLocked(r).count>=4).sort((a,b)=>{const ra=getSignalsLocked(a),rb=getSignalsLocked(b);return rb.count!==ra.count?rb.count-ra.count:b.hrp-a.hrp;}).slice(0,5);
   Object.keys(WX).forEach(k=>delete WX[k]);Object.assign(WX,origWX);
 
-  const tParkRanked=tGames.map(g=>{const park=getPark(g.home)||{};const wx=tWX[g.home]||{};const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;const windOut=diff<45||diff>315;return{g,park,wx,windOut,score:(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0)};}).sort((a,b)=>b.score-a.score);
+  const tParkRanked=tGames.map(g=>{const park=getPark(g.home)||{};const wx=tWX[g.home]||{};const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;const windOut=diff>135&&diff<225;return{g,park,wx,windOut,score:(park.f||1)+(windOut&&wx.ws?wx.ws*0.005:0)};}).sort((a,b)=>b.score-a.score);
 
   const tTop5HTML=tTop5.map((r,i)=>{
     const hc=r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':'var(--amber)';
@@ -6684,11 +6707,11 @@ async function renderTomorrow() {
   const tMatchupsHTML=tGames.map(g=>{
     const park=getPark(g.home)||{};const wx=tWX[g.home]||{};
     const orient=park.orient||180;const diff=wx.wd?((wx.wd-orient)%360+360)%360:180;
-    const windOut=diff<45||diff>315;
+    const windOut=diff>135&&diff<225;
     const pfColor=(park.f||1)>=1.15?'var(--green)':(park.f||1)>=1.05?'var(--teal)':'var(--t2)';
     const icons=[(park.f||1)>=1.05?'\uD83D\uDCC8':'',windOut&&wx.ws?'\uD83D\uDCA8':''].filter(Boolean).join(' ');
     const ap=getPitcher(g.ap.name)||{};const hp=getPitcher(g.hp.name)||{};
-    const wdir=windOut?'\u2191 out':diff>135&&diff<225?'\u2193 in':'\u2192';
+    const wdir=windOut?'\u2191 out':diff<45||diff>315?'\u2193 in':'\u2192';
     return '<div class="today-game" style="padding:8px 16px;border-bottom:1px solid var(--bg3)">'
       +'<div style="flex:1"><div class="today-game-teams">'+g.away+' <span style="color:var(--t3)">@</span> '+g.home+' '+icons+'</div>'
       +'<div class="today-game-meta">'+g.time+' · '+g.ap.name+' vs '+g.hp.name+'</div>'
@@ -6761,7 +6784,7 @@ function calcF5Projection(pit, side, g, oppTeam) {
   // Wind adjustment
   const orient = park.orient || 180;
   const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-  const windOut = diff<45||diff>315;
+  const windOut = diff>135&&diff<225;
   if (park.roof!=='dome' && wx.ws && windOut && wx.ws>=8) runsAllowed += 0.15;
 
   // Hot batters
@@ -6813,7 +6836,7 @@ function calcFullGameProjection(pit, side, g, oppTeam) {
   // Wind effect carries through full game
   const orient = park.orient || 180;
   const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-  const windOut = diff<45||diff>315;
+  const windOut = diff>135&&diff<225;
   if (park.roof!=='dome' && wx.ws && windOut && wx.ws>=8) totalRuns += 0.20;
 
   return {
@@ -7193,9 +7216,9 @@ function renderGames(){
     const orient = park.orient || 180;
     const windDiff = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : null;
     const windDir = windDiff !== null
-      ? (windDiff < 45 || windDiff > 315 ? '↑ out' : windDiff > 135 && windDiff < 225 ? '↓ in' : '→ cross')
+      ? (windDiff > 135 && windDiff < 225 ? '↑ out' : windDiff < 45 || windDiff > 315 ? '↓ in' : '→ cross')
       : null;
-    const windFlag = windDiff !== null && (windDiff < 45 || windDiff > 315) ? ' 💨' : '';
+    const windFlag = windDiff !== null && (windDiff > 135 && windDiff < 225) ? ' 💨' : '';
     const wstr = park.roof==='dome' ? '🏟 Dome'
       : wx.ws ? `${Math.round(wx.ws)}mph ${windDir} · ${Math.round(wx.t||70)}°F${windFlag}`
       : '—';
@@ -7536,7 +7559,7 @@ function hasWxEdge(r) {
   if (!wx) return false; // weather not loaded yet
   const orient = pk.orient || 180;
   const diff = ((wx.wd - orient) % 360 + 360) % 360;
-  return diff < 45 || diff > 315; // blowing out toward outfield
+  return diff > 135 && diff < 225; // blowing out toward outfield
 }
 function sortBy(k){if(sortKey===k)sortAsc=!sortAsc;else{sortKey=k;sortAsc=false;}allRows.sort((a,b)=>sortAsc?a[k]-b[k]:b[k]-a[k]);renderPlayers();}
 function setStatus(s,msg){document.getElementById('sdot').className='dot '+(s==='live'?'live':s==='loading'?'spin':'');document.getElementById('stxt').textContent=msg;}

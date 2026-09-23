@@ -94,8 +94,14 @@ test('hrProb: wind blowing out raises probability, wind blowing in lowers it, vs
   const batter = { pa: 400, ba: 10, ev: 90, xw: 0.320, iso: 0.170, hh: 40 };
   const park = { f: 1.0, roof: 'open', orient: 180 };
   const noWind = hrProb(batter, park, {}, LEAGUE_PIT, 5);
-  const windOut = hrProb(batter, park, { ws: 15, wd: 180 }, LEAGUE_PIT, 5); // diff=0 -> blowing out
-  const windIn = hrProb(batter, park, { ws: 15, wd: 0 }, LEAGUE_PIT, 5);    // diff=180 -> blowing in
+  // wx.wd is meteorological wind direction (source, not travel direction).
+  // orient=180 is the park's home-plate-to-center-field bearing. Wind
+  // sourced from the SAME bearing as center field (wd=180, diff=0) is
+  // blowing FROM center field TOWARD home plate -- i.e. blowing IN. Wind
+  // sourced from the opposite bearing (wd=0, diff=180, from behind home
+  // plate) carries fly balls OUT toward center field.
+  const windOut = hrProb(batter, park, { ws: 15, wd: 0 }, LEAGUE_PIT, 5);   // diff=180 -> blowing out
+  const windIn = hrProb(batter, park, { ws: 15, wd: 180 }, LEAGUE_PIT, 5);  // diff=0 -> blowing in
   assert.ok(windOut > noWind, `wind out should raise probability above no-wind baseline (${noWind} -> ${windOut})`);
   assert.ok(windIn < noWind, `wind in should lower probability below no-wind baseline (${noWind} -> ${windIn})`);
 });
