@@ -2844,7 +2844,6 @@ function lockSignals() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const etDate = new Date(etStr);
   const today = etDate.toLocaleDateString('en-CA');
-  const etHour = etDate.getHours();
 
   // Lock is DB-only — localStorage removed to ensure all devices share same state
   // DB restore happens in loadHistory() — if already restored, skip rebuild
@@ -2852,20 +2851,29 @@ function lockSignals() {
     return;
   }
 
-  // Only build fresh lock before 1pm ET — after that games are in progress
-  if (etHour >= 13) {
-    // After 1pm: if DB has a lock, use it; otherwise build once and save
-    if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
-      return;
-    }
-    // Double-check DB restore hasn't happened yet — wait briefly if history not loaded
-    if (!historyLoaded) {
-      setTimeout(lockSignals, 2000);
-      return;
-    }
+  // Never build a fresh local lock before the DB restore attempt
+  // (loadHistory) has had a chance to complete — this used to only be
+  // checked after 1pm ET. Before 1pm, this function could race ahead of
+  // an in-flight loadHistory() fetch and build its own fresh lock from
+  // whatever live signals happened to be computed at that exact moment,
+  // instead of picking up the lock an earlier page load that same day
+  // already saved to the DB. That's how two refreshes minutes apart could
+  // each "lock in" a different Best Play / signal snapshot. Waiting for
+  // historyLoaded first, regardless of time of day, makes the DB record
+  // (once one exists for today) consistently win.
+  if (!historyLoaded) {
+    setTimeout(lockSignals, 2000);
+    return;
+  }
+  // historyLoaded is true — loadHistory() already restored a DB lock into
+  // SIGNAL_LOCK if one existed for today; re-check before building fresh.
+  if (Object.keys(SIGNAL_LOCK).length > 0 && _signalLockDate === today) {
+    return;
   }
 
-  // Build fresh lock from current allRows (pre-game state)
+  // No DB lock existed for today — build fresh from current allRows
+  // (pre-game state before 1pm ET; a same-day fallback after that if
+  // no DB record ever got saved).
   if (!allRows.length) return;
   _signalLockDate = today;
   for (const r of allRows) {
