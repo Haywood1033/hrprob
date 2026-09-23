@@ -5044,7 +5044,7 @@ function calcHRWeather(team, wx, park) {
 function renderParks() {
   const el = document.getElementById('parks-grid');
   if (!el) return;
-  if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading\u2026</h3></div>'; return; }
+  if (!games.length) { el.innerHTML = '<div class="empty"><h3>Loading…</h3></div>'; return; }
 
   const hasPres = Object.values(WX).some(w=>!w.dome && w.pres != null);
   // Try the backfill once per page load, not on every render — renderParks()
@@ -5057,7 +5057,20 @@ function renderParks() {
     loadWeather(true).then(()=>{ rebuild(); renderParks(); });
   }
 
-  const parkData = games.map(g => {
+  // Defend against a literal duplicate gamePk (a real data bug) while still
+  // showing a genuine doubleheader (two different gamePks, same home team)
+  // as two clearly-labeled cards instead of what looks like a stray dupe.
+  const seenPk = new Set();
+  const uniqueGames = games.filter(g => { if (seenPk.has(g.pk)) return false; seenPk.add(g.pk); return true; });
+  const homeCounts = {};
+  for (const g of uniqueGames) homeCounts[g.home] = (homeCounts[g.home]||0) + 1;
+  const gameLabel = (g) => {
+    if ((homeCounts[g.home]||0) < 2) return '';
+    const sameHome = uniqueGames.filter(x => x.home === g.home).sort(gameTimeSort);
+    return ' · Gm ' + (sameHome.indexOf(g) + 1);
+  };
+
+  const parkData = uniqueGames.map(g => {
     const wx   = WX[g.home] || {};
     const park = getPark(g.home) || {};
     const hrw  = calcHRWeather(g.home, wx, park);
@@ -5065,64 +5078,74 @@ function renderParks() {
     const top3 = gamePlayers
       .sort((a,b) => (getSignalsLocked(b).hrp||b.hrp||0) - (getSignalsLocked(a).hrp||a.hrp||0))
       .slice(0, 3);
-    return { g, wx, park, hrw, top3 };
+    return { g, wx, park, hrw, top3, label: gameLabel(g) };
   })
   .filter(d => !d.wx.dome)
   .sort((a,b) => (b.hrw?.score||0) - (a.hrw?.score||0));
 
   const scoreColor = s => s>=15?'var(--green)':s>=5?'var(--teal)':s>=0?'var(--t2)':s>=-5?'var(--amber)':'var(--red)';
 
-  // Compass SVG arrow pointing in wind direction
-  const compassSVG = (wd, carry) => {
+  // Field-relative wind diagram — arrow points toward the outfield wall
+  // when wind carries the ball OUT, toward home plate when it carries IN.
+  // Drawn relative to THIS park's own orientation, so reading it never
+  // requires cross-referencing a raw compass heading against a separate
+  // "which way does this park face" fact — the diagram already does that
+  // translation.
+  const fieldWindSVG = (wd, orient, carry) => {
     const color = carry > 1.5 ? '#4ade80' : carry < -1.5 ? '#f87171' : 'rgba(255,255,255,0.4)';
-    const rad = (wd * Math.PI) / 180;
-    const cx = 20, cy = 20, r = 14;
+    const rel = (((wd - orient + 180) % 360) + 360) % 360; // 0=toward CF (out), 180=toward plate (in)
+    const rad = (rel * Math.PI) / 180;
+    const cx = 40, cy = 46, r = 24;
     const tx = cx + r * Math.sin(rad), ty = cy - r * Math.cos(rad);
-    const fx = cx - 8 * Math.sin(rad), fy = cy + 8 * Math.cos(rad);
-    return `<svg width="40" height="40" viewBox="0 0 40 40" style="flex-shrink:0">
-      <circle cx="20" cy="20" r="19" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.10)" stroke-width="0.5"/>
-      <text x="20" y="7" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="5" font-family="monospace">N</text>
-      <text x="20" y="36" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="5" font-family="monospace">S</text>
-      <text x="6" y="22" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="5" font-family="monospace">W</text>
-      <text x="35" y="22" text-anchor="middle" fill="rgba(255,255,255,0.35)" font-size="5" font-family="monospace">E</text>
-      <line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" stroke="${color}" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="${tx}" cy="${ty}" r="2.5" fill="${color}"/>
+    const fx = cx - 9 * Math.sin(rad), fy = cy + 9 * Math.cos(rad);
+    return `<svg width="72" height="76" viewBox="0 0 80 84" style="flex-shrink:0">
+      <path d="M40,74 L8,14 Q40,-6 72,14 Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
+      <circle cx="40" cy="74" r="2.5" fill="rgba(255,255,255,0.45)"/>
+      <text x="40" y="9" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="7" font-family="monospace">CF</text>
+      <line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
+      <circle cx="${tx}" cy="${ty}" r="3" fill="${color}"/>
     </svg>`;
   };
 
-  const windRow = (carry, speed, wd, compass) => {
+  const windPanel = (carry, speed, wd, orient, compass) => {
     const isOut = carry > 1.5, isIn = carry < -1.5;
     const color = isOut?'var(--green)':isIn?'var(--red)':'rgba(255,255,255,0.45)';
-    const tag   = isOut?'WINDS OUT':isIn?'WINDS IN':'CROSSWIND';
-    const tagBg = isOut?'rgba(74,222,128,0.12)':isIn?'rgba(248,113,113,0.12)':'rgba(255,255,255,0.06)';
-    const pct   = Math.min(45, Math.abs(carry)/10*45);
-    return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:0.5px solid rgba(255,255,255,0.08);border-bottom:0.5px solid rgba(255,255,255,0.08);margin:10px 0">
-      ${compassSVG(wd||0, carry)}
-      <div style="flex:1">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:12px;font-weight:500;color:rgba(255,255,255,0.85)">${speed} mph ${compass||''}</span>
-          <span style="font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:4px;background:${tagBg};color:${color};font-weight:500">${tag} &middot; ${carry>=0?'+':''}${carry.toFixed(1)}% carry</span>
-        </div>
-        <div style="background:rgba(255,255,255,0.07);border-radius:4px;height:6px;position:relative;overflow:hidden">
-          <div style="position:absolute;left:49.5%;width:1px;height:6px;background:rgba(255,255,255,0.2)"></div>
-          ${isOut?`<div style="position:absolute;left:50%;width:${pct}%;height:6px;background:var(--green);border-radius:0 3px 3px 0"></div>`:''}
-          ${isIn ?`<div style="position:absolute;right:50%;width:${pct}%;height:6px;background:var(--red);border-radius:3px 0 0 3px"></div>`:''}
-        </div>
+    const tag   = isOut?'WIND OUT':isIn?'WIND IN':'CROSSWIND';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:0.5px solid rgba(255,255,255,0.08);border-bottom:0.5px solid rgba(255,255,255,0.08);margin:8px 0">
+      ${fieldWindSVG(wd||0, orient||180, carry)}
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)">${speed} mph${compass?' '+compass:''}</div>
+        <div style="font-size:11px;font-family:var(--mono);font-weight:700;color:${color};margin-top:3px">${tag} · ${carry>=0?'+':''}${carry.toFixed(1)}%</div>
       </div>
     </div>`;
   };
 
   const statCell = (label, val, sub, subColor) =>
-    `<div style="background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:10px 8px;text-align:center">
-      <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.55);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${label}</div>
-      <div style="font-size:17px;font-weight:500;font-family:var(--mono);color:rgba(255,255,255,0.92);line-height:1.1">${val}</div>
-      <div style="font-size:9px;font-family:var(--mono);color:${subColor||'rgba(255,255,255,0.45)'};margin-top:3px">${sub}</div>
+    `<div style="background:rgba(255,255,255,0.05);border:0.5px solid rgba(255,255,255,0.10);border-radius:8px;padding:8px 6px;text-align:center">
+      <div style="font-size:8px;font-family:var(--mono);color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">${label}</div>
+      <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:rgba(255,255,255,0.92);line-height:1.1">${val}</div>
+      ${sub?`<div style="font-size:9px;font-family:var(--mono);color:${subColor||'rgba(255,255,255,0.45)'};margin-top:2px">${sub}</div>`:''}
     </div>`;
+
+  const targetRow = (r, i, compact) => {
+    const {badge,count,hrp:lhrp}=getSignalsLocked(r);
+    const lh=lhrp||r.hrp||0;
+    const hc=lh>=20?'var(--green)':lh>=15?'var(--teal)':lh>=10?'var(--amber)':'rgba(255,255,255,0.6)';
+    const streak=STREAK[r.name];
+    return `<div style="display:flex;align-items:center;gap:${compact?10:12}px;padding:${compact?8:12}px 0;border-bottom:0.5px solid rgba(255,255,255,0.07)">
+      <span style="font-size:${compact?11:12}px;font-family:var(--mono);color:rgba(255,255,255,0.4);width:${compact?14:20}px;flex-shrink:0">${i+1}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:${compact?13:14}px;font-weight:500;color:rgba(255,255,255,0.92)">${r.name} ${streak?.flame||''}</div>
+        <div style="font-size:${compact?10:11}px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:1px">${r.team} · ${count} sig${badge?` · <span style="color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}</div>
+      </div>
+      <div style="font-size:${compact?14:16}px;font-weight:500;font-family:var(--mono);color:${hc};flex-shrink:0">${lh.toFixed(1)}%</div>
+    </div>`;
+  };
 
   // Full screen modal
   window._parkData = parkData;
   window._openParkModal = (idx) => {
-    const {g, wx, park, hrw, top3} = window._parkData[idx];
+    const {g, wx, park, hrw, label} = window._parkData[idx];
     const score = hrw?.score || 0;
     const carry = hrw?.windCarry||0;
     const speed = wx.ws||wx.w||0;
@@ -5132,111 +5155,79 @@ function renderParks() {
       .sort((a,b)=>(getSignalsLocked(b).hrp||b.hrp||0)-(getSignalsLocked(a).hrp||a.hrp||0))
       .slice(0,12);
 
-    const allTargetsHTML = allPlayers.map((r,i)=>{
-      const {badge,count,hrp:lhrp}=getSignalsLocked(r);
-      const lh=lhrp||r.hrp||0;
-      const hc=lh>=20?'var(--green)':lh>=15?'var(--teal)':lh>=10?'var(--amber)':'rgba(255,255,255,0.6)';
-      const streak=STREAK[r.name];
-      return `<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:0.5px solid rgba(255,255,255,0.07)">
-        <span style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.4);width:20px">${i+1}</span>
-        <div style="flex:1">
-          <div style="font-size:14px;font-weight:500;color:rgba(255,255,255,0.92)">${r.name} ${streak?.flame||''}</div>
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:2px">${r.team} &middot; Bat ${r.order} &middot; ${count} signals${badge?` &middot; <span style="color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}</div>
-        </div>
-        <div style="font-size:16px;font-weight:500;font-family:var(--mono);color:${hc}">${lh.toFixed(1)}%</div>
-      </div>`;
-    }).join('');
+    const allTargetsHTML = allPlayers.length
+      ? allPlayers.map((r,i)=>targetRow(r,i,false)).join('')
+      : `<div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);padding:8px 0">Lineups loading…</div>`;
 
     el.innerHTML = `<div style="padding:4px 0">
       <button onclick="renderParks()" style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.12);padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:20px">← Back to all parks</button>
 
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
         <div>
-          <div style="font-size:22px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:4px">${park.name||g.home}</div>
-          <div style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.55)">${g.away} @ ${g.home} &middot; ${g.time}</div>
-          <div style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.45)">${park.city||''} &middot; ${park.elev?(+park.elev).toLocaleString()+'ft':''} &middot; ${park.roof==='open'?'Open air':'Retractable'}</div>
+          <div style="font-size:22px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:4px">${park.name||g.home}${label}</div>
+          <div style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.55)">${g.away} @ ${g.home} · ${g.time}</div>
+          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.4)">${[park.city, park.elev?(+park.elev).toLocaleString()+'ft':'', park.roof!=='open'?(park.roof==='dome'?'Dome':'Retractable'):''].filter(Boolean).join(' · ')}</div>
         </div>
         <div style="text-align:right">
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:4px;letter-spacing:.06em">HR WEATHER</div>
-          <div style="font-size:48px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-2px;line-height:1">${score>0?'+':''}${score}%</div>
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:4px">${wx.sky||wx.s||''}</div>
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:2px;letter-spacing:.06em">HR WEATHER</div>
+          <div style="font-size:44px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-2px;line-height:1">${score>0?'+':''}${score}%</div>
+          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:3px">${wx.sky||wx.s||''}</div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
-        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--', (hrw?.tempAdj>=0?'+':'')+hrw?.tempAdj+'%', (hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':'rgba(255,255,255,0.45)')}
-        ${statCell('Humidity', wx.hum!=null?wx.hum+'%':'--', (hrw?.humAdj>=0?'+':'')+hrw?.humAdj+'%', 'rgba(255,255,255,0.45)')}
-        ${statCell('Pressure', wx.pres!=null?wx.pres:'--', 'hPa '+(hrw?.presAdj>=0?'+':'')+hrw?.presAdj+'%', (hrw?.presAdj||0)>3?'var(--green)':'rgba(255,255,255,0.45)')}
-        ${statCell('Park', park.f?(hrw?.parkBoost>=0?'+':'')+hrw?.parkBoost+'%':'--', park.f?park.f+'x':'--', (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'rgba(255,255,255,0.45)')}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--', hrw?((hrw.tempAdj>=0?'+':'')+hrw.tempAdj+'%'):null, (hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':null)}
+        ${statCell('Humidity', wx.hum!=null?wx.hum+'%':'--')}
+        ${statCell('Pressure', wx.pres!=null?wx.pres+' hPa':'--', hrw?((hrw.presAdj>=0?'+':'')+hrw.presAdj+'%'):null, (hrw?.presAdj||0)>3?'var(--green)':null)}
+        ${statCell('Park', park.f?park.f+'x':'--', park.f&&hrw?((hrw.parkBoost>=0?'+':'')+hrw.parkBoost+'%'):null, (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':null)}
       </div>
 
-      ${windRow(carry, speed, wd, wx.c||'')}
+      ${windPanel(carry, speed, wd, park.orient, wx.c||'')}
 
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px">
-        ${[['Park',hrw?.parkBoost||0],['Temp',hrw?.tempAdj||0],['Wind',carry],['Pres',hrw?.presAdj||0]].map(([l,v])=>`<span style="font-size:10px;font-family:var(--mono);padding:4px 10px;border-radius:20px;background:rgba(255,255,255,0.05);color:${v>0.5?'var(--green)':v<-0.5?'var(--red)':'rgba(255,255,255,0.5)'}">${l} ${v>=0?'+':''}${v.toFixed(1)}%</span>`).join('')}
-      </div>
-
-      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:16px">
-        <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:12px">All targets at this park tonight</div>
+      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:14px;margin-top:6px">
+        <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">All targets tonight</div>
         ${allTargetsHTML}
       </div>
     </div>`;
   };
   // _openParkModal already assigned above with window._parkData
 
-  const cards = parkData.map(({g, wx, park, hrw, top3}, idx) => {
+  const cards = parkData.map(({g, wx, park, hrw, top3, label}, idx) => {
     const score = hrw?.score || 0;
     const carry = hrw?.windCarry||0;
     const speed = wx.ws||wx.w||0;
     const wd    = wx.wd||wx.d||0;
     const borderColor = score>=15?'rgba(74,222,128,0.3)':score>=5?'rgba(74,222,128,0.12)':score<=-5?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.09)';
 
-    const top3HTML = top3.length ? top3.map((r,i) => {
-      const {badge,count,hrp:lhrp}=getSignalsLocked(r);
-      const lh=lhrp||r.hrp||0;
-      const hc=lh>=20?'var(--green)':lh>=15?'var(--teal)':lh>=10?'var(--amber)':'rgba(255,255,255,0.6)';
-      const streak=STREAK[r.name];
-      return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;${i<top3.length-1?'border-bottom:0.5px solid rgba(255,255,255,0.07)':''}">
-        <span style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);width:14px;flex-shrink:0">${i+1}</span>
+    const top3HTML = top3.length
+      ? top3.map((r,i)=>targetRow(r,i,true)).join('')
+      : `<div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);padding:8px 0">Lineups loading…</div>`;
+
+    return `<div style="background:var(--bg2);border:0.5px solid ${borderColor};border-radius:12px;padding:16px;display:flex;flex-direction:column;cursor:pointer" onclick="_openParkModal(${idx})">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:500;color:rgba(255,255,255,0.92)">${r.name} ${streak?.flame||''}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:1px">${r.team} &middot; ${count} sig${badge?` &middot; <span style="color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}</div>
+          <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:2px">${park.name||g.home}${label}</div>
+          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.55)">${g.away} @ ${g.home} · ${g.time}</div>
         </div>
-        <div style="font-size:14px;font-weight:500;font-family:var(--mono);color:${hc};flex-shrink:0">${lh.toFixed(1)}%</div>
-      </div>`;
-    }).join('') : `<div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);padding:10px 0">Lineups loading\u2026</div>`;
-
-    return `<div style="background:var(--bg2);border:0.5px solid ${borderColor};border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:0">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:3px">${park.name||g.home}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.6);margin-bottom:1px">${g.away} @ ${g.home} &middot; ${g.time}</div>
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5)">${park.city||''} &middot; ${park.elev?(+park.elev).toLocaleString()+'ft':''} &middot; ${park.roof==='open'?'Open air':'Retractable'}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:12px">
-          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:3px;letter-spacing:.06em">HR WEATHER</div>
-          <div style="font-size:30px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1">${score>0?'+':''}${score}%</div>
-          <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:3px">${wx.sky||wx.s||''}</div>
+        <div style="text-align:right;flex-shrink:0;margin-left:10px">
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);letter-spacing:.06em">HR WX</div>
+          <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1.1">${score>0?'+':''}${score}%</div>
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:4px">
-        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--', (hrw?.tempAdj>=0?'+':'')+hrw?.tempAdj+'%', (hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':'rgba(255,255,255,0.45)')}
-        ${statCell('Humidity', wx.hum!=null?wx.hum+'%':'--', (hrw?.humAdj>=0?'+':'')+hrw?.humAdj+'%', 'rgba(255,255,255,0.45)')}
-        ${statCell('Pressure', wx.pres!=null?wx.pres:'--', 'hPa '+(hrw?.presAdj>=0?'+':'')+hrw?.presAdj+'%', (hrw?.presAdj||0)>3?'var(--green)':'rgba(255,255,255,0.45)')}
-        ${statCell('Park', park.f?(hrw?.parkBoost>=0?'+':'')+hrw?.parkBoost+'%':'--', park.f?park.f+'x':'--', (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':'rgba(255,255,255,0.45)')}
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
+        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--')}
+        ${statCell('Hum', wx.hum!=null?wx.hum+'%':'--')}
+        ${statCell('Pres', wx.pres!=null?wx.pres:'--')}
+        ${statCell('Park', park.f?park.f+'x':'--', null, (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':null)}
       </div>
 
-      ${windRow(carry, speed, wd, wx.c||'')}
+      ${windPanel(carry, speed, wd, park.orient, wx.c||'')}
 
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-        ${[['Park',hrw?.parkBoost||0],['Temp',hrw?.tempAdj||0],['Wind',carry],['Pres',hrw?.presAdj||0]].map(([l,v])=>`<span style="font-size:9px;font-family:var(--mono);padding:3px 8px;border-radius:20px;background:rgba(255,255,255,0.05);color:${v>0.5?'var(--green)':v<-0.5?'var(--red)':'rgba(255,255,255,0.5)'}">${l} ${v>=0?'+':''}${v.toFixed(1)}%</span>`).join('')}
-      </div>
-
-      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:12px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em">Top targets tonight</div>
-          <button onclick="event.stopPropagation();_openParkModal(${idx})" style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.06);border:0.5px solid rgba(255,255,255,0.12);padding:3px 8px;border-radius:4px;cursor:pointer">Expand ↗</button>
+      <div style="border-top:0.5px solid rgba(255,255,255,0.08);padding-top:10px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em">Top targets</div>
+          <span style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.35)">Tap for more ↗</span>
         </div>
         ${top3HTML}
       </div>
@@ -5245,9 +5236,9 @@ function renderParks() {
 
   const domeCount = games.filter(g=>WX[g.home]?.dome).length;
   el.innerHTML = `<div style="padding:4px 0">
-    <div style="font-size:10px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:16px">HR Weather = park factor + temp + barometric pressure + wind carry &middot; sorted best conditions first${domeCount?' &middot; '+domeCount+' dome'+(domeCount>1?'s':'')+' excluded':''}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px">
-      ${cards||'<div class="empty"><p>Weather data loading\u2026</p></div>'}
+    <div style="font-size:9px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:14px">Sorted by HR-friendliest conditions${domeCount?' · '+domeCount+' dome'+(domeCount>1?'s':'')+' excluded':''}</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
+      ${cards||'<div class="empty"><p>Weather data loading…</p></div>'}
     </div>
   </div>`;
 }
