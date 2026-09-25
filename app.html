@@ -529,7 +529,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <button class="bn-btn on" data-bn="today" onclick="setView('today',document.querySelector('.tab[onclick*=today]'))"><span class="bn-icon">⚡</span><span>Today</span></button>
   <button class="bn-btn" data-bn="players" onclick="setView('players',document.querySelector('.tab[onclick*=players]'))"><span class="bn-icon">☰</span><span>Players</span></button>
   <button class="bn-btn" data-bn="targets" onclick="setView('targets',document.querySelector('.tab[onclick*=targets]'))"><span class="bn-icon">🎯</span><span>Plays</span></button>
-  <button class="bn-btn" data-bn="parks" onclick="setView('parks',document.querySelector('.tab[onclick*=parks]'));if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})"><span class="bn-icon">🏟</span><span>Parks</span></button>
+  <button class="bn-btn" data-bn="live" onclick="setView('live',document.querySelector('.tab[onclick*=live]'))"><span class="bn-icon">🔴</span><span>Live</span></button>
   <button class="bn-btn" data-bn="more" onclick="openMoreSheet()"><span class="bn-icon">⋯</span><span>More</span></button>
 </nav>
 
@@ -541,7 +541,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
     </div>
     <div class="more-sheet-sub">The rest of HRProb's tabs, one tap away</div>
     <div class="more-sheet-list">
-      <button class="more-item" onclick="closeMoreSheet();setView('live',document.querySelector('.tab[onclick*=live]'))"><span class="mi-icon">🔴</span><span class="mi-label">Live</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('parks',document.querySelector('.tab[onclick*=parks]'));if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})"><span class="mi-icon">🏟</span><span class="mi-label">Parks</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('pitchers',document.querySelector('.tab[onclick*=pitchers]'))"><span class="mi-icon">⚾</span><span class="mi-label">Pitchers</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('derby',document.querySelector('.tab[onclick*=derby]'))"><span class="mi-icon">📋</span><span class="mi-label">Props</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('parlay',document.querySelector('.tab[onclick*=parlay]'))"><span class="mi-icon">🎰</span><span class="mi-label">Parlays</span><span class="mi-arrow">›</span></button>
@@ -7389,7 +7389,7 @@ function renderAll(){
 
 // ── UI ──
 // Views with a direct bottom-nav icon; everything else falls under "more"
-const BOTTOM_NAV_DIRECT = {today:'today', players:'players', targets:'targets', parks:'parks'};
+const BOTTOM_NAV_DIRECT = {today:'today', players:'players', targets:'targets', live:'live'};
 
 function setView(v,el){
   curView=v;
