@@ -338,6 +338,8 @@ module.exports = async function handler(req, res) {
   console.log(`Splits: ${Object.keys(batterSplits).length} batters (${withBoth} both sides), ${Object.keys(pitcherSplits).length} pitchers (${pitWithBoth} both sides), ${parkCount} park splits, ${Date.now()-start}ms`);
 
   cache = { data: { splits: batterSplits, pitcherSplits, parkSplits }, timestamp: Date.now() };
-  res.setHeader('Cache-Control', 's-maxage=3600');
+  // max-age=0: never served from the browser's own cache, always revalidate
+  // with the edge. s-maxage keeps the 1hr shared-cache tier.
+  res.setHeader('Cache-Control', 'max-age=0, s-maxage=3600');
   return res.status(200).json({ splits: batterSplits, pitcherSplits, parkSplits, elapsed: Date.now() - start });
 };

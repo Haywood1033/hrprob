@@ -6,7 +6,10 @@ const CACHE_TTL = 60 * 60 * 1000; // 1 hour
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=3600');
+  // max-age=0: never served from the browser's own cache, always revalidate
+  // with the edge. s-maxage keeps the 1hr shared-cache tier that protects
+  // the Baseball Savant fetch.
+  res.setHeader('Cache-Control', 'max-age=0, s-maxage=3600');
 
   const age = cache.timestamp ? Date.now() - cache.timestamp : Infinity;
   const force = req.query.force === 'true';
