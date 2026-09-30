@@ -126,6 +126,9 @@ module.exports = async function handler(req, res) {
 
   console.log(`Streaks: ${Object.keys(results).length}/${names.length} in ${Date.now()-start}ms`);
   cache = { data: { streaks: results, playerIds }, timestamp: Date.now() };
-  res.setHeader('Cache-Control', 's-maxage=7200');
+  // max-age=0: never served from the browser's own cache, always revalidate
+  // with the edge. s-maxage keeps the 2hr shared-cache tier that protects
+  // the MLB Stats API fetch.
+  res.setHeader('Cache-Control', 'max-age=0, s-maxage=7200');
   return res.status(200).json({ streaks: results, playerIds, elapsed: Date.now()-start });
 };

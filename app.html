@@ -7838,6 +7838,24 @@ async function init(){
   }, 5*60*1000);
 }
 
+// Mobile Safari/Chrome frequently restore the page from the back/forward
+// cache (bfcache) instead of doing a real reload -- swipe away and back,
+// switch apps and return, or tap a link then go back. bfcache resumes the
+// exact in-memory JS state (including whatever mid-flight fetch timers,
+// stale WX/BATTER/PITCHER data, and _loadState flags existed the moment
+// the tab was backgrounded) rather than re-running init(), which is what
+// made "refresh" behave completely differently on mobile than on desktop
+// -- sometimes showing stale data, sometimes never finishing a load that
+// was already half-done when the tab got backgrounded. Detecting a bfcache
+// restore and forcing a real reload makes every "refresh" (tap the reload
+// button, swipe-back-and-forward, switch apps and return) actually re-run
+// the full load cycle, consistently on both platforms.
+if (typeof window.addEventListener === 'function') {
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) location.reload();
+  });
+}
+
 init();
 </script>
 

@@ -149,6 +149,10 @@ module.exports = async function handler(req, res) {
   };
 
   cache = { data, timestamp: Date.now(), date: targetDate };
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=60');
+  // max-age=0 keeps this out of the BROWSER's own cache (always revalidate
+  // with the edge on a real page load); s-maxage/stale-while-revalidate
+  // still let Vercel's edge serve a shared cached copy for up to 5 min to
+  // protect the upstream MLB/RotoWire fetch from being hit by every request.
+  res.setHeader('Cache-Control', 'max-age=0, s-maxage=300, stale-while-revalidate=60');
   return res.status(200).json(data);
 };

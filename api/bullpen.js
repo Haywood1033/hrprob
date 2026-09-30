@@ -118,7 +118,9 @@ async function fetchBullpenStats() {
 module.exports = async function handler(req, res) {
   try {
     const data = await fetchBullpenStats();
-    res.setHeader('Cache-Control', 'public, s-maxage=21600');
+    // max-age=0: never served from the browser's own cache, always revalidate
+    // with the edge. s-maxage keeps the 6hr shared-cache tier.
+    res.setHeader('Cache-Control', 'public, max-age=0, s-maxage=21600');
     return res.status(200).json({ ok: true, bullpen: data, count: Object.keys(data).length });
   } catch(e) {
     console.error('Bullpen API error:', e.message);
