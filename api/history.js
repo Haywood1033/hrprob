@@ -123,8 +123,11 @@ module.exports = async function handler(req, res) {
         }, alreadyAdded: true });
 
         // Fetch MLB schedule with linescore for this date
+        // gameType=R,F,D,L,W: regular season + all postseason rounds --
+        // omitting gameType can silently default to regular-season-only,
+        // which would make yesterday's postseason results invisible here.
         const mlbR = await fetch(
-          `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&hydrate=linescore`,
+          `https://statsapi.mlb.com/api/v1/schedule?sportId=1&date=${date}&gameType=R,F,D,L,W&hydrate=linescore`,
           { headers: { 'User-Agent': 'Mozilla/5.0' } }
         );
         if (!mlbR.ok) return res.status(502).json({ error: 'MLB API error' });
