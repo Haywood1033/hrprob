@@ -7867,7 +7867,20 @@ async function init(){
 // the full load cycle, consistently on both platforms.
 if (typeof window.addEventListener === 'function') {
   window.addEventListener('pageshow', (e) => {
-    if (e.persisted) location.reload();
+    if (!e.persisted) return;
+    // Guard against a reload loop: some mobile browsers/webviews have been
+    // known to misreport `persisted` as true even on a genuinely fresh
+    // load. Without this, that would force an immediate reload on every
+    // single load, forever -- which looks exactly like the page being
+    // stuck, since it never gets far enough into init() to show real data.
+    // Capping this at one forced reload per tab (sessionStorage survives
+    // the reload but not a new tab) keeps the real bfcache fix while
+    // making that failure mode impossible.
+    let already = false;
+    try { already = sessionStorage.getItem('_bfcacheReloaded') === '1'; } catch(err) {}
+    if (already) return;
+    try { sessionStorage.setItem('_bfcacheReloaded', '1'); } catch(err) {}
+    location.reload();
   });
 }
 
