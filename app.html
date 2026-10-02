@@ -6516,7 +6516,7 @@ async function renderTomorrow() {
 
   try {
     if (!tomorrowData || tomorrowData.date !== tomorrowDate) {
-      const r = await safeFetch('/api/slate?date='+tomorrowDate, 15000);
+      const r = await safeFetch('/api/slate?date='+tomorrowDate, 25000);
       if (!r.ok) throw new Error('HTTP '+r.status);
       tomorrowData = await r.json();
     }
@@ -7541,25 +7541,37 @@ async function init(){
   // confirmed lineups from RotoWire, and weather in one call (~3 sec)
   let apiSlateLoaded = false;
   try {
-    const r = await safeFetch('/api/slate?t='+Math.floor(Date.now()/300000), 12000); // busts every 5min
+    // 25s, not 12s: api/slate.js is allowed up to 30s server-side
+    // (vercel.json maxDuration) because in the worst case it does a
+    // sequential probable-pitchers fetch (up to 8s) then a parallel
+    // lineups/rosters batch (up to 7s) then weather (up to 9s) -- call it
+    // 24s worst case. A 12s client timeout could abort a request that was
+    // seconds away from succeeding, silently falling back to the baked-in
+    // placeholder slate for no real reason.
+    const r = await safeFetch('/api/slate?t='+Math.floor(Date.now()/300000), 25000); // busts every 5min
     if (r.ok) {
       const slate = await r.json();
-      if (slate.pitchers?.length) {
-        // Sync date
-        if (slate.date) {
-          // Only clear lock if date genuinely changed AND lock wasn't restored from DB
-          // _lockRestoredFromDB flag prevents wiping a good DB lock on first page load
-          if (SLATE.date && SLATE.date !== slate.date && !_lockRestoredFromDB) {
-            Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
-            _signalLockDate = null;
-          } else if (SLATE.date && SLATE.date !== slate.date && _lockRestoredFromDB) {
-            _lockRestoredFromDB = false; // reset for genuine future date changes
-          }
-          SLATE.date = slate.date;
-          document.getElementById('hdr-date').textContent =
-            new Date(slate.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
-          checkSlateDate();
+      // Sync the displayed date from ANY valid response, not just one with
+      // games -- this used to live inside the `slate.pitchers?.length`
+      // branch below, so a genuine no-games day (an off day, or any day
+      // the schedule endpoint returns nothing for) left the header (and
+      // SLATE.date) stuck on the hardcoded placeholder date forever, since
+      // nothing else ever corrects it.
+      if (slate.date) {
+        // Only clear lock if date genuinely changed AND lock wasn't restored from DB
+        // _lockRestoredFromDB flag prevents wiping a good DB lock on first page load
+        if (SLATE.date && SLATE.date !== slate.date && !_lockRestoredFromDB) {
+          Object.keys(SIGNAL_LOCK).forEach(k => delete SIGNAL_LOCK[k]);
+          _signalLockDate = null;
+        } else if (SLATE.date && SLATE.date !== slate.date && _lockRestoredFromDB) {
+          _lockRestoredFromDB = false; // reset for genuine future date changes
         }
+        SLATE.date = slate.date;
+        document.getElementById('hdr-date').textContent =
+          new Date(slate.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
+        checkSlateDate();
+      }
+      if (slate.pitchers?.length) {
         // Build games from live pitcher data
         games = slate.pitchers.map(g => ({
           pk: g.gamePk,
@@ -7821,7 +7833,7 @@ async function init(){
   // ── Auto-refresh every 5 min ────────────────────────────────
   setInterval(async ()=>{
     try {
-      const r = await safeFetch('/api/slate',10000);
+      const r = await safeFetch('/api/slate',25000);
       if (r.ok) {
         const slate = await r.json();
         if (slate.lineups) {
