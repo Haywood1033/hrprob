@@ -91,13 +91,20 @@ module.exports = async function handler(req, res) {
   const targetDate = requestedDate;
 
   // Step 1: get schedule fast
-  const pitchers = await safe(fetchProbablePitchers(targetDate), 8000);
+  const pitchersDebug = {};
+  const pitchers = await safe(fetchProbablePitchers(targetDate, pitchersDebug), 8000);
 
   if (!pitchers?.length) {
+    // debug shows exactly what the MLB schedule API itself said -- whether
+    // it genuinely returned zero games for this date+gameType, an HTTP
+    // error, a thrown exception, or (if pitchersDebug is empty) the 8s
+    // `safe()` timeout winning the race before fetchProbablePitchers ever
+    // got to report anything back.
     return res.status(200).json({
       date: targetDate, pitchers: [], lineups: {}, rosters: {}, lineupSource: 'none',
       weather: {}, confirmedCount: 0,
       timestamp: Date.now(), elapsed: Date.now() - start, error: 'No games found',
+      debug: pitchersDebug,
     });
   }
 
