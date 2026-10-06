@@ -7884,16 +7884,17 @@ function sgpPropLegs(gamePk) {
   // dominant starter's K line competes for a spot in the pool on equal
   // footing with the batter props above (via the edge normalization
   // below), not bolted on as a guaranteed/separate pick.
-  // Uses a fixed "5+ Strikeouts" threshold (same pattern as the batter
-  // markets' fixed floors -- 1+ Hit, 2+ TB, etc. -- where probability is
-  // left to vary with player quality) rather than calcPitcherK's own
-  // p_low/p_mid lines, which are set AT each pitcher's own projection and
-  // so land near 40-50% for essentially any starter regardless of
-  // quality -- that self-calibration is exactly right for "what's the
-  // fair betting line" but useless for "which starter is the better K
-  // bet," which is what this builder needs to compare.
+  // The floor line scales with each pitcher's own projection (projK - 2,
+  // floored at 3) instead of a flat threshold -- a fixed number doesn't
+  // work the way "1+ Hit" does across batters, because starters' real K
+  // range swings 4-10+ by role/workload. A flat "5+" was a near-lock for
+  // a true ace (projecting 8 K, it barely registered as a bet) and a real
+  // coinflip for a back-end arm -- not a useful comparison. calcPitcherK's
+  // own p_low/p_mid lines aren't used here either: those are set AT each
+  // pitcher's own projection, so they land near 40-50% for essentially
+  // any starter regardless of quality -- right for "what's the fair
+  // betting line," useless for "which starter is the better K bet."
   if (g) {
-    const K_THRESHOLD = 5;
     const poissonAtLeast = (threshold, lambda) => {
       let pmf = Math.exp(-lambda), cum = pmf;
       for (let i = 1; i < threshold; i++) { pmf *= lambda / i; cum += pmf; }
@@ -7903,12 +7904,15 @@ function sgpPropLegs(gamePk) {
     for (const { pit, team, opp } of starters) {
       if (!pit?.name) continue;
       const kc = calcPitcherK(pit, opp);
-      const prob = +poissonAtLeast(K_THRESHOLD, kc.projK).toFixed(1);
-      if (prob >= minProb.K) {
+      const floorLine = Math.max(3, Math.round(kc.projK) - 2);
+      const ceilLine  = Math.round(kc.projK) + 2;
+      const floorProb = +poissonAtLeast(floorLine, kc.projK).toFixed(1);
+      const ceilProb  = +poissonAtLeast(ceilLine, kc.projK).toFixed(1);
+      if (floorProb >= minProb.K) {
         raw.push({
-          type: 'K', label: `${K_THRESHOLD}+ Strikeouts`, prob,
+          type: 'K', label: `${floorLine}+ Strikeouts`, prob: floorProb,
           player: { name: pit.name, team, pitName: opp, game: g, gamePk: g.pk },
-          gamePk: g.pk, kc,
+          gamePk: g.pk, kc, floorLine, ceilLine, ceilProb,
         });
       }
     }
@@ -8070,8 +8074,8 @@ function renderSGP() {
         const r = leg.player;
         let detail, sigHTML;
         if (leg.type === 'K') {
-          detail = `${r.team} SP vs ${r.pitName} · xERA ${leg.kc.xera} · K% ${leg.kc.k_pct}% · ~${leg.kc.expIP} IP · opp whiff ${leg.kc.avgWhiff}%`;
-          sigHTML = '';
+          detail = `Floor ${leg.floorLine}+ (${leg.prob.toFixed(1)}%) · Ceiling ${leg.ceilLine}+ (${leg.ceilProb.toFixed(1)}%) · xERA ${leg.kc.xera} · K% ${leg.kc.k_pct}% · opp whiff ${leg.kc.avgWhiff}%`;
+          sigHTML = `<div style="margin-top:3px;font-size:10px;font-family:var(--mono);color:var(--teal)">Projected ${leg.kc.projK}K over ~${leg.kc.expIP} IP vs ${r.pitName}</div>`;
         } else {
           const streak = STREAK[r.name];
           const park = getPark(r.game?.home||r.team) || {};
