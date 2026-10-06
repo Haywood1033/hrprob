@@ -7874,7 +7874,7 @@ function sgpPropLegs(gamePk) {
 
   // Pitcher strikeout legs -- the same real, opponent-adjusted calcPitcherK()
   // model that backs the Props tab's K props and Pitchers tab, so a
-  // dominant starter's K line competes for a category slot on equal
+  // dominant starter's K line competes for a spot in the pool on equal
   // footing with the batter props above (via the edge normalization
   // below), not bolted on as a guaranteed/separate pick.
   // Uses a fixed "5+ Strikeouts" threshold (same pattern as the batter
@@ -7921,26 +7921,23 @@ function sgpPropLegs(gamePk) {
   }
   raw.forEach(l => { l.edge = l.prob / (avgByType[l.type] || 1); });
 
-  // One leg per market category -- the single most notable (highest-edge)
-  // qualifying player for each of HR/Hit/2+TB/RBI/Run -- so the builder
-  // genuinely spans categories instead of ranking by raw probability,
-  // which always collapses to whichever market has the highest floor
-  // (1+ Hit, then 1+ RBI) regardless of how notable a pick actually is.
-  // Picks are assigned player-exclusively: once a player is used for one
-  // category, they can't also fill another (no double-dipping the same
-  // batter across two correlated markets).
-  const byType = {};
-  for (const type of Object.keys(minProb)) {
-    byType[type] = raw.filter(l => l.type === type).sort((a, b) => b.edge - a.edge);
+  // One leg per PLAYER (their single most notable market by edge) -- not
+  // one per category. Capping to one leg per category forced the whole
+  // pool down to a handful of candidates game-wide (one per of
+  // HR/Hit/TB/RBI/Run/K, 6 at most) regardless of how many genuinely
+  // strong players were on the slate, needlessly capping the combo
+  // search's hit-rate and payout range below. Keeping every qualifying
+  // player -- each represented by their own best-edge market, so a power
+  // threat still surfaces as HR and a table-setter as Run rather than
+  // everyone defaulting to 1+ Hit -- gives the real combinatorial search
+  // in renderSGP a much larger, still fully diversified pool to actually
+  // optimize probability over instead of being stuck with 6 candidates.
+  const bestPerPlayer = new Map();
+  for (const l of raw) {
+    const cur = bestPerPlayer.get(l.player.name);
+    if (!cur || l.edge > cur.edge) bestPerPlayer.set(l.player.name, l);
   }
-  const usedPlayers = new Set();
-  const legs = [];
-  const typeOrder = Object.keys(byType).sort((a, b) => (byType[b][0]?.edge || 0) - (byType[a][0]?.edge || 0));
-  for (const type of typeOrder) {
-    const pick = byType[type].find(l => !usedPlayers.has(l.player.name));
-    if (pick) { legs.push(pick); usedPlayers.add(pick.player.name); }
-  }
-  return legs.sort((a, b) => b.edge - a.edge);
+  return [...bestPerPlayer.values()].sort((a, b) => b.edge - a.edge);
 }
 
 function scoreSGPCombo(legs) {
@@ -7960,6 +7957,19 @@ function scoreSGPCombo(legs) {
     signalScore: +signalScore.toFixed(0),
     avgSignals:  +avgSignals.toFixed(1),
     avgEdge:     +avgEdge.toFixed(2),
+    // Ranking-only metric (never displayed -- jointProb above is the real,
+    // honest combined probability). Raw joint probability alone always
+    // rewards stacking the single safest market (1+ Hit routinely runs
+    // 55-70% per batter), so ranking combos by jointProb collapses right
+    // back to all-Hit sweeps -- the exact thing edge-normalizing each
+    // individual leg's market was meant to fix. Weighting by avgEdge^3
+    // here is what makes a genuinely notable cross-category mix (HR +
+    // RBI + Run, say) outscore three generically-safe Hit legs, without
+    // forcing a hard one-per-category cap that would throw away good
+    // candidates (this exponent was picked by checking it flips the
+    // ranking for realistic mixed-vs-all-safe combos, not an arbitrary
+    // dial -- see PR description).
+    score: adjusted * (1 + avgSignals * 0.08) * Math.pow(avgEdge, 3),
     bonus,
   };
 }
@@ -8010,19 +8020,20 @@ function renderSGP() {
   let html = header;
   for (const { k, label } of sections) {
     if (legs.length < k) continue;
-    // legs is a small pool (one candidate per category, at most 6), so a
-    // full search over its k-combinations is cheap. Picking the top-k by
-    // edge directly (legs.slice(0,k)) would make every card a strict
-    // superset of the smaller one -- whichever single leg has the best
-    // edge (e.g. a star's HR prop) ends up pinned into every card
-    // regardless of size. Searching instead lets each card size find its
-    // own best-scoring combo -- a smaller card can trade a high-edge-but
-    // -lower-probability leg for a few safer ones if that scores higher,
-    // so the three cards aren't just nested copies of each other.
+    // legs is every qualifying player (not capped per category), so a
+    // full search over its k-combinations stays cheap (a realistic slate
+    // has well under 20 candidates). Ranking by raw jointProb would
+    // always win on whichever legs have the highest individual
+    // probability -- since 1+ Hit runs 55-70% for nearly any batter,
+    // that collapses straight back into all-Hit sweeps. scoreSGPCombo's
+    // `score` (edge-weighted, see its own comment) is what lets a
+    // genuinely notable cross-category mix outrank a pile of safe-but-
+    // unremarkable Hit legs, while the displayed jointProb stays the
+    // real, honest combined probability either way.
     const combos = generateCombinations(legs, k);
     const scored = combos
       .map(combo => ({ combo, ...scoreSGPCombo(combo) }))
-      .sort((a, b) => b.jointProb - a.jointProb)
+      .sort((a, b) => b.score - a.score)
       .slice(0, 1);
 
     html += `<div class="psection"><div class="psection-title">${label} <span></span></div>`;
