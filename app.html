@@ -4432,7 +4432,14 @@ function calcPitcherK(pit, oppTeam) {
   const pitData = getPitcher(pit.name) || {};
   const xera  = pitData.xera || pit.xera || pit.era || 4.50;
   const whiff = pitData.whiff || pit.whiff || 22;
-  const k_pct = pitData.k_pct || pit.k_pct || +(whiff * 0.72 + 3.0).toFixed(1);
+  // Fallback K% estimate for when Statcast's own strikeout_percent/
+  // p_k_percent didn't come through for this pitcher. K% tracks whiff%
+  // closely across the league (whiff%-per-swing and K% move almost
+  // 1-for-1, not whiff*0.72+3 -- that old formula was tuned around an
+  // average arm and badly undershoots elite strikeout pitchers, e.g. a
+  // 30%+ whiff ace was coming out at K%~25 instead of the ~28-33% their
+  // own recent game logs showed).
+  const k_pct = pitData.k_pct || pit.k_pct || +(whiff * 0.95 - 0.5).toFixed(1);
   // Expected IP — calibrated: better pitchers go deeper
   const expIP = Math.min(7.0, Math.max(4.0, 6.8 - (xera - 4.00) * 0.6));
   // BF per IP — modern average ~4.0
