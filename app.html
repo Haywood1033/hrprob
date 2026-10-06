@@ -7852,8 +7852,9 @@ function renderDFS() {
 let SGP_GAME = null;
 
 function sgpPropLegs(gamePk) {
+  const g = games.find(x => x.pk === gamePk);
   const rows = allRows.filter(r => r.gamePk === gamePk);
-  const minProb = { HR: 8, HIT: 38, TB2: 16, RBI: 11, RUN: 16 };
+  const minProb = { HR: 8, HIT: 38, TB2: 16, RBI: 11, RUN: 16, K: 30 };
   const raw = [];
   for (const r of rows) {
     const pa = getBatter(r.name)?.pa || 0;
@@ -7868,6 +7869,41 @@ function sgpPropLegs(gamePk) {
     ];
     for (const c of candidates) {
       if (c.prob >= minProb[c.type]) raw.push({ ...c, player: r, gamePk: r.gamePk });
+    }
+  }
+
+  // Pitcher strikeout legs -- the same real, opponent-adjusted calcPitcherK()
+  // model that backs the Props tab's K props and Pitchers tab, so a
+  // dominant starter's K line competes for a category slot on equal
+  // footing with the batter props above (via the edge normalization
+  // below), not bolted on as a guaranteed/separate pick.
+  // Uses a fixed "5+ Strikeouts" threshold (same pattern as the batter
+  // markets' fixed floors -- 1+ Hit, 2+ TB, etc. -- where probability is
+  // left to vary with player quality) rather than calcPitcherK's own
+  // p_low/p_mid lines, which are set AT each pitcher's own projection and
+  // so land near 40-50% for essentially any starter regardless of
+  // quality -- that self-calibration is exactly right for "what's the
+  // fair betting line" but useless for "which starter is the better K
+  // bet," which is what this builder needs to compare.
+  if (g) {
+    const K_THRESHOLD = 5;
+    const poissonAtLeast = (threshold, lambda) => {
+      let pmf = Math.exp(-lambda), cum = pmf;
+      for (let i = 1; i < threshold; i++) { pmf *= lambda / i; cum += pmf; }
+      return Math.max(0, Math.min(100, (1 - cum) * 100));
+    };
+    const starters = [{ pit: g.ap, team: g.away, opp: g.home }, { pit: g.hp, team: g.home, opp: g.away }];
+    for (const { pit, team, opp } of starters) {
+      if (!pit?.name) continue;
+      const kc = calcPitcherK(pit, opp);
+      const prob = +poissonAtLeast(K_THRESHOLD, kc.projK).toFixed(1);
+      if (prob >= minProb.K) {
+        raw.push({
+          type: 'K', label: `${K_THRESHOLD}+ Strikeouts`, prob,
+          player: { name: pit.name, team, pitName: opp, game: g, gamePk: g.pk },
+          gamePk: g.pk, kc,
+        });
+      }
     }
   }
 
@@ -7909,7 +7945,9 @@ function sgpPropLegs(gamePk) {
 
 function scoreSGPCombo(legs) {
   const jointProb = legs.reduce((acc, l) => acc * (l.prob / 100), 1);
-  const signalScore = legs.reduce((acc, l) => acc + getSignalsLocked(l.player).count, 0);
+  // Pitcher K legs have no equivalent to the batter signal system, so they
+  // contribute 0 rather than calling getSignalsLocked on a non-batter row.
+  const signalScore = legs.reduce((acc, l) => acc + (l.type === 'K' ? 0 : getSignalsLocked(l.player).count), 0);
   const avgSignals = signalScore / legs.length;
   const avgEdge = legs.reduce((acc, l) => acc + l.edge, 0) / legs.length;
   // Every leg shares one game by construction -- same 4+ signal stack
@@ -8001,21 +8039,28 @@ function renderSGP() {
 
       combo.forEach((leg, i) => {
         const r = leg.player;
-        const streak = STREAK[r.name];
-        const park = getPark(r.game?.home||r.team) || {};
-        const wx = WX[r.game?.home||r.team] || {};
-        const detail = [
-          `${r.team} vs ${r.pitName}`,
-          park.f >= 1.05 ? '📈 Hitter park' : park.f <= 0.95 ? '📉 Pitcher park' : '',
-          wx.label?.includes('out') ? '💨 Wind out' : wx.label?.includes('in') ? '🌬 Wind in' : '',
-          streak?.flame || '',
-        ].filter(Boolean).join(' · ');
+        let detail, sigHTML;
+        if (leg.type === 'K') {
+          detail = `${r.team} SP vs ${r.pitName} · xERA ${leg.kc.xera} · K% ${leg.kc.k_pct}% · ~${leg.kc.expIP} IP · opp whiff ${leg.kc.avgWhiff}%`;
+          sigHTML = '';
+        } else {
+          const streak = STREAK[r.name];
+          const park = getPark(r.game?.home||r.team) || {};
+          const wx = WX[r.game?.home||r.team] || {};
+          detail = [
+            `${r.team} vs ${r.pitName}`,
+            park.f >= 1.05 ? '📈 Hitter park' : park.f <= 0.95 ? '📉 Pitcher park' : '',
+            wx.label?.includes('out') ? '💨 Wind out' : wx.label?.includes('in') ? '🌬 Wind in' : '',
+            streak?.flame || '',
+          ].filter(Boolean).join(' · ');
+          sigHTML = `<div style="margin-top:3px">${signalPanel(r, true)}</div>`;
+        }
 
         html += `<div class="pleg">
           <div class="pleg-num">${i+1}</div>
           <div style="flex:1">
             <div class="pleg-name">${r.name} <span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 6px;border-radius:3px;background:var(--bg3);color:var(--purple);margin-left:4px">${leg.label}</span></div>
-            <div style="margin-top:3px">${signalPanel(r, true)}</div>
+            ${sigHTML}
             <div class="pleg-detail">${detail}</div>
           </div>
           <div style="text-align:right">
