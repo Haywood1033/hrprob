@@ -122,8 +122,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vgamelines,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks,#vquicklook,#vdfs{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vgamelines.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on,#vquicklook.on,#vdfs.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vgamelines,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks,#vquicklook,#vdfs,#vsgp{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vgamelines.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on,#vquicklook.on,#vdfs.on,#vsgp.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -521,6 +521,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('derby',this)">📋 Props</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
   <div class="tab" onclick="setView('dfs',this)">🏆 DFS Optimizer</div>
+  <div class="tab" onclick="setView('sgp',this)">🧩 SGP</div>
   <div class="tab" onclick="setView('gamelines',this)">🎲 Game Lines</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})">🏟 Parks</div>
@@ -547,6 +548,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <button class="more-item" onclick="closeMoreSheet();setView('pitchers',document.querySelector('.tab[onclick*=pitchers]'))"><span class="mi-icon">⚾</span><span class="mi-label">Pitchers</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('quicklook',document.querySelector('.tab[onclick*=quicklook]'))"><span class="mi-icon">🔍</span><span class="mi-label">Quick Look</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('dfs',document.querySelector('.tab[onclick*=dfs]'))"><span class="mi-icon">🏆</span><span class="mi-label">DFS Optimizer</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('sgp',document.querySelector('.tab[onclick*=sgp]'))"><span class="mi-icon">🧩</span><span class="mi-label">SGP Builder</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('derby',document.querySelector('.tab[onclick*=derby]'))"><span class="mi-icon">📋</span><span class="mi-label">Props</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('parlay',document.querySelector('.tab[onclick*=parlay]'))"><span class="mi-icon">🎰</span><span class="mi-label">Parlays</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('gamelines',document.querySelector('.tab[onclick*=gamelines]'))"><span class="mi-icon">🎲</span><span class="mi-label">Game Lines</span><span class="mi-arrow">›</span></button>
@@ -592,6 +594,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vtargets" class="view"><div id="tgrid" style="display:block;padding:0;width:100%;overflow-x:auto"></div></div>
 <div id="vquicklook" class="view"><div id="quicklook-grid"></div></div>
 <div id="vdfs" class="view"><div id="dfs-grid"></div></div>
+<div id="vsgp" class="view"><div id="sgp-grid"></div></div>
 <div id="vparlay" class="view"><span id="parlay-pill-active" data-pill="auto" style="display:none"></span>
   <div class="today-pills" style="padding:10px 20px 0">
     <button class="today-pill on" data-pill="auto" onclick="setParlayPill(this.dataset.pill,this)">Auto Parlays</button>
@@ -7832,6 +7835,169 @@ function renderDFS() {
   </div>`;
 }
 
+// ── SAME GAME PARLAY BUILDER ───────────────────────────────────
+// Reuses the model's own stat-probability ladder (calcBatterProps) across
+// categories -- not just HR -- scoped to a single selected game, scored by
+// joint probability and signal convergence the same way the cross-game
+// Parlays tab scores HR-only combos.
+let SGP_GAME = null;
+
+function sgpPropLegs(gamePk) {
+  const rows = allRows.filter(r => r.gamePk === gamePk);
+  const minProb = { HR: 8, HIT: 38, TB2: 16, RBI: 11, RUN: 16 };
+  const legs = [];
+  for (const r of rows) {
+    const pa = getBatter(r.name)?.pa || 0;
+    if (pa < 20) continue; // too thin a sample to trust any market
+    const props = calcBatterProps(r);
+    const candidates = [
+      { type: 'HR',  label: 'HR',           prob: r.hrp },
+      { type: 'HIT', label: '1+ Hit',       prob: props.p_hit },
+      { type: 'TB2', label: '2+ Total Bases', prob: props.p_2tb },
+      { type: 'RBI', label: '1+ RBI',       prob: props.p_rbi },
+      { type: 'RUN', label: '1+ Run',       prob: props.p_run },
+    ];
+    for (const c of candidates) {
+      if (c.prob >= minProb[c.type]) legs.push({ ...c, player: r, gamePk: r.gamePk });
+    }
+  }
+  return legs;
+}
+
+// Combos restricted to one leg per player -- a real SGP stacks different
+// players/markets in one game; multiple markets on the same player (e.g.
+// HR + 1+ Hit) are too correlated to treat as independent legs.
+function generateSGPCombos(legs, k) {
+  return generateCombinations(legs, k).filter(c => new Set(c.map(l => l.player.name)).size === c.length);
+}
+
+function scoreSGPCombo(legs) {
+  const jointProb = legs.reduce((acc, l) => acc * (l.prob / 100), 1);
+  const signalScore = legs.reduce((acc, l) => acc + getSignalsLocked(l.player).count, 0);
+  const avgSignals = signalScore / legs.length;
+  // Every leg shares one game by construction -- same 4+ signal stack
+  // bonus / low-signal same-game penalty the Parlays tab applies, here
+  // generalized across mixed stat markets instead of HR alone.
+  const bonus = avgSignals >= 4 ? 1.05 : 0.85;
+  const adjusted = jointProb * bonus;
+  return {
+    jointProb:   +(adjusted * 100).toFixed(2),
+    signalScore: +signalScore.toFixed(0),
+    avgSignals:  +avgSignals.toFixed(1),
+    score:       adjusted * (1 + avgSignals * 0.08),
+    bonus,
+  };
+}
+
+function selectSGPGame(pk) {
+  SGP_GAME = pk ? +pk : null;
+  renderSGP();
+}
+
+function renderSGP() {
+  const grid = document.getElementById('sgp-grid');
+  if (!grid) return;
+  if (!games.length) { grid.innerHTML = '<div class="empty" style="padding:40px 20px"><h3>Loading games…</h3></div>'; return; }
+
+  if (!SGP_GAME || !games.some(g => g.pk === SGP_GAME)) SGP_GAME = [...games].sort(gameTimeSort)[0]?.pk || null;
+
+  const gameOptions = [...games].sort(gameTimeSort)
+    .map(g => `<option value="${g.pk}" ${g.pk===SGP_GAME?'selected':''}>${g.away} @ ${g.home} · ${g.time}</option>`).join('');
+
+  const header = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--t1)">Same Game Parlay Builder</div>
+      <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">One game · every stat category · model probability + signal convergence</div>
+    </div>
+    <div style="flex-grow:1"></div>
+    <select onchange="selectSGPGame(this.value)" style="background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);color:var(--t1);padding:6px 10px;border-radius:8px;font-family:var(--mono);font-size:11px">${gameOptions}</select>
+  </div>`;
+
+  const g = games.find(x => x.pk === SGP_GAME);
+  if (!g) { grid.innerHTML = header + '<div class="empty"><p>No games available</p></div>'; return; }
+
+  const legs = sgpPropLegs(g.pk);
+  if (legs.length < 2) {
+    grid.innerHTML = header + `<div class="empty" style="padding:40px 20px">
+      <div style="font-size:28px;margin-bottom:12px">🧩</div>
+      <h3>Not enough qualifying props yet</h3>
+      <p style="font-size:12px;color:var(--t3);margin-top:8px">${g.away} @ ${g.home} needs confirmed lineups and sufficient PA data.</p>
+    </div>`;
+    return;
+  }
+
+  const sections = [
+    { k: 2, label: '2-Leg SGP', top: 4 },
+    { k: 3, label: '3-Leg SGP', top: 4 },
+    { k: 4, label: '4-Leg SGP', top: 3 },
+  ];
+
+  let html = header;
+  for (const { k, label, top } of sections) {
+    const combos = generateSGPCombos(legs, k);
+    if (!combos.length) continue;
+    const scored = combos.map(combo => ({ combo, ...scoreSGPCombo(combo) }))
+      .sort((a, b) => b.score - a.score).slice(0, top);
+
+    html += `<div class="psection"><div class="psection-title">${label} <span></span></div>`;
+
+    for (const { combo, jointProb, signalScore, avgSignals, bonus } of scored) {
+      const signalColor = avgSignals >= 4 ? 'var(--green)' : avgSignals >= 3 ? 'var(--teal)' : 'var(--t2)';
+      const tags = [];
+      if (avgSignals >= 4) tags.push(`<span class="tag hot">⭐ High Signal Stack</span>`);
+      tags.push(bonus > 1
+        ? `<span class="tag park">🏟 Same-Game Bonus</span>`
+        : `<span class="tag" style="background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)">Correlation Penalty</span>`);
+
+      html += `<div class="pcard">
+        <div class="pcard-header">
+          <div>
+            <div class="pcard-odds">${jointProb}%</div>
+            <div style="font-size:10px;font-family:var(--mono);color:var(--t3);margin-top:2px">Joint probability (model)</div>
+          </div>
+          <div style="text-align:right">
+            <div class="pcard-ev" style="color:${signalColor}">⚡ ${signalScore} signals · avg ${avgSignals}/5 per leg</div>
+            <div class="pcard-tags">${tags.join('')}</div>
+          </div>
+        </div>`;
+
+      combo.forEach((leg, i) => {
+        const r = leg.player;
+        const streak = STREAK[r.name];
+        const park = getPark(r.game?.home||r.team) || {};
+        const wx = WX[r.game?.home||r.team] || {};
+        const detail = [
+          `${r.team} vs ${r.pitName}`,
+          park.f >= 1.05 ? '📈 Hitter park' : park.f <= 0.95 ? '📉 Pitcher park' : '',
+          wx.label?.includes('out') ? '💨 Wind out' : wx.label?.includes('in') ? '🌬 Wind in' : '',
+          streak?.flame || '',
+        ].filter(Boolean).join(' · ');
+
+        html += `<div class="pleg">
+          <div class="pleg-num">${i+1}</div>
+          <div style="flex:1">
+            <div class="pleg-name">${r.name} <span style="font-size:9px;font-family:var(--mono);font-weight:700;padding:1px 6px;border-radius:3px;background:var(--bg3);color:var(--purple);margin-left:4px">${leg.label}</span></div>
+            <div style="margin-top:3px">${signalPanel(r, true)}</div>
+            <div class="pleg-detail">${detail}</div>
+          </div>
+          <div style="text-align:right">
+            <div class="pleg-prob">${leg.prob.toFixed(1)}%</div>
+          </div>
+        </div>`;
+      });
+
+      html += `<div class="pcard-note">
+        Fair value at ${jointProb}% joint probability
+        ${bonus > 1 ? ' · High-signal same-game bonus applied' : ' · Same-game correlation penalty applied'}
+      </div></div>`;
+    }
+
+    html += '</div>';
+  }
+
+  grid.innerHTML = html;
+}
+
 function renderAll(){
   if(curView==='players')  renderPlayers();
   else if(curView==='games')   renderGames();
@@ -7847,6 +8013,7 @@ function renderAll(){
   else if(curView==='gamelines') renderGameLines();
   else if(curView==='quicklook') renderQuickLook();
   else if(curView==='dfs') renderDFS();
+  else if(curView==='sgp') renderSGP();
   else renderTargets();
 }
 
@@ -7857,7 +8024,7 @@ const BOTTOM_NAV_DIRECT = {today:'today', players:'players', targets:'targets', 
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','gamelines','quicklook','dfs'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','gamelines','quicklook','dfs','sgp'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   const bnActive = BOTTOM_NAV_DIRECT[v] || 'more';
   document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('on', b.dataset.bn===bnActive));
