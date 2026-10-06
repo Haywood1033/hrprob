@@ -7584,41 +7584,50 @@ function matchDFSPlayer(dkRow) {
     || null;
 }
 
+// Find which of today's games a pitcher (by name) is starting, and who
+// they're facing -- DK CSV pitcher rows don't carry a game reference the
+// way batter rows do (allRows is batters only), so this looks them up
+// directly against games[] instead of via matchDFSPlayer.
+function findPitcherGame(name) {
+  const n = normName(name);
+  for (const g of games) {
+    if (normName(g.ap?.name) === n) return { game: g, team: g.away, opp: g.home, pitObj: g.ap };
+    if (normName(g.hp?.name) === n) return { game: g, team: g.home, opp: g.away, pitObj: g.hp };
+  }
+  return null;
+}
+
 // Approximate DraftKings fantasy points from the model's own projections.
 // Batting: DK scores 3/5/8/10 for 1B/2B/3B/HR + 2/RBI + 2/Run + 2/BB. Using
 // 2*totalBases + hits reproduces that exactly for singles/doubles and comes
 // within 1 point for triples/HR (we don't project the 1B/2B/3B/HR split
 // individually, only aggregate expected hits/total bases) -- a deliberate,
 // clearly-labeled approximation, not a guaranteed-exact replica.
-// Pitching: we don't project innings/strikeouts/win probability elsewhere
-// in this app (it's an HR model, not a full point-projection system), so
-// this uses simple, clearly-approximate heuroristic from the pitcher's
-// existing rate stats (xERA, whiff%, team context) rather than real
-// per-start modeling.
+// Pitching: reuses calcPitcherK() -- the same real, opponent-lineup-adjusted
+// strikeout/IP model that backs the Props tab's K props and the Pitchers
+// tab's strikeout projection -- instead of a one-off heuristic.
 function projectDKPoints(dkRow, matched) {
   const isPitcher = dkRow.positions.includes('P') || dkRow.positions.includes('SP') || dkRow.positions.includes('RP');
   if (isPitcher) {
-    const pit = (matched && (matched.pit || getPitcher(matched.pitName))) || getPitcher(dkRow.name) || {};
-    const xera = pit.xera || 4.20;
-    const whiff = pit.whiff || 22;
-    const expIP = 5.3; // league-average starter workload -- no per-start IP model exists in this app
-    const expK  = expIP * 4.25 * (whiff / 100) * 1.35; // whiff% -> rough K/BF scalar
-    const expER = expIP * (xera / 9);
-    // Win probability proxy from the game's own moneyline if we have it,
+    const info = findPitcherGame(dkRow.name);
+    const kc = calcPitcherK(info?.pitObj || { name: dkRow.name }, info?.opp || null);
+    // Win probability from the game's own moneyline if we have it,
     // otherwise a flat coin-flip default.
     let winProb = 0.5;
-    if (matched?.game) {
-      const og = GAME_ODDS[matched.game.away + '@' + matched.game.home];
+    const g = info?.game;
+    if (g) {
+      const og = GAME_ODDS[g.away + '@' + g.home];
       if (og?.awayML && og?.homeML) {
         const toProb = o => o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
         const pAway = toProb(og.awayML), pHome = toProb(og.homeML);
         const norm = pAway + pHome;
-        const isHome = dkRow.team === matched.game.home;
+        const isHome = info.team === g.home;
         winProb = norm > 0 ? (isHome ? pHome : pAway) / norm : 0.5;
       }
     }
-    const pts = expIP * 6.75 + expK * 2 - expER * 2 + winProb * 4;
-    return { pts: +Math.max(0, pts).toFixed(1), isPitcher: true, approx: true };
+    const expER = kc.expIP * (kc.xera / 9);
+    const pts = kc.expIP * 6.75 + kc.projK * 2 - expER * 2 + winProb * 4;
+    return { pts: +Math.max(0, pts).toFixed(1), isPitcher: true, approx: true, kc };
   }
 
   if (!matched) return { pts: 0, isPitcher: false, approx: true, unmatched: true };
@@ -7726,7 +7735,7 @@ function handleDFSUpload(input) {
     DFS_POOL = players.map((p, i) => {
       const matched = matchDFSPlayer(p);
       const proj = projectDKPoints(p, matched);
-      return { id: 'dfs'+i, ...p, matched, projPts: proj.pts, isPitcher: proj.isPitcher, unmatched: !!proj.unmatched };
+      return { id: 'dfs'+i, ...p, matched, projPts: proj.pts, isPitcher: proj.isPitcher, unmatched: !!proj.unmatched, kc: proj.kc || null };
     }).sort((a,b) => b.projPts - a.projPts);
     renderDFS();
   };
@@ -7819,7 +7828,7 @@ function renderDFS() {
           return `<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--bg3);opacity:${excluded?0.4:1}">
             <div style="flex:1;min-width:0">
               <div style="font-size:12px;font-weight:600;color:var(--t1)">${p.name}${p.unmatched?' <span style="font-size:8px;color:var(--amber)">unmatched</span>':''}</div>
-              <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team||''} · ${p.positions.join('/')||'?'}</div>
+              <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team||''} · ${p.positions.join('/')||'?'}${p.isPitcher && p.kc ? ` · Proj ${p.kc.projK}K · ${p.kc.expIP} IP` : ''}</div>
             </div>
             <div style="font-size:11px;font-family:var(--mono);color:var(--t2);width:70px;text-align:right">$${p.salary.toLocaleString()}</div>
             <div style="font-size:11px;font-family:var(--mono);color:var(--teal);width:56px;text-align:right">${p.projPts}p</div>
