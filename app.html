@@ -7858,6 +7858,14 @@ function renderDFS() {
 // Parlays tab scores HR-only combos.
 let SGP_GAME = null;
 
+// P(count >= threshold) under a Poisson(lambda) model -- shared by every
+// SGP category's "ceiling" line (and HR's implied rate, and pitcher K).
+function poissonAtLeast(threshold, lambda) {
+  let pmf = Math.exp(-lambda), cum = pmf;
+  for (let i = 1; i < threshold; i++) { pmf *= lambda / i; cum += pmf; }
+  return Math.max(0, Math.min(100, (1 - cum) * 100));
+}
+
 function sgpPropLegs(gamePk) {
   const g = games.find(x => x.pk === gamePk);
   const rows = allRows.filter(r => r.gamePk === gamePk);
@@ -7867,12 +7875,16 @@ function sgpPropLegs(gamePk) {
     const pa = getBatter(r.name)?.pa || 0;
     if (pa < 20) continue; // too thin a sample to trust any market
     const props = calcBatterProps(r);
+    // HR has no ladder of its own (hrp is just P(1+ HR)) -- back out an
+    // implied Poisson rate from it so a "2+ HR" ceiling and an expected-
+    // count projection can be shown the same way as the other categories.
+    const hrLambda = -Math.log(Math.max(0.001, 1 - r.hrp / 100));
     const candidates = [
-      { type: 'HR',  label: 'HR',           prob: r.hrp },
-      { type: 'HIT', label: '1+ Hit',       prob: props.p_hit },
-      { type: 'TB2', label: '2+ Total Bases', prob: props.p_2tb },
-      { type: 'RBI', label: '1+ RBI',       prob: props.p_rbi },
-      { type: 'RUN', label: '1+ Run',       prob: props.p_run },
+      { type: 'HR',  label: 'HR',             prob: r.hrp,       floorLine: 1, ceilLine: 2, ceilProb: +poissonAtLeast(2, hrLambda).toFixed(1), proj: +hrLambda.toFixed(2), unit: ' HR' },
+      { type: 'HIT', label: '1+ Hit',         prob: props.p_hit, floorLine: 1, ceilLine: 2, ceilProb: props.p_2hit, proj: props.exp_hits, unit: ' Hits' },
+      { type: 'TB2', label: '2+ Total Bases', prob: props.p_2tb, floorLine: 2, ceilLine: 4, ceilProb: props.p_4tb, proj: props.exp_tb, unit: ' TB' },
+      { type: 'RBI', label: '1+ RBI',         prob: props.p_rbi, floorLine: 1, ceilLine: 2, ceilProb: props.p_2rbi, proj: props.exp_rbi, unit: ' RBI' },
+      { type: 'RUN', label: '1+ Run',         prob: props.p_run, floorLine: 1, ceilLine: 2, ceilProb: props.p_2run, proj: props.exp_runs, unit: ' Runs' },
     ];
     for (const c of candidates) {
       if (c.prob >= minProb[c.type]) raw.push({ ...c, player: r, gamePk: r.gamePk });
@@ -7895,11 +7907,6 @@ function sgpPropLegs(gamePk) {
   // any starter regardless of quality -- right for "what's the fair
   // betting line," useless for "which starter is the better K bet."
   if (g) {
-    const poissonAtLeast = (threshold, lambda) => {
-      let pmf = Math.exp(-lambda), cum = pmf;
-      for (let i = 1; i < threshold; i++) { pmf *= lambda / i; cum += pmf; }
-      return Math.max(0, Math.min(100, (1 - cum) * 100));
-    };
     const starters = [{ pit: g.ap, team: g.away, opp: g.home }, { pit: g.hp, team: g.home, opp: g.away }];
     for (const { pit, team, opp } of starters) {
       if (!pit?.name) continue;
@@ -7912,7 +7919,7 @@ function sgpPropLegs(gamePk) {
         raw.push({
           type: 'K', label: `${floorLine}+ Strikeouts`, prob: floorProb,
           player: { name: pit.name, team, pitName: opp, game: g, gamePk: g.pk },
-          gamePk: g.pk, kc, floorLine, ceilLine, ceilProb,
+          gamePk: g.pk, kc, floorLine, ceilLine, ceilProb, proj: kc.projK, unit: 'K',
         });
       }
     }
@@ -8073,20 +8080,22 @@ function renderSGP() {
       combo.forEach((leg, i) => {
         const r = leg.player;
         let detail, sigHTML;
+        const floorCeil = `Floor ${leg.floorLine}+ (${leg.prob.toFixed(1)}%) · Ceiling ${leg.ceilLine}+ (${leg.ceilProb.toFixed(1)}%)`;
         if (leg.type === 'K') {
-          detail = `Floor ${leg.floorLine}+ (${leg.prob.toFixed(1)}%) · Ceiling ${leg.ceilLine}+ (${leg.ceilProb.toFixed(1)}%) · xERA ${leg.kc.xera} · K% ${leg.kc.k_pct}% · opp whiff ${leg.kc.avgWhiff}%`;
-          sigHTML = `<div style="margin-top:3px;font-size:10px;font-family:var(--mono);color:var(--teal)">Projected ${leg.kc.projK}K over ~${leg.kc.expIP} IP vs ${r.pitName}</div>`;
+          detail = `${floorCeil} · xERA ${leg.kc.xera} · K% ${leg.kc.k_pct}% · opp whiff ${leg.kc.avgWhiff}%`;
+          sigHTML = `<div style="margin-top:3px;font-size:10px;font-family:var(--mono);color:var(--teal)">Projected ${leg.proj}${leg.unit} over ~${leg.kc.expIP} IP vs ${r.pitName}</div>`;
         } else {
           const streak = STREAK[r.name];
           const park = getPark(r.game?.home||r.team) || {};
           const wx = WX[r.game?.home||r.team] || {};
-          detail = [
+          const context = [
             `${r.team} vs ${r.pitName}`,
             park.f >= 1.05 ? '📈 Hitter park' : park.f <= 0.95 ? '📉 Pitcher park' : '',
             wx.label?.includes('out') ? '💨 Wind out' : wx.label?.includes('in') ? '🌬 Wind in' : '',
             streak?.flame || '',
           ].filter(Boolean).join(' · ');
-          sigHTML = `<div style="margin-top:3px">${signalPanel(r, true)}</div>`;
+          detail = `${floorCeil} · ${context}`;
+          sigHTML = `<div style="margin-top:3px;font-size:10px;font-family:var(--mono);color:var(--teal)">Projected ${leg.proj}${leg.unit}</div><div style="margin-top:3px">${signalPanel(r, true)}</div>`;
         }
 
         html += `<div class="pleg">
