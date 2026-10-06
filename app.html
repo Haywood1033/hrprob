@@ -122,8 +122,8 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 .ibar .sep{color:var(--bd)}
 .empty{text-align:center;padding:40px 20px;color:var(--t3)}
 .empty h3{font-size:15px;color:var(--t2);margin-bottom:8px}
-#vplayers,#vgames,#vtargets,#vparlay,#vgamelines,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks,#vquicklook{display:none}
-#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vgamelines.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on,#vquicklook.on{display:block}
+#vplayers,#vgames,#vtargets,#vparlay,#vgamelines,#vhistory,#vtoday,#vtomorrow,#vpitchers,#vderby,#vlive,#vparks,#vquicklook,#vdfs{display:none}
+#vplayers.on,#vgames.on,#vtargets.on,#vparlay.on,#vgamelines.on,#vhistory.on,#vtoday.on,#vtomorrow.on,#vpitchers.on,#vderby.on,#vlive.on,#vparks.on,#vquicklook.on,#vdfs.on{display:block}
 
 .pgrid{padding:16px;max-width:1200px;margin:0 auto;}
 .psection{margin-bottom:28px;}
@@ -520,6 +520,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('quicklook',this)">🔍 Quick Look</div>
   <div class="tab" onclick="setView('derby',this)">📋 Props</div>
   <div class="tab" onclick="setView('parlay',this)">🎰 Parlays</div>
+  <div class="tab" onclick="setView('dfs',this)">🏆 DFS Optimizer</div>
   <div class="tab" onclick="setView('gamelines',this)">🎲 Game Lines</div>
   <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})">🏟 Parks</div>
@@ -545,6 +546,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <button class="more-item" onclick="closeMoreSheet();setView('parks',document.querySelector('.tab[onclick*=parks]'));if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})"><span class="mi-icon">🏟</span><span class="mi-label">Parks</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('pitchers',document.querySelector('.tab[onclick*=pitchers]'))"><span class="mi-icon">⚾</span><span class="mi-label">Pitchers</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('quicklook',document.querySelector('.tab[onclick*=quicklook]'))"><span class="mi-icon">🔍</span><span class="mi-label">Quick Look</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('dfs',document.querySelector('.tab[onclick*=dfs]'))"><span class="mi-icon">🏆</span><span class="mi-label">DFS Optimizer</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('derby',document.querySelector('.tab[onclick*=derby]'))"><span class="mi-icon">📋</span><span class="mi-label">Props</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('parlay',document.querySelector('.tab[onclick*=parlay]'))"><span class="mi-icon">🎰</span><span class="mi-label">Parlays</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('gamelines',document.querySelector('.tab[onclick*=gamelines]'))"><span class="mi-icon">🎲</span><span class="mi-label">Game Lines</span><span class="mi-arrow">›</span></button>
@@ -589,6 +591,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
 <div id="vgames" class="view"><div class="ggrid" id="ggrid"></div></div>
 <div id="vtargets" class="view"><div id="tgrid" style="display:block;padding:0;width:100%;overflow-x:auto"></div></div>
 <div id="vquicklook" class="view"><div id="quicklook-grid"></div></div>
+<div id="vdfs" class="view"><div id="dfs-grid"></div></div>
 <div id="vparlay" class="view"><span id="parlay-pill-active" data-pill="auto" style="display:none"></span>
   <div class="today-pills" style="padding:10px 20px 0">
     <button class="today-pill on" data-pill="auto" onclick="setParlayPill(this.dataset.pill,this)">Auto Parlays</button>
@@ -7466,6 +7469,369 @@ function renderQuickLook() {
 
 function updateSbar(rows){}
 
+// ── DFS OPTIMIZER ──────────────────────────────────────────────
+// DraftKings MLB Classic: 10 roster spots, $50K salary cap (standard).
+// Showdown: 1 CPT (1.5x salary + 1.5x points) + 5 UTIL, same cap.
+const DK_CLASSIC_SLOTS  = ['P','P','C','1B','2B','3B','SS','OF','OF','OF'];
+const DK_SHOWDOWN_SLOTS = ['CPT','UTIL','UTIL','UTIL','UTIL','UTIL'];
+
+let DFS_POOL = [];                 // parsed + matched player pool
+let DFS_SLATE_TYPE = 'classic';    // 'classic' | 'showdown'
+let DFS_SALARY_CAP = 50000;
+let DFS_LOCKED = new Set();        // player ids forced into the lineup
+let DFS_EXCLUDED = new Set();      // player ids never used
+let DFS_CAPTAIN = null;            // pinned CPT player id (showdown only)
+let DFS_RESULT = null;             // last optimizer result
+
+// Robust single-line CSV split -- handles quoted fields containing commas
+// (DraftKings "Name + ID" / "Game Info" columns are usually comma-safe, but
+// this is user-uploaded data and a naive split would silently corrupt a row
+// rather than fail loudly).
+function splitCsvLine(line) {
+  const out = [];
+  let cur = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (c === '"') {
+      if (inQuotes && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuotes = !inQuotes;
+    } else if (c === ',' && !inQuotes) {
+      out.push(cur); cur = '';
+    } else cur += c;
+  }
+  out.push(cur);
+  return out.map(v => v.trim());
+}
+
+function parseDKCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (!lines.length) return { players: [], slateType: 'classic', error: 'Empty file' };
+
+  const hdr = splitCsvLine(lines[0]).map(h => h.toLowerCase().trim());
+  const col = (...names) => { for (const n of names) { const i = hdr.indexOf(n); if (i >= 0) return i; } return -1; };
+
+  const iName     = col('name');
+  const iNameId   = col('name + id', 'nameid');
+  const iPos      = col('position');
+  const iRosterPos= col('roster position', 'rosterposition');
+  const iSalary   = col('salary');
+  const iTeam     = col('teamabbrev', 'team');
+  const iGame     = col('game info', 'gameinfo');
+  const iAvgPts   = col('avgpointspergame', 'fppg', 'avg pts');
+
+  if (iName < 0 && iNameId < 0) return { players: [], slateType: 'classic', error: 'Couldn’t find a Name column -- is this a DraftKings export?' };
+  if (iSalary < 0) return { players: [], slateType: 'classic', error: 'Couldn’t find a Salary column -- is this a DraftKings export?' };
+
+  const rows = [];
+  let sawCPT = false, sawUTIL = false;
+  for (const line of lines.slice(1)) {
+    const cells = splitCsvLine(line);
+    const rawName = iName >= 0 ? cells[iName] : (cells[iNameId] || '').replace(/\s*\(\d+\)\s*$/, '');
+    const name = normName(rawName) || rawName;
+    if (!name) continue;
+    const salary = parseInt((cells[iSalary] || '0').replace(/[^0-9]/g, ''), 10) || 0;
+    const posStr = (iPos >= 0 ? cells[iPos] : '') || '';
+    const rosterPos = (iRosterPos >= 0 ? cells[iRosterPos] : '') || '';
+    if (rosterPos.toUpperCase() === 'CPT') sawCPT = true;
+    if (rosterPos.toUpperCase() === 'UTIL') sawUTIL = true;
+    rows.push({
+      name, rawName,
+      positions: posStr.split('/').map(p => p.trim().toUpperCase()).filter(Boolean),
+      rosterPos: rosterPos.toUpperCase(),
+      salary,
+      team: iTeam >= 0 ? cells[iTeam] : '',
+      game: iGame >= 0 ? cells[iGame] : '',
+      dkAvgPts: iAvgPts >= 0 ? (parseFloat(cells[iAvgPts]) || null) : null,
+    });
+  }
+
+  const slateType = (sawCPT || sawUTIL) ? 'showdown' : 'classic';
+
+  // Showdown CSVs list every player twice (once as CPT at 1.5x salary, once
+  // as UTIL at base salary) -- collapse to one entry per player using the
+  // UTIL row as the base and deriving CPT salary/points ourselves (1.5x),
+  // rather than trusting two separately-matched rows to agree.
+  let players;
+  if (slateType === 'showdown') {
+    const byName = new Map();
+    for (const r of rows) {
+      const key = r.name;
+      if (!byName.has(key)) byName.set(key, { ...r, positions: ['UTIL'] });
+      else if (r.rosterPos === 'UTIL') byName.set(key, { ...r, positions: ['UTIL'] });
+    }
+    players = [...byName.values()];
+  } else {
+    players = rows;
+  }
+
+  return { players, slateType, error: null };
+}
+
+// Fuzzy-match a DK CSV row to today's actual slate row, so we can pull our
+// own model's projections (hrp, calcBatterProps, signals) instead of
+// relying on anything DK provides beyond salary/position.
+function matchDFSPlayer(dkRow) {
+  const seen = new Map();
+  for (const r of allRows) {
+    if (!seen.has(r.name) || r.hrp > seen.get(r.name).hrp) seen.set(r.name, r);
+  }
+  return seen.get(dkRow.name)
+    || seen.get(normName(dkRow.name))
+    || [...seen.values()].find(r => normName(r.name) === normName(dkRow.name))
+    || null;
+}
+
+// Approximate DraftKings fantasy points from the model's own projections.
+// Batting: DK scores 3/5/8/10 for 1B/2B/3B/HR + 2/RBI + 2/Run + 2/BB. Using
+// 2*totalBases + hits reproduces that exactly for singles/doubles and comes
+// within 1 point for triples/HR (we don't project the 1B/2B/3B/HR split
+// individually, only aggregate expected hits/total bases) -- a deliberate,
+// clearly-labeled approximation, not a guaranteed-exact replica.
+// Pitching: we don't project innings/strikeouts/win probability elsewhere
+// in this app (it's an HR model, not a full point-projection system), so
+// this uses simple, clearly-approximate heuroristic from the pitcher's
+// existing rate stats (xERA, whiff%, team context) rather than real
+// per-start modeling.
+function projectDKPoints(dkRow, matched) {
+  const isPitcher = dkRow.positions.includes('P') || dkRow.positions.includes('SP') || dkRow.positions.includes('RP');
+  if (isPitcher) {
+    const pit = (matched && (matched.pit || getPitcher(matched.pitName))) || getPitcher(dkRow.name) || {};
+    const xera = pit.xera || 4.20;
+    const whiff = pit.whiff || 22;
+    const expIP = 5.3; // league-average starter workload -- no per-start IP model exists in this app
+    const expK  = expIP * 4.25 * (whiff / 100) * 1.35; // whiff% -> rough K/BF scalar
+    const expER = expIP * (xera / 9);
+    // Win probability proxy from the game's own moneyline if we have it,
+    // otherwise a flat coin-flip default.
+    let winProb = 0.5;
+    if (matched?.game) {
+      const og = GAME_ODDS[matched.game.away + '@' + matched.game.home];
+      if (og?.awayML && og?.homeML) {
+        const toProb = o => o > 0 ? 100 / (o + 100) : Math.abs(o) / (Math.abs(o) + 100);
+        const pAway = toProb(og.awayML), pHome = toProb(og.homeML);
+        const norm = pAway + pHome;
+        const isHome = dkRow.team === matched.game.home;
+        winProb = norm > 0 ? (isHome ? pHome : pAway) / norm : 0.5;
+      }
+    }
+    const pts = expIP * 6.75 + expK * 2 - expER * 2 + winProb * 4;
+    return { pts: +Math.max(0, pts).toFixed(1), isPitcher: true, approx: true };
+  }
+
+  if (!matched) return { pts: 0, isPitcher: false, approx: true, unmatched: true };
+  const props = calcBatterProps(matched);
+  const hrp = matched.hrp || 0;
+  const pts = 2 * (props.exp_tb || 0) + (props.exp_hits || 0) + 2 * (props.exp_runs || 0) + 2 * (props.exp_rbi || 0) + (hrp / 100) * 1.5; // small bonus weight toward our model's core HR signal
+  return { pts: +Math.max(0, pts).toFixed(1), isPitcher: false, approx: true };
+}
+
+function effectiveSalary(p, slot) {
+  return slot === 'CPT' ? Math.round(p.salary * 1.5) : p.salary;
+}
+function effectivePts(p, slot) {
+  return slot === 'CPT' ? +(p.projPts * 1.5).toFixed(1) : p.projPts;
+}
+function slotEligible(p, slot) {
+  if (DFS_SLATE_TYPE === 'showdown') return true; // every player can fill CPT or UTIL
+  if (slot === 'P') return p.positions.includes('P') || p.positions.includes('SP') || p.positions.includes('RP');
+  return p.positions.includes(slot);
+}
+
+function optimizeDFSLineup() {
+  const slots = DFS_SLATE_TYPE === 'showdown' ? DK_SHOWDOWN_SLOTS : DK_CLASSIC_SLOTS;
+  const pool = DFS_POOL.filter(p => !DFS_EXCLUDED.has(p.id) && p.projPts > 0);
+  if (!pool.length) return null;
+
+  const lockedPlayers = pool.filter(p => DFS_LOCKED.has(p.id));
+  const captainPick = DFS_SLATE_TYPE === 'showdown' && DFS_CAPTAIN ? pool.find(p => p.id === DFS_CAPTAIN) : null;
+
+  let best = null;
+  const ITER = 4000;
+  for (let iter = 0; iter < ITER; iter++) {
+    const lineup = new Array(slots.length).fill(null);
+    const used = new Set();
+    let salaryUsed = 0;
+    let ok = true;
+
+    // Pin the chosen captain first, if any.
+    if (captainPick) {
+      lineup[0] = captainPick; // CPT is always slot 0
+      used.add(captainPick.id);
+      salaryUsed += effectiveSalary(captainPick, 'CPT');
+    }
+
+    // Place locked players into their best-fit open slot.
+    for (const p of lockedPlayers) {
+      if (used.has(p.id)) continue;
+      let placed = false;
+      for (let i = 0; i < slots.length; i++) {
+        if (lineup[i] || !slotEligible(p, slots[i])) continue;
+        const cost = effectiveSalary(p, slots[i]);
+        lineup[i] = p; used.add(p.id); salaryUsed += cost; placed = true;
+        break;
+      }
+      if (!placed) { ok = false; break; }
+    }
+    if (!ok || salaryUsed > DFS_SALARY_CAP) continue;
+
+    // Fill remaining slots with a randomized points-per-dollar greedy pass
+    // (jittered each iteration so repeated runs explore different lineups,
+    // not a guaranteed-optimal solver but converges on strong lineups fast
+    // at this roster size).
+    const ranked = pool
+      .filter(p => !used.has(p.id))
+      .map(p => ({ p, score: (p.projPts / Math.max(1, p.salary)) * (0.8 + Math.random() * 0.4) }))
+      .sort((a, b) => b.score - a.score)
+      .map(x => x.p);
+
+    for (const p of ranked) {
+      if (used.has(p.id)) continue;
+      let slotIdx = -1;
+      for (let i = 0; i < slots.length; i++) {
+        if (!lineup[i] && slotEligible(p, slots[i])) { slotIdx = i; break; }
+      }
+      if (slotIdx === -1) continue;
+      const cost = effectiveSalary(p, slots[slotIdx]);
+      if (salaryUsed + cost > DFS_SALARY_CAP) continue;
+      lineup[slotIdx] = p; used.add(p.id); salaryUsed += cost;
+      if (lineup.every(Boolean)) break;
+    }
+
+    if (!lineup.every(Boolean)) continue;
+    const totalProj = lineup.reduce((s, p, i) => s + effectivePts(p, slots[i]), 0);
+    if (!best || totalProj > best.totalProj) {
+      best = { lineup: [...lineup], slots: [...slots], salaryUsed, totalProj: +totalProj.toFixed(1) };
+    }
+  }
+
+  return best;
+}
+
+function handleDFSUpload(input) {
+  const file = input.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const { players, slateType, error } = parseDKCsv(e.target.result);
+    if (error) { alert(error); return; }
+    if (!players.length) { alert('No players found in that file.'); return; }
+    DFS_SLATE_TYPE = slateType;
+    DFS_LOCKED = new Set();
+    DFS_EXCLUDED = new Set();
+    DFS_CAPTAIN = null;
+    DFS_RESULT = null;
+    DFS_POOL = players.map((p, i) => {
+      const matched = matchDFSPlayer(p);
+      const proj = projectDKPoints(p, matched);
+      return { id: 'dfs'+i, ...p, matched, projPts: proj.pts, isPitcher: proj.isPitcher, unmatched: !!proj.unmatched };
+    }).sort((a,b) => b.projPts - a.projPts);
+    renderDFS();
+  };
+  reader.readAsText(file);
+}
+
+function toggleDFSLock(id) {
+  if (DFS_LOCKED.has(id)) DFS_LOCKED.delete(id); else { DFS_EXCLUDED.delete(id); DFS_LOCKED.add(id); }
+  renderDFS();
+}
+function toggleDFSExclude(id) {
+  if (DFS_EXCLUDED.has(id)) DFS_EXCLUDED.delete(id); else { DFS_LOCKED.delete(id); DFS_EXCLUDED.add(id); }
+  renderDFS();
+}
+function setDFSCaptain(id) {
+  DFS_CAPTAIN = DFS_CAPTAIN === id ? null : id;
+  renderDFS();
+}
+function setDFSSalaryCap(val) {
+  DFS_SALARY_CAP = Math.max(1000, parseInt(val, 10) || 50000);
+}
+function runDFSOptimize() {
+  DFS_RESULT = optimizeDFSLineup();
+  renderDFS();
+}
+function clearDFSPool() {
+  DFS_POOL = []; DFS_LOCKED = new Set(); DFS_EXCLUDED = new Set(); DFS_CAPTAIN = null; DFS_RESULT = null;
+  renderDFS();
+}
+
+function renderDFS() {
+  const grid = document.getElementById('dfs-grid');
+  if (!grid) return;
+
+  if (!DFS_POOL.length) {
+    grid.innerHTML = `<div style="padding:40px 20px;max-width:560px;margin:0 auto;text-align:center">
+      <div style="font-size:32px;margin-bottom:12px">🏆</div>
+      <h3 style="margin-bottom:10px">DFS Lineup Optimizer</h3>
+      <p style="font-size:12px;color:var(--t3);margin-bottom:20px;line-height:1.6">Upload a DraftKings CSV export (Classic or Showdown) for today’s MLB slate. Players are matched to this app’s own projections by name -- salaries and positions come from DraftKings, everything else comes from the model.</p>
+      <label class="btn" style="display:inline-block;padding:12px 24px;border-radius:10px;cursor:pointer;background:var(--accent);color:#1a0e04;border-color:var(--accent);font-weight:700">
+        Upload DK CSV
+        <input type="file" accept=".csv" style="display:none" onchange="handleDFSUpload(this)">
+      </label>
+    </div>`;
+    return;
+  }
+
+  const slots = DFS_SLATE_TYPE === 'showdown' ? DK_SHOWDOWN_SLOTS : DK_CLASSIC_SLOTS;
+  const matchedCount = DFS_POOL.filter(p => !p.unmatched).length;
+
+  const resultHTML = DFS_RESULT ? `
+    <div class="today-section" style="margin-bottom:14px">
+      <div class="today-section-hdr"><span>Optimized Lineup</span><span style="color:var(--t3);font-size:9px">$${DFS_RESULT.salaryUsed.toLocaleString()} / $${DFS_SALARY_CAP.toLocaleString()} · ${DFS_RESULT.totalProj} proj pts</span></div>
+      <div class="today-section-body" style="padding:0">
+        ${DFS_RESULT.lineup.map((p,i) => `<div style="display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--bg3)">
+          <div style="width:34px;flex-shrink:0;font-size:10px;font-family:var(--mono);font-weight:700;color:var(--purple)">${DFS_RESULT.slots[i]}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:var(--t1)">${p.name}${p.id===DFS_CAPTAIN?' ®':''}</div>
+            <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team||''} · ${p.positions.join('/')}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;font-family:var(--mono)">
+            <div style="font-size:11px;color:var(--t2)">$${effectiveSalary(p,DFS_RESULT.slots[i]).toLocaleString()}</div>
+            <div style="font-size:10px;color:var(--teal)">${effectivePts(p,DFS_RESULT.slots[i])} pts</div>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>` : '';
+
+  grid.innerHTML = `<div style="padding:14px 16px;max-width:900px;margin:0 auto">
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px">
+      <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${DFS_POOL.length} players loaded (${matchedCount} matched to today’s model) · ${DFS_SLATE_TYPE==='showdown'?'Showdown':'Classic'}</div>
+      <div style="flex-grow:1"></div>
+      <label style="font-size:10px;font-family:var(--mono);color:var(--t3);display:flex;align-items:center;gap:6px">Cap
+        <input type="number" value="${DFS_SALARY_CAP}" step="1000" oninput="setDFSSalaryCap(this.value)" style="width:90px;background:var(--bg3);border:0.5px solid rgba(255,255,255,0.11);color:var(--t1);padding:4px 8px;border-radius:6px;font-family:var(--mono);font-size:11px">
+      </label>
+      <button class="btn" style="padding:8px 16px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;background:var(--accent);color:#1a0e04;border-color:var(--accent)" onclick="runDFSOptimize()">⚡ Optimize</button>
+      <label class="btn" style="padding:7px 14px;border-radius:8px;font-size:11px;cursor:pointer">
+        New CSV<input type="file" accept=".csv" style="display:none" onchange="handleDFSUpload(this)">
+      </label>
+      <button class="btn" style="padding:7px 14px;border-radius:8px;font-size:11px;cursor:pointer" onclick="clearDFSPool()">Clear</button>
+    </div>
+
+    ${resultHTML}
+
+    <div class="today-section">
+      <div class="today-section-hdr"><span>Player Pool</span><span style="color:var(--t3);font-size:9px">📌 lock · 🚫 exclude${DFS_SLATE_TYPE==='showdown'?' · ® captain':''}</span></div>
+      <div class="today-section-body" style="padding:0;max-height:520px;overflow-y:auto">
+        ${DFS_POOL.map(p => {
+          const locked = DFS_LOCKED.has(p.id), excluded = DFS_EXCLUDED.has(p.id), isCpt = DFS_CAPTAIN===p.id;
+          return `<div style="display:flex;align-items:center;gap:8px;padding:8px 16px;border-bottom:1px solid var(--bg3);opacity:${excluded?0.4:1}">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:12px;font-weight:600;color:var(--t1)">${p.name}${p.unmatched?' <span style="font-size:8px;color:var(--amber)">unmatched</span>':''}</div>
+              <div style="font-size:9px;font-family:var(--mono);color:var(--t3)">${p.team||''} · ${p.positions.join('/')||'?'}</div>
+            </div>
+            <div style="font-size:11px;font-family:var(--mono);color:var(--t2);width:70px;text-align:right">$${p.salary.toLocaleString()}</div>
+            <div style="font-size:11px;font-family:var(--mono);color:var(--teal);width:56px;text-align:right">${p.projPts}p</div>
+            <div style="display:flex;gap:4px;flex-shrink:0">
+              ${DFS_SLATE_TYPE==='showdown' ? `<button onclick="setDFSCaptain('${p.id}')" title="Captain" style="background:${isCpt?'rgba(255,138,61,.2)':'transparent'};border:0.5px solid rgba(255,255,255,0.15);border-radius:5px;padding:3px 6px;cursor:pointer;color:${isCpt?'var(--accent)':'var(--t3)'};font-size:11px">®</button>` : ''}
+              <button onclick="toggleDFSLock('${p.id}')" title="Lock" style="background:${locked?'rgba(74,222,128,.15)':'transparent'};border:0.5px solid rgba(255,255,255,0.15);border-radius:5px;padding:3px 6px;cursor:pointer;color:${locked?'var(--green)':'var(--t3)'};font-size:11px">📌</button>
+              <button onclick="toggleDFSExclude('${p.id}')" title="Exclude" style="background:${excluded?'rgba(248,113,113,.15)':'transparent'};border:0.5px solid rgba(255,255,255,0.15);border-radius:5px;padding:3px 6px;cursor:pointer;color:${excluded?'var(--red)':'var(--t3)'};font-size:11px">🚫</button>
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
 function renderAll(){
   if(curView==='players')  renderPlayers();
   else if(curView==='games')   renderGames();
@@ -7480,6 +7846,7 @@ function renderAll(){
   else if(curView==='parks')   renderParks();
   else if(curView==='gamelines') renderGameLines();
   else if(curView==='quicklook') renderQuickLook();
+  else if(curView==='dfs') renderDFS();
   else renderTargets();
 }
 
@@ -7490,7 +7857,7 @@ const BOTTOM_NAV_DIRECT = {today:'today', players:'players', targets:'targets', 
 function setView(v,el){
   curView=v;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));el?.classList.add('active');
-  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','gamelines','quicklook'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
+  ['today','players','targets','parlay','tomorrow','pitchers','history','derby','live','parks','gamelines','quicklook','dfs'].forEach(id=>document.getElementById('v'+id).classList.toggle('on',id===v));
   document.getElementById('fbar').style.display=v==='players'?'flex':'none';
   const bnActive = BOTTOM_NAV_DIRECT[v] || 'more';
   document.querySelectorAll('.bn-btn').forEach(b=>b.classList.toggle('on', b.dataset.bn===bnActive));
