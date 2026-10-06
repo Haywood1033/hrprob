@@ -8010,10 +8010,20 @@ function renderSGP() {
   let html = header;
   for (const { k, label } of sections) {
     if (legs.length < k) continue;
-    // legs is already sorted by edge (most notable category standout
-    // first), so the top k IS the one best cross-category combo for this
-    // leg count -- no combinatorial search needed.
-    const scored = [{ combo: legs.slice(0, k), ...scoreSGPCombo(legs.slice(0, k)) }];
+    // legs is a small pool (one candidate per category, at most 6), so a
+    // full search over its k-combinations is cheap. Picking the top-k by
+    // edge directly (legs.slice(0,k)) would make every card a strict
+    // superset of the smaller one -- whichever single leg has the best
+    // edge (e.g. a star's HR prop) ends up pinned into every card
+    // regardless of size. Searching instead lets each card size find its
+    // own best-scoring combo -- a smaller card can trade a high-edge-but
+    // -lower-probability leg for a few safer ones if that scores higher,
+    // so the three cards aren't just nested copies of each other.
+    const combos = generateCombinations(legs, k);
+    const scored = combos
+      .map(combo => ({ combo, ...scoreSGPCombo(combo) }))
+      .sort((a, b) => b.jointProb - a.jointProb)
+      .slice(0, 1);
 
     html += `<div class="psection"><div class="psection-title">${label} <span></span></div>`;
 
