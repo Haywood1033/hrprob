@@ -3326,6 +3326,7 @@ const PITCHER_SPLITS = {}; // pitcher platoon splits from /api/splits
 const PARK_SPLITS    = {}; // career park splits from /api/splits
 let F1_CACHE = [];
 let tomorrowData = null; // cached tomorrow slate response // shared first inning calculations — computed once, used by both Forecast and Today tabs
+let NO_GAMES_TODAY_SHOWING_NEXT = null; // {date, daysAhead} when init() had no games today and jumped ahead to the next scheduled date instead
 const ROSTERS = {};   // active rosters from /api/slate — current 26-man        // {name: {hr, avg, slg, ab, games, flame}}
 window._debug = {get STREAK(){return STREAK;}, get BATTER(){return BATTER;}, get PITCHER(){return PITCHER;}, get games(){return games;}, get allRows(){return allRows;}};
 const STREAK_ID_CACHE = {};
@@ -6389,7 +6390,17 @@ function renderToday() {
     + '</div>';
 
 
+  const noGamesTodayBanner = NO_GAMES_TODAY_SHOWING_NEXT ? (() => {
+    const n = NO_GAMES_TODAY_SHOWING_NEXT;
+    const d = new Date(n.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    const gap = n.daysAhead > 1 ? ' · travel day in between' : '';
+    return '<div style="display:flex;align-items:center;gap:8px;padding:8px 14px;margin-bottom:12px;border-radius:8px;background:rgba(96,165,250,.1);border:1px solid rgba(96,165,250,.2);font-size:11px;font-family:var(--mono);color:var(--blue)">'
+      + '📅 No games today — showing the next scheduled slate: <b>'+d+'</b>'+gap
+      + '</div>';
+  })() : '';
+
   grid.innerHTML = '<div class="today-wrap">'
+    + noGamesTodayBanner
     + stripHTML
     + '<div class="today-hero">'
     + kpiHTML
@@ -6587,15 +6598,12 @@ async function renderTomorrow() {
     }
   }
 
-  // Build projected rows — use today's rosters (valid for tomorrow's lineup projection)
-  // If rosters not loaded yet, show message
-  if (!Object.keys(ROSTERS).length) {
-    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>Loading roster data\u2026</h3><p style="margin-top:8px;font-size:12px;color:var(--t3)">Today\'s data needs to finish loading first. Try again in a few seconds.</p></div></div>';
-    return;
-  }
-
-  // Build projected rows
-  // First merge tomorrow's rosters for teams not in today's slate
+  // Build projected rows — reuse today's rosters when available (same
+  // players), but don't block on them: on a genuine no-games-today day
+  // ROSTERS never populates from the main Today flow, and this tab's own
+  // td.rosters (fetched above, scoped to the next game's teams) is enough
+  // on its own to render. Any team still missing after merging falls back
+  // to an empty placeholder below rather than stalling the whole tab.
   if (td.rosters) {
     for (const [team, players] of Object.entries(td.rosters)) {
       if (!ROSTERS[team]) ROSTERS[team] = players.map(p=>({...p, name: normName(p.name)||p.name}));
@@ -8327,7 +8335,25 @@ async function init(){
     // placeholder slate for no real reason.
     const r = await safeFetch('/api/slate?t='+Math.floor(Date.now()/300000), 25000); // busts every 5min
     if (r.ok) {
-      const slate = await r.json();
+      let slate = await r.json();
+      // No games today (a genuine off day -- common between postseason
+      // games, which can have 1-2 day travel gaps) -- jump straight to the
+      // next scheduled date instead of falling through to the stale baked
+      // placeholder slate below. This makes the WHOLE app (every tab, not
+      // just a single forward-looking preview tab) usable for research on
+      // a travel day, which is the actual point of looking ahead.
+      if (!slate.pitchers?.length) {
+        try {
+          const rNext = await safeFetch('/api/slate?date=next', 25000);
+          if (rNext.ok) {
+            const nextSlate = await rNext.json();
+            if (nextSlate.pitchers?.length) {
+              slate = nextSlate;
+              NO_GAMES_TODAY_SHOWING_NEXT = { date: slate.date, daysAhead: slate.daysAhead };
+            }
+          }
+        } catch(e) { console.warn('No-games-today jump-ahead failed:', e.message); }
+      }
       // Sync the displayed date from ANY valid response, not just one with
       // games -- this used to live inside the `slate.pitchers?.length`
       // branch below, so a genuine no-games day (an off day, or any day
