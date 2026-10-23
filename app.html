@@ -8302,8 +8302,14 @@ function showDebug(){
 }
 
 async function init(){
+  // The header always shows the real calendar date, never the date of
+  // whatever slate is actively loaded -- on a no-games-today jump-ahead,
+  // SLATE.date becomes the next game's (future) date so the rest of the
+  // app can fetch/display that game, but the header is "what day is it",
+  // not "what day's games are showing" (the Today-tab banner covers that).
+  const todayRealStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   document.getElementById('hdr-date').textContent=
-    new Date(SLATE.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
+    new Date(todayRealStr).toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
   setStatus('loading','Loading…');
   updateLoadingStep('slate','active');
   setLoadingStatus('Connecting to MLB…');
@@ -8370,8 +8376,12 @@ async function init(){
           _lockRestoredFromDB = false; // reset for genuine future date changes
         }
         SLATE.date = slate.date;
+        // Header stays on the real today's date -- see todayRealStr note
+        // above. Only re-set it here (rather than leaving the initial
+        // value) to pick up a genuine day rollover while the tab's been
+        // open past midnight ET.
         document.getElementById('hdr-date').textContent =
-          new Date(slate.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
+          new Date(todayRealStr).toLocaleDateString('en-US',{weekday:'short',month:'long',day:'numeric',year:'numeric'});
         checkSlateDate();
       }
       if (slate.pitchers?.length) {
