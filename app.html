@@ -523,7 +523,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
   <div class="tab" onclick="setView('dfs',this)">🏆 DFS Optimizer</div>
   <div class="tab" onclick="setView('sgp',this)">🧩 SGP</div>
   <div class="tab" onclick="setView('gamelines',this)">🎲 Game Lines</div>
-  <div class="tab" onclick="setView('tomorrow',this)">📅 Tomorrow</div>
+  <div class="tab" onclick="setView('tomorrow',this)">📅 Next Game</div>
   <div class="tab" onclick="setView('parks',this);if(Object.values(WX).some(w=>!w.dome&&w.pres==null))loadWeather(true).then(()=>{rebuild();renderParks();})">🏟 Parks</div>
   <div class="tab" onclick="setView('history',this)">📊 Accuracy</div>
 </nav>
@@ -552,7 +552,7 @@ td{padding:9px 12px;font-size:13px;vertical-align:middle;white-space:nowrap}
       <button class="more-item" onclick="closeMoreSheet();setView('derby',document.querySelector('.tab[onclick*=derby]'))"><span class="mi-icon">📋</span><span class="mi-label">Props</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('parlay',document.querySelector('.tab[onclick*=parlay]'))"><span class="mi-icon">🎰</span><span class="mi-label">Parlays</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('gamelines',document.querySelector('.tab[onclick*=gamelines]'))"><span class="mi-icon">🎲</span><span class="mi-label">Game Lines</span><span class="mi-arrow">›</span></button>
-      <button class="more-item" onclick="closeMoreSheet();setView('tomorrow',document.querySelector('.tab[onclick*=tomorrow]'))"><span class="mi-icon">📅</span><span class="mi-label">Tomorrow</span><span class="mi-arrow">›</span></button>
+      <button class="more-item" onclick="closeMoreSheet();setView('tomorrow',document.querySelector('.tab[onclick*=tomorrow]'))"><span class="mi-icon">📅</span><span class="mi-label">Next Game</span><span class="mi-arrow">›</span></button>
       <button class="more-item" onclick="closeMoreSheet();setView('history',document.querySelector('.tab[onclick*=history]'))"><span class="mi-icon">📊</span><span class="mi-label">Accuracy</span><span class="mi-arrow">›</span></button>
     </div>
   </div>
@@ -6534,30 +6534,43 @@ function renderGameLines() {
 
 async function renderTomorrow() {
   const grid = document.getElementById('tomorrow-grid');
-  grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><div style="font-size:28px;margin-bottom:12px">\uD83D\uDCC5</div><h3>Loading tomorrow\u2019s slate\u2026</h3></div></div>';
+  grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><div style="font-size:28px;margin-bottom:12px">\uD83D\uDCC5</div><h3>Finding the next game\u2026</h3></div></div>';
 
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const todayET = new Date(etStr);
-  const tomorrowET = new Date(todayET);
-  tomorrowET.setDate(tomorrowET.getDate()+1);
-  const tomorrowDate = tomorrowET.toLocaleDateString('en-CA');
+  const todayDateStr = todayET.toLocaleDateString('en-CA');
 
   try {
-    if (!tomorrowData || tomorrowData.date !== tomorrowDate) {
-      const r = await safeFetch('/api/slate?date='+tomorrowDate, 25000);
+    // date=next looks past literal "tomorrow" to find the next date with
+    // any scheduled game -- postseason/World Series off days can leave
+    // 1-2 day gaps, so a flat tomorrow lookup goes empty on a travel day
+    // even with a game coming up soon. Cached per calendar day so
+    // switching tabs doesn't refetch repeatedly, but a new day always
+    // re-resolves (yesterday's "next game" may now be today's).
+    if (!tomorrowData || tomorrowData._fetchedOnDate !== todayDateStr) {
+      const r = await safeFetch('/api/slate?date=next', 25000);
       if (!r.ok) throw new Error('HTTP '+r.status);
       tomorrowData = await r.json();
+      tomorrowData._fetchedOnDate = todayDateStr;
     }
   } catch(e) {
-    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>Tomorrow\u2019s slate unavailable</h3><p style="margin-top:8px;font-size:12px;color:var(--t3)">Probable pitchers may not be posted yet. Check back later.</p></div></div>';
+    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>Next game unavailable</h3><p style="margin-top:8px;font-size:12px;color:var(--t3)">Probable pitchers may not be posted yet. Check back later.</p></div></div>';
     return;
   }
 
   const td = tomorrowData;
-  if (!td.pitchers?.length) {
-    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>No games found for '+tomorrowET.toLocaleDateString('en-US',{month:'long',day:'numeric'})+'</h3></div></div>';
+  if (!td.date || !td.pitchers?.length) {
+    grid.innerHTML = '<div class="today-wrap"><div class="empty" style="padding:40px"><h3>No upcoming games found</h3><p style="margin-top:8px;font-size:12px;color:var(--t3)">Nothing scheduled in the next 10 days.</p></div></div>';
     return;
   }
+
+  // The resolved date drives every date-formatted string below -- it may
+  // be several days out on a postseason travel day, not just tomorrow.
+  const tomorrowET = new Date(td.date+'T12:00:00');
+  const daysAhead = td.daysAhead != null ? td.daysAhead : Math.round((tomorrowET - todayET) / 864e5);
+  const gapBanner = daysAhead > 1
+    ? '<div style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:3px;background:rgba(96,165,250,.1);color:var(--blue);border:1px solid rgba(96,165,250,.2);margin-left:8px">Next game is '+daysAhead+' days out \u00B7 travel day in between</div>'
+    : '';
 
   const tGames = td.pitchers.map(g => ({
     pk: g.gamePk, time: new Date(g.gameTime).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',timeZone:'America/New_York'})+' ET',
@@ -6659,6 +6672,7 @@ async function renderTomorrow() {
     +'<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">'
     +'<div class="today-hero-date">'+tomorrowET.toLocaleDateString('en-US',{weekday:'long'})+' · '+tomorrowET.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})+'</div>'
     +'<span style="font-size:9px;font-family:var(--mono);padding:2px 8px;border-radius:3px;background:rgba(245,158,11,.1);color:var(--amber);border:1px solid rgba(245,158,11,.2)">~ ALL PROJECTIONS · NO CONFIRMED LINEUPS</span>'
+    +gapBanner
     +'</div>'
     +'<div class="today-hero-title">'+tGames.length+'-Game Slate Preview</div>'
     +'<div class="today-hero-sub">Probable pitchers confirmed · Batting orders projected from rosters · '+expHR.toFixed(1)+' expected HRs</div>'
@@ -6673,7 +6687,7 @@ async function renderTomorrow() {
     +'<div class="today-section"><div class="today-section-hdr"><span>Top HR Targets</span><span style="color:var(--t3);font-size:9px">~ Projected lineups</span></div><div class="today-section-body">'+tTop5HTML+'</div></div>'
     +'<div class="today-section"><div class="today-section-hdr"><span>Top Signal Plays</span><span style="color:var(--t3);font-size:9px">~ Projected lineups</span></div><div class="today-section-body">'+tSignalHTML+'</div></div>'
     +'</div>'
-    +'<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Tomorrow\u2019s Matchups</span><span style="color:var(--t3);font-size:9px">Probable pitchers · Park + weather</span></div><div class="today-section-body" style="padding:6px 0">'+tMatchupsHTML+'</div></div>'
+    +'<div class="today-section" style="margin-bottom:12px"><div class="today-section-hdr"><span>Next Game\u2019s Matchups</span><span style="color:var(--t3);font-size:9px">Probable pitchers · Park + weather</span></div><div class="today-section-body" style="padding:6px 0">'+tMatchupsHTML+'</div></div>'
     +'<div style="padding:12px 16px;font-size:10px;font-family:var(--mono);color:var(--t3);text-align:center;line-height:1.6">\u26A0 All projections use probable pitchers + roster-based batting orders. No confirmed lineups until 2-3 hrs before first pitch. Streak data reflects tonight\u2019s results after games complete.</div>'
     +'</div>';
 }
@@ -8665,7 +8679,7 @@ init();
     <div class="guide-row"><span class="guide-tag teal">⚾ Pitchers</span><div class="guide-text">Today's starters ranked by HR vulnerability — xERA, HR/9, Whiff%, platoon splits. Identifies pitchers to target.</div></div>
     <div class="guide-row"><span class="guide-tag teal">🎯 Best Plays</span><div class="guide-text">Curated picks bucketed by badge tier — 🏆 Elite (6 signals), ⭐ All-Star (5 signals), 💡 Value (4 signals), 📊 Top Probability (15%+). Max 3 per game per section.</div></div>
     <div class="guide-row"><span class="guide-tag teal">🎰 Parlays</span><div class="guide-text">Best 2, 3, and 4-leg HR parlays built from today's top signal plays.</div></div>
-    <div class="guide-row"><span class="guide-tag teal">📅 Tomorrow</span><div class="guide-text">Early look at tomorrow's slate with projected lineups and park/weather context.</div></div>
+    <div class="guide-row"><span class="guide-tag teal">📅 Next Game</span><div class="guide-text">Early look at the next scheduled slate — not just tomorrow, so it still finds the next game across multi-day postseason travel gaps — with projected lineups and park/weather context.</div></div>
     <div class="guide-row"><span class="guide-tag teal">🔮 Forecast</span><div class="guide-text">Expected HR total, hot batters, pitcher K props, and NRFI/YRFI targets.</div></div>
     <div class="guide-row"><span class="guide-tag teal">📊 Accuracy</span><div class="guide-text">30-day model calibration — actual vs predicted HR rate by probability tier and signal badge. Updates each morning automatically.</div></div>
   </div>

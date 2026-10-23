@@ -1,7 +1,7 @@
 // api/slate.js — FAST endpoint (3-5 sec)
 // Returns: today's schedule, probable pitchers, confirmed lineups, active rosters, weather
 
-const { fetchMLBLineups, fetchRotoWireLineups, fetchProbablePitchers } = require('../lib/lineups.js');
+const { fetchMLBLineups, fetchRotoWireLineups, fetchProbablePitchers, fetchNextGameDate } = require('../lib/lineups.js');
 const { fetchAllWeather } = require('../lib/weather.js');
 
 let cache = { data: null, timestamp: null, date: null };
@@ -72,9 +72,28 @@ module.exports = async function handler(req, res) {
   const etStr = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
   const today = new Date(etStr).toLocaleDateString('en-CA');
   const force = req.query.force === 'true';
-  // Support ?date= parameter for tomorrow's slate
-  const requestedDate = req.query.date || today;
+
+  // ?date=next resolves to the next calendar date with any scheduled game,
+  // not just literally tomorrow -- postseason/World Series off days can
+  // leave 1-2 day gaps between games, so a flat "tomorrow" lookup would
+  // come back empty on a travel day even though a game is coming up soon.
+  let requestedDate = req.query.date || today;
+  let resolvedFromNext = false;
+  if (requestedDate === 'next') {
+    resolvedFromNext = true;
+    const nextDate = await fetchNextGameDate(today, 10);
+    if (!nextDate) {
+      return res.status(200).json({
+        date: null, pitchers: [], lineups: {}, rosters: {}, lineupSource: 'none',
+        weather: {}, confirmedCount: 0, resolvedFromNext: true, daysAhead: null,
+        timestamp: Date.now(), elapsed: 0, error: 'No upcoming games found in the next 10 days',
+      });
+    }
+    requestedDate = nextDate;
+  }
+
   const isTomorrow = requestedDate !== today;
+  const daysAhead  = Math.round((new Date(requestedDate + 'T00:00:00Z') - new Date(today + 'T00:00:00Z')) / 864e5);
   const age   = cache.timestamp ? (Date.now() - cache.timestamp) / 1000 : Infinity;
 
   // Cache 5 minutes same date, 30 min for tomorrow (pitchers don't change often)
@@ -102,7 +121,7 @@ module.exports = async function handler(req, res) {
     // got to report anything back.
     return res.status(200).json({
       date: targetDate, pitchers: [], lineups: {}, rosters: {}, lineupSource: 'none',
-      weather: {}, confirmedCount: 0,
+      weather: {}, confirmedCount: 0, resolvedFromNext, daysAhead,
       timestamp: Date.now(), elapsed: Date.now() - start, error: 'No games found',
       debug: pitchersDebug,
     });
@@ -151,7 +170,7 @@ module.exports = async function handler(req, res) {
 
   const data = {
     date: targetDate, pitchers, lineups, rosters, lineupSource,
-    weather: weather || {}, confirmedCount,
+    weather: weather || {}, confirmedCount, resolvedFromNext, daysAhead,
     timestamp: Date.now(), elapsed: Date.now() - start,
   };
 
