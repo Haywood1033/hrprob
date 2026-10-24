@@ -101,6 +101,35 @@ async function searchPlayer(name) {
   return null;
 }
 
+// MLB's gameLog defaults to regular season only, so in October the "last 20 PA" and
+// recent-start windows would stop at the end of September. Merge in postseason games
+// (gameType=P; per-round F/D/L/W if P comes back empty) and de-dupe by game.
+function inPostseasonWindow(now = new Date()) {
+  const m = now.getUTCMonth() + 1, d = now.getUTCDate();
+  return m === 10 || m === 11 || (m === 9 && d >= 28);
+}
+async function fetchGameLog(playerId, group) {
+  const base = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=${group}&sportId=1&limit=200`;
+  const get = async (q = '') => {
+    try {
+      const r = await fetch(base + q, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return d.stats?.[0]?.splits || [];
+    } catch (e) { return []; }
+  };
+  if (!inPostseasonWindow()) return get();
+  let [regular, post] = await Promise.all([get(), get('&gameType=P')]);
+  if (!post.length) post = (await Promise.all(['F', 'D', 'L', 'W'].map(t => get('&gameType=' + t)))).flat();
+  const seen = new Set(), out = [];
+  for (const s of [...regular, ...post]) {
+    const k = s.game?.gamePk ? String(s.game.gamePk) : `${s.date}|${s.opponent?.id ?? s.opponent?.name ?? ''}`;
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(s);
+  }
+  return out;
+}
+
 async function getBatterSplits(playerId) {
   const r = await fetch(
     `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=hitting&sportId=1&sitCodes=vr,vl`,
@@ -149,10 +178,7 @@ async function getPitcherSplits(playerId) {
       `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=statSplits&group=pitching&sportId=1&sitCodes=hm,aw`,
       { headers: { 'User-Agent': 'Mozilla/5.0' } }
     ),
-    fetch(
-      `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=pitching&sportId=1&limit=5`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' } }
-    ),
+    fetchGameLog(playerId, 'pitching'),
   ]);
 
   const result = { vsLHB: null, vsRHB: null, f1: null, home: null, away: null, recentOutings: [] };
@@ -215,9 +241,9 @@ async function getPitcherSplits(playerId) {
   }
 
   // ── Recent outings (last 5 starts) ─────────────────────────
-  if (gameLogRes.status === 'fulfilled' && gameLogRes.value.ok) {
-    const d = await gameLogRes.value.json();
-    const games = d.stats?.[0]?.splits || [];
+  if (gameLogRes.status === 'fulfilled' && gameLogRes.value.length) {
+    // Newest first, so "last 5 starts" is the last five whatever order the API returns.
+    const games = [...gameLogRes.value].sort((a, b) => new Date(b.date) - new Date(a.date));
     result.recentOutings = games.slice(0, 5).map(g => {
       const stat = g.stat || {};
       const ip = parseFloat(stat.inningsPitched || '0') || 0;

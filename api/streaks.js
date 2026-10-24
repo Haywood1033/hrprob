@@ -18,15 +18,37 @@ async function searchPlayer(name) {
   return null;
 }
 
-async function getLast20PA(playerId) {
-  const r = await fetch(
-    `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=hitting&sportId=1&limit=200`,
-    { headers: { 'User-Agent': 'Mozilla/5.0' } }
-  );
-  if (!r.ok) return null;
-  const d = await r.json();
+// MLB's gameLog defaults to regular season only, so in October the "last 20 PA" and
+// recent-start windows would stop at the end of September. Merge in postseason games
+// (gameType=P; per-round F/D/L/W if P comes back empty) and de-dupe by game.
+function inPostseasonWindow(now = new Date()) {
+  const m = now.getUTCMonth() + 1, d = now.getUTCDate();
+  return m === 10 || m === 11 || (m === 9 && d >= 28);
+}
+async function fetchGameLog(playerId, group) {
+  const base = `https://statsapi.mlb.com/api/v1/people/${playerId}/stats?stats=gameLog&group=${group}&sportId=1&limit=200`;
+  const get = async (q = '') => {
+    try {
+      const r = await fetch(base + q, { headers: { 'User-Agent': 'Mozilla/5.0' } });
+      if (!r.ok) return [];
+      const d = await r.json();
+      return d.stats?.[0]?.splits || [];
+    } catch (e) { return []; }
+  };
+  if (!inPostseasonWindow()) return get();
+  let [regular, post] = await Promise.all([get(), get('&gameType=P')]);
+  if (!post.length) post = (await Promise.all(['F', 'D', 'L', 'W'].map(t => get('&gameType=' + t)))).flat();
+  const seen = new Set(), out = [];
+  for (const s of [...regular, ...post]) {
+    const k = s.game?.gamePk ? String(s.game.gamePk) : `${s.date}|${s.opponent?.id ?? s.opponent?.name ?? ''}`;
+    if (seen.has(k)) continue;
+    seen.add(k); out.push(s);
+  }
+  return out;
+}
 
-  const splits = d.stats?.[0]?.splits || [];
+async function getLast20PA(playerId) {
+  const splits = await fetchGameLog(playerId, 'hitting');
   if (!splits.length) return null;
 
   // Sort by date descending — most recent first
