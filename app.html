@@ -565,6 +565,44 @@ tbody tr:hover td{background:var(--bg2)}
 #pp-tip.on{opacity:1}
 #pp-tip b{color:var(--t1)}
 @media(max-width:520px){.pp-signal{grid-template-columns:1fr}.pp-kv.four{grid-template-columns:repeat(2,1fr)}}
+
+/* Parks tab */
+#parks-grid{padding:0!important}
+.pk-page{max-width:1240px;margin:0 auto;padding:22px 20px 48px}
+.pk-title h2,.pk-head h2{font-size:20px;font-weight:700;color:var(--t1);letter-spacing:-.01em}
+.pk-title .sub,.pk-head .sub{font-size:13px;color:var(--t3);margin-top:4px;line-height:1.5}
+.pk-title{margin-bottom:16px}
+.pk-panel{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:18px 20px;margin-bottom:20px}
+.pk-chart text.pk-name{fill:var(--t1);font-size:13px;font-weight:600}
+.pk-chart text.pk-sub{fill:var(--t3);font-size:11px}
+.pk-chart text.pk-val{font-size:13px;font-weight:700}
+.pk-row{cursor:pointer}
+.pk-row:hover rect:first-child{fill:rgba(255,255,255,.03)}
+.pk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
+.pk-card{background:var(--bg2);border:1px solid var(--bd);border-radius:var(--r);padding:16px 18px;cursor:pointer;display:flex;flex-direction:column;gap:12px;transition:border-color .15s}
+.pk-card:hover{border-color:var(--bd2)}
+.pk-card .pp-kv>div{background:var(--bg3)}
+.pk-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.pk-head h3{font-size:15px;font-weight:600;color:var(--t1)}
+.pk-head .sub{font-size:12px}
+.pk-score{text-align:right;flex-shrink:0}
+.pk-score .k{font-size:12px;color:var(--t3)}
+.pk-score .v{font-size:34px;font-weight:700;line-height:1.1;letter-spacing:-.02em}
+.pk-score .v.sm{font-size:24px}
+.pk-wind{display:flex;align-items:center;gap:14px;padding:4px 0}
+.pk-wind .v{font-size:15px;font-weight:600;color:var(--t1)}
+.pk-wind .k{font-size:12.5px;color:var(--t3);margin-top:3px}
+.pk-target{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--bd);cursor:pointer}
+.pk-target:last-child{border-bottom:0}
+.pk-target:hover .nm{color:var(--teal)}
+.pk-target .rk{width:16px;font-size:12px;color:var(--t3)}
+.pk-target .nm{font-size:13.5px;font-weight:600;color:var(--t1)}
+.pk-target .sub{font-size:12px;color:var(--t3);margin-top:1px}
+.pk-target .pc{font-size:14px;font-weight:600;color:var(--t1)}
+.pk-two{display:grid;grid-template-columns:2fr 1fr;gap:20px;margin-top:20px}
+.pk-two .pk-wind svg{width:140px;height:140px}
+.pk-two .pp-chart{max-width:560px}
+@media(max-width:760px){.pk-two{grid-template-columns:1fr}.pk-grid{grid-template-columns:1fr}.pk-page{padding:16px 16px 40px}}
 </style>
 </head>
 <body>
@@ -5257,163 +5295,139 @@ function renderParks() {
   .filter(d => !d.wx.dome)
   .sort((a,b) => (b.hrw?.score||0) - (a.hrw?.score||0));
 
-  const scoreColor = s => s>=15?'var(--green)':s>=5?'var(--teal)':s>=0?'var(--t2)':s>=-5?'var(--amber)':'var(--red)';
+  const scoreColor = s => s>=5?'var(--green)':s<=-5?'var(--red)':'var(--t1)';
+  const sgn = v => `${v>0?'+':v<0?'−':''}${Math.abs(v).toFixed(1)}`;
+  // The HR weather score is the sum of these five parts (calcHRWeather), so each bar is exact.
+  const PARTS = [
+    ['parkBoost', 'Park', 'var(--s1)'], ['tempAdj', 'Temperature', 'var(--s2)'], ['windCarry', 'Wind', 'var(--s3)'],
+    ['presAdj', 'Pressure', '#9085e9'], ['humAdj', 'Humidity', '#7d8aa5'],
+  ];
+  const windWord = carry => carry > 1.5 ? 'Blowing out' : carry < -1.5 ? 'Blowing in' : 'Crosswind';
 
-  // Field-relative wind diagram — arrow points toward the outfield wall
-  // when wind carries the ball OUT, toward home plate when it carries IN.
-  // Drawn relative to THIS park's own orientation, so reading it never
-  // requires cross-referencing a raw compass heading against a separate
-  // "which way does this park face" fact — the diagram already does that
-  // translation.
-  const fieldWindSVG = (wd, orient, carry) => {
-    const color = carry > 1.5 ? '#4ade80' : carry < -1.5 ? '#f87171' : 'rgba(255,255,255,0.4)';
-    const rel = (((wd - orient + 180) % 360) + 360) % 360; // 0=toward CF (out), 180=toward plate (in)
-    const rad = (rel * Math.PI) / 180;
-    const cx = 40, cy = 46, r = 24;
-    const tx = cx + r * Math.sin(rad), ty = cy - r * Math.cos(rad);
-    const fx = cx - 9 * Math.sin(rad), fy = cy + 9 * Math.cos(rad);
-    return `<svg width="72" height="76" viewBox="0 0 80 84" style="flex-shrink:0">
-      <path d="M40,74 L8,14 Q40,-6 72,14 Z" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>
-      <circle cx="40" cy="74" r="2.5" fill="rgba(255,255,255,0.45)"/>
-      <text x="40" y="9" text-anchor="middle" fill="rgba(255,255,255,0.3)" font-size="7" font-family="monospace">CF</text>
-      <line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" stroke="${color}" stroke-width="2.5" stroke-linecap="round"/>
-      <circle cx="${tx}" cy="${ty}" r="3" fill="${color}"/>
+  // Field-relative wind diagram: the arrow points toward the wall when wind carries the ball
+  // out, toward the plate when it knocks it down — already translated for this park's orientation.
+  const fieldWindSVG = (wd, orient, carry, speed, size = 96) => {
+    const color = carry > 1.5 ? 'var(--s3)' : carry < -1.5 ? 'var(--s2)' : 'var(--t3)';
+    const rel = (((wd - orient + 180) % 360) + 360) % 360, rad = rel * Math.PI / 180;
+    const cx = 50, cy = 60, len = speed ? 14 + Math.min(speed, 20) * 1.1 : 0;
+    const tx = cx + len / 2 * Math.sin(rad), ty = cy - len / 2 * Math.cos(rad), fx = cx - len / 2 * Math.sin(rad), fy = cy + len / 2 * Math.cos(rad);
+    const ah = 7, a1 = rad + Math.PI * 0.82, a2 = rad - Math.PI * 0.82;
+    return `<svg width="${size}" height="${size}" viewBox="0 0 100 100" style="flex-shrink:0" aria-label="Wind relative to the field">
+      <path d="M50,92 L8,46 A60,60 0 0,1 92,46 Z" fill="rgba(25,158,112,.07)" stroke="var(--bd2)"/>
+      <path d="M50,92 L33,73 L50,56 L67,73 Z" fill="none" stroke="var(--bd2)"/>
+      <text x="50" y="18" text-anchor="middle" fill="var(--t3)" font-size="9" font-family="Inter,sans-serif">CF</text>
+      ${speed ? `<line x1="${fx}" y1="${fy}" x2="${tx}" y2="${ty}" stroke="${color}" stroke-width="3" stroke-linecap="round"/>
+      <path d="M${tx},${ty} L${tx + ah * Math.sin(a1)},${ty - ah * Math.cos(a1)} L${tx + ah * Math.sin(a2)},${ty - ah * Math.cos(a2)} Z" fill="${color}"/>` : `<text x="50" y="64" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Inter,sans-serif">Calm</text>`}
     </svg>`;
   };
 
-  const windPanel = (carry, speed, wd, orient, compass) => {
-    const isOut = carry > 1.5, isIn = carry < -1.5;
-    const color = isOut?'var(--green)':isIn?'var(--red)':'rgba(255,255,255,0.45)';
-    const tag   = isOut?'WIND OUT':isIn?'WIND IN':'CROSSWIND';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid rgba(255,255,255,0.08);border-bottom:1px solid rgba(255,255,255,0.08);margin:8px 0">
-      ${fieldWindSVG(wd||0, orient||180, carry)}
-      <div style="flex:1;min-width:0">
-        <div style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.9)">${speed} mph${compass?' '+compass:''}</div>
-        <div style="font-size:11px;font-family:var(--mono);font-weight:700;color:${color};margin-top:3px">${tag} · ${carry>=0?'+':''}${carry.toFixed(1)}%</div>
-      </div>
-    </div>`;
+  const partsTip = (d) => {
+    const h = d.hrw || {};
+    return `<b>${d.park.name || d.g.home}: ${sgn(h.score || 0)}%</b><br>` + PARTS.map(([k, l]) => `${l}: ${sgn(h[k] || 0)}`).join('<br>');
   };
 
-  const statCell = (label, val, sub, subColor) =>
-    `<div style="background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:8px 6px;text-align:center">
-      <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-bottom:3px">${label}</div>
-      <div style="font-size:15px;font-weight:600;font-family:var(--mono);color:rgba(255,255,255,0.92);line-height:1.1">${val}</div>
-      ${sub?`<div style="font-size:11px;font-family:var(--mono);color:${subColor||'rgba(255,255,255,0.45)'};margin-top:2px">${sub}</div>`:''}
-    </div>`;
-
-  const targetRow = (r, i, compact) => {
-    const {badge,count,hrp:lhrp}=getSignalsLocked(r);
-    const lh=lhrp||r.hrp||0;
-    const hc=lh>=20?'var(--green)':lh>=15?'var(--teal)':lh>=10?'var(--amber)':'rgba(255,255,255,0.6)';
-    const streak=STREAK[r.name];
-    return `<div style="display:flex;align-items:center;gap:${compact?10:12}px;padding:${compact?8:12}px 0;border-bottom:1px solid rgba(255,255,255,0.07)">
-      <span style="font-size:${compact?11:12}px;font-family:var(--mono);color:rgba(255,255,255,0.4);width:${compact?14:20}px;flex-shrink:0">${i+1}</span>
-      <div style="flex:1;min-width:0">
-        <div style="font-size:${compact?13:14}px;font-weight:500;color:rgba(255,255,255,0.92)">${r.name} ${streak?.flame||''}</div>
-        <div style="font-size:${compact?10:11}px;font-family:var(--mono);color:rgba(255,255,255,0.5);margin-top:1px">${r.team} · ${count} sig${badge?` · <span style="color:${badge.color}">${badge.label.replace(' Play','')}</span>`:''}</div>
-      </div>
-      <div style="font-size:${compact?14:16}px;font-weight:500;font-family:var(--mono);color:${hc};flex-shrink:0">${lh.toFixed(1)}%</div>
-    </div>`;
+  // Ranking chart: one diverging stacked bar per park, positives right of zero, negatives left.
+  const rankChart = (rows) => {
+    const W = 1000, rowH = 34, ml = 210, mr = 70, top = 26, H = top + rowH * rows.length + 8;
+    let lo = 0, hi = 0;
+    for (const d of rows) { const h = d.hrw || {}; let p = 0, n = 0; for (const [k] of PARTS) { const v = h[k] || 0; v > 0 ? p += v : n += v; } hi = Math.max(hi, p); lo = Math.min(lo, n); }
+    const span = Math.max(10, hi - lo) * 1.06; lo = Math.min(lo, -span * 0.12); hi = lo + span;
+    const x = v => ml + (W - ml - mr) * ((v - lo) / (hi - lo));
+    const step = span > 60 ? 20 : span > 25 ? 10 : 5, ticks = [];
+    for (let t = Math.ceil(lo / step) * step; t <= hi; t += step) ticks.push(t);
+    const body = rows.map((d, i) => {
+      const y = top + rowH * i, h = d.hrw || {};
+      let pos = 0, neg = 0;
+      const segs = PARTS.map(([k, , c]) => { const v = h[k] || 0; if (Math.abs(v) < 0.05) return '';
+        const a = v > 0 ? pos : neg + v; v > 0 ? pos += v : neg += v;
+        return `<rect x="${x(a)}" y="${y + 9}" width="${Math.max(1, x(a + Math.abs(v)) - x(a))}" height="16" fill="${c}"/>`; }).join('');
+      return `<g class="pk-row" data-pp-tip="${ppEsc(partsTip(d))}" onclick="_openParkModal(${d.idx})">
+        <rect x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>
+        <text x="0" y="${y + 16}" class="pk-name">${ppEsc(d.park.name || d.g.home)}${ppEsc(d.label)}</text>
+        <text x="0" y="${y + 29}" class="pk-sub">${ppEsc(d.g.away)} @ ${ppEsc(d.g.home)} · ${ppEsc(d.g.time)}</text>
+        ${segs}
+        <text x="${x(Math.max(pos, 0)) + 8}" y="${y + 22}" class="pk-val" style="fill:${scoreColor(h.score || 0)}">${sgn(h.score || 0)}%</text></g>`;
+    }).join('');
+    return `<svg class="pp-chart pk-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="HR weather by park">
+      ${ticks.map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 6}" y2="${H}" stroke="${t === 0 ? 'var(--t3)' : 'var(--grid)'}"/><text x="${x(t)}" y="${top - 12}" text-anchor="middle">${t > 0 ? '+' : ''}${t}%</text>`).join('')}
+      ${body}</svg>
+      <div class="pp-legend">${PARTS.map(([, l, c]) => `<span><i style="background:${c}"></i>${l}</span>`).join('')}</div>`;
   };
 
-  // Full screen modal
+  // Detail view: one bar per part, diverging from zero.
+  const partsChart = (h) => {
+    const W = 560, rowH = 34, ml = 100, mr = 64, top = 24, H = top + rowH * PARTS.length + 6;
+    const vals = PARTS.map(([k]) => h[k] || 0), m = Math.max(5, ...vals.map(Math.abs)) * 1.1;
+    const x = v => ml + (W - ml - mr) * ((v + m) / (2 * m));
+    return `<svg class="pp-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="HR weather breakdown">
+      ${[-m, -m / 2, 0, m / 2, m].map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 6}" y2="${H}" stroke="${t === 0 ? 'var(--t3)' : 'var(--grid)'}"/><text x="${x(t)}" y="${top - 11}" text-anchor="middle">${t > 0 ? '+' : ''}${Math.round(t)}</text>`).join('')}
+      ${PARTS.map(([k, l, c], i) => { const v = h[k] || 0, y = top + rowH * i;
+        return `<text x="0" y="${y + 21}" class="pp-lbl">${l}</text><rect x="${Math.min(x(0), x(v))}" y="${y + 9}" width="${Math.max(1, Math.abs(x(v) - x(0)))}" height="16" rx="3" fill="${c}"/>
+        <text x="${v >= 0 ? x(v) + 6 : x(v) - 6}" y="${y + 21}" text-anchor="${v >= 0 ? 'start' : 'end'}" class="pp-strong">${sgn(v)}</text>`; }).join('')}</svg>`;
+  };
+
+  const kv = (pairs) => `<div class="pp-kv four">${pairs.map(([k, v, s]) => `<div><div class="k">${k}</div><div class="v">${v}${s ? `<span class="pct">${s}</span>` : ''}</div></div>`).join('')}</div>`;
+  const condPairs = (wx, park, hrw) => [
+    ['Temp', wx.t != null ? `${Math.round(wx.t)}°F` : '—', hrw ? sgn(hrw.tempAdj) : ''],
+    ['Humidity', wx.hum != null ? `${Math.round(wx.hum)}%` : '—', hrw && wx.hum != null ? sgn(hrw.humAdj) : ''],
+    ['Pressure', wx.pres != null ? `${Math.round(wx.pres)}` : '—', hrw && wx.pres != null ? sgn(hrw.presAdj) : ''],
+    ['Park', park.f ? `${(+park.f).toFixed(2)}×` : '—', hrw ? sgn(hrw.parkBoost) : ''],
+  ];
+
+  const targetRow = (r, i) => {
+    const { badge, count, hrp: lhrp } = getSignalsLocked(r);
+    const lh = lhrp || r.hrp || 0, esc = r.name.replace(/'/g, "\\'");
+    return `<div class="pk-target" onclick="event.stopPropagation();openPlayerModal('${esc}')">
+      <span class="rk">${i + 1}</span>
+      <div style="flex:1;min-width:0"><div class="nm">${ppEsc(r.name)}</div><div class="sub">${ppEsc(r.team)} · ${count} of 8 signals${badge ? ` · ${ppEsc(badge.label.replace(/^\S+\s/, '').replace(' Play', ''))}` : ''}</div></div>
+      <div class="pc">${lh.toFixed(1)}%</div></div>`;
+  };
+
+  const windBlock = (wx, park, hrw) => {
+    const carry = hrw?.windCarry || 0, speed = Math.round(wx.ws || wx.w || 0);
+    return `<div class="pk-wind">${fieldWindSVG(wx.wd || wx.d || 0, park.orient || 180, carry, speed)}
+      <div><div class="v">${speed ? `${speed} mph` : 'Calm'}${wx.c ? ` ${ppEsc(wx.c)}` : ''}</div>
+      <div class="k">${speed ? windWord(carry) : 'No wind'} · ${sgn(carry)} to HR weather</div></div></div>`;
+  };
+
+  parkData.forEach((d, i) => { d.idx = i; });
   window._parkData = parkData;
   window._openParkModal = (idx) => {
-    const {g, wx, park, hrw, label} = window._parkData[idx];
+    const d = window._parkData[idx]; const { g, wx, park, hrw, label } = d;
     const score = hrw?.score || 0;
-    const carry = hrw?.windCarry||0;
-    const speed = wx.ws||wx.w||0;
-    const wd    = wx.wd||wx.d||0;
-
-    const allPlayers = allRows.filter(r=>String(r.gamePk)===String(g.pk))
-      .sort((a,b)=>(getSignalsLocked(b).hrp||b.hrp||0)-(getSignalsLocked(a).hrp||a.hrp||0))
-      .slice(0,12);
-
-    const allTargetsHTML = allPlayers.length
-      ? allPlayers.map((r,i)=>targetRow(r,i,false)).join('')
-      : `<div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);padding:8px 0">Lineups loading…</div>`;
-
-    el.innerHTML = `<div style="padding:4px 0">
-      <button onclick="renderParks()" style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:20px">← Back to all parks</button>
-
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
-        <div>
-          <div style="font-size:22px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:4px">${park.name||g.home}${label}</div>
-          <div style="font-size:12px;font-family:var(--mono);color:rgba(255,255,255,0.55)">${g.away} @ ${g.home} · ${g.time}</div>
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.4)">${[park.city, park.elev?(+park.elev).toLocaleString()+'ft':'', park.roof!=='open'?(park.roof==='dome'?'Dome':'Retractable'):''].filter(Boolean).join(' · ')}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:2px">HR WEATHER</div>
-          <div style="font-size:44px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-2px;line-height:1">${score>0?'+':''}${score}%</div>
-          <div style="font-size:11.5px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-top:3px">${wx.sky||wx.s||''}</div>
-        </div>
+    const players = allRows.filter(r => String(r.gamePk) === String(g.pk))
+      .sort((a, b) => (getSignalsLocked(b).hrp || b.hrp || 0) - (getSignalsLocked(a).hrp || a.hrp || 0)).slice(0, 12);
+    el.innerHTML = `<div class="pk-page">
+      <button class="btn" onclick="renderParks()" style="margin-bottom:18px">← All parks</button>
+      <div class="pk-head"><div><h2>${ppEsc(park.name || g.home)}${ppEsc(label)}</h2>
+        <div class="sub">${ppEsc(g.away)} @ ${ppEsc(g.home)} · ${ppEsc(g.time)}${[park.city, park.elev ? `${(+park.elev).toLocaleString()} ft` : '', park.roof && park.roof !== 'open' ? (park.roof === 'dome' ? 'Dome' : 'Retractable roof') : '', wx.sky || wx.s || ''].filter(Boolean).map(t => ' · ' + ppEsc(t)).join('')}</div></div>
+        <div class="pk-score"><div class="k">HR weather</div><div class="v" style="color:${scoreColor(score)}">${sgn(score)}%</div></div></div>
+      <div class="pk-two">
+        <div class="pp-section"><div class="pp-t">Where the score comes from (points of HR boost)</div>${partsChart(hrw || {})}</div>
+        <div class="pp-section"><div class="pp-t">Wind relative to the field</div>${windBlock(wx, park, hrw)}</div>
       </div>
-
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
-        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--', hrw?((hrw.tempAdj>=0?'+':'')+hrw.tempAdj+'%'):null, (hrw?.tempAdj||0)>2?'var(--green)':(hrw?.tempAdj||0)<-2?'var(--red)':null)}
-        ${statCell('Humidity', wx.hum!=null?wx.hum+'%':'--')}
-        ${statCell('Pressure', wx.pres!=null?wx.pres+' hPa':'--', hrw?((hrw.presAdj>=0?'+':'')+hrw.presAdj+'%'):null, (hrw?.presAdj||0)>3?'var(--green)':null)}
-        ${statCell('Park', park.f?park.f+'x':'--', park.f&&hrw?((hrw.parkBoost>=0?'+':'')+hrw.parkBoost+'%'):null, (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':null)}
-      </div>
-
-      ${windPanel(carry, speed, wd, park.orient, wx.c||'')}
-
-      <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;margin-top:6px">
-        <div style="font-size:11.5px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:8px">All targets tonight</div>
-        ${allTargetsHTML}
-      </div>
+      <div class="pp-section">${kv(condPairs(wx, park, hrw))}</div>
+      <div class="pp-section"><div class="pp-t">Every target in this game</div>${players.length ? players.map(targetRow).join('') : '<div class="pp-note">Lineups loading…</div>'}</div>
     </div>`;
   };
-  // _openParkModal already assigned above with window._parkData
 
-  const cards = parkData.map(({g, wx, park, hrw, top3, label}, idx) => {
-    const score = hrw?.score || 0;
-    const carry = hrw?.windCarry||0;
-    const speed = wx.ws||wx.w||0;
-    const wd    = wx.wd||wx.d||0;
-    const borderColor = score>=15?'rgba(74,222,128,0.3)':score>=5?'rgba(74,222,128,0.12)':score<=-5?'rgba(248,113,113,0.2)':'rgba(255,255,255,0.09)';
-
-    const top3HTML = top3.length
-      ? top3.map((r,i)=>targetRow(r,i,true)).join('')
-      : `<div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);padding:8px 0">Lineups loading…</div>`;
-
-    return `<div style="background:var(--bg2);border:1px solid ${borderColor};border-radius:12px;padding:16px;display:flex;flex-direction:column;cursor:pointer" onclick="_openParkModal(${idx})">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
-        <div style="flex:1;min-width:0">
-          <div style="font-size:15px;font-weight:500;color:rgba(255,255,255,0.92);margin-bottom:2px">${park.name||g.home}${label}</div>
-          <div style="font-size:11.5px;font-family:var(--mono);color:rgba(255,255,255,0.55)">${g.away} @ ${g.home} · ${g.time}</div>
-        </div>
-        <div style="text-align:right;flex-shrink:0;margin-left:10px">
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5)">HR WX</div>
-          <div style="font-size:26px;font-weight:500;font-family:var(--mono);color:${scoreColor(score)};letter-spacing:-1px;line-height:1.1">${score>0?'+':''}${score}%</div>
-        </div>
-      </div>
-
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">
-        ${statCell('Temp', wx.t!=null?wx.t+'°F':'--')}
-        ${statCell('Hum', wx.hum!=null?wx.hum+'%':'--')}
-        ${statCell('Pres', wx.pres!=null?wx.pres:'--')}
-        ${statCell('Park', park.f?park.f+'x':'--', null, (park.f||1)>=1.05?'var(--green)':(park.f||1)<=0.95?'var(--red)':null)}
-      </div>
-
-      ${windPanel(carry, speed, wd, park.orient, wx.c||'')}
-
-      <div style="border-top:1px solid rgba(255,255,255,0.08);padding-top:10px">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-          <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.5)">Top targets</div>
-          <span style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.35)">Tap for more ↗</span>
-        </div>
-        ${top3HTML}
-      </div>
+  const cards = parkData.map(d => {
+    const { g, wx, park, hrw, top3, label, idx } = d, score = hrw?.score || 0;
+    return `<div class="pk-card" onclick="_openParkModal(${idx})">
+      <div class="pk-head"><div style="min-width:0"><h3>${ppEsc(park.name || g.home)}${ppEsc(label)}</h3><div class="sub">${ppEsc(g.away)} @ ${ppEsc(g.home)} · ${ppEsc(g.time)}</div></div>
+        <div class="pk-score"><div class="k">HR weather</div><div class="v sm" style="color:${scoreColor(score)}">${sgn(score)}%</div></div></div>
+      ${kv(condPairs(wx, park, hrw))}
+      ${windBlock(wx, park, hrw)}
+      <div class="pp-t" style="margin:4px 0 2px">Top targets</div>
+      ${top3.length ? top3.map(targetRow).join('') : '<div class="pp-note">Lineups loading…</div>'}
     </div>`;
   }).join('');
 
-  const domeCount = games.filter(g=>WX[g.home]?.dome).length;
-  el.innerHTML = `<div style="padding:4px 0">
-    <div style="font-size:11px;font-family:var(--mono);color:rgba(255,255,255,0.45);margin-bottom:14px">Sorted by HR-friendliest conditions${domeCount?' · '+domeCount+' dome'+(domeCount>1?'s':'')+' excluded':''}</div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px">
-      ${cards||'<div class="empty"><p>Weather data loading…</p></div>'}
-    </div>
+  const domeCount = games.filter(g => WX[g.home]?.dome).length;
+  el.innerHTML = `<div class="pk-page">
+    <div class="pk-title"><h2>HR weather by park</h2><div class="sub">Park, temperature, wind, pressure and humidity, combined into one HR boost or drag. Sorted best to worst${domeCount ? ` · ${domeCount} dome${domeCount > 1 ? 's' : ''} excluded` : ''}. Hover a bar for the breakdown, click for the park.</div></div>
+    ${parkData.length ? `<div class="pk-panel">${rankChart(parkData)}</div>` : ''}
+    <div class="pk-grid">${cards || '<div class="pp-note">Weather data loading…</div>'}</div>
   </div>`;
 }
 
