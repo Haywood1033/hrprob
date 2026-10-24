@@ -519,6 +519,48 @@ tbody tr:hover td{background:var(--bg2)}
 .bottom-nav .bn-btn{font-size:11px}
 #player-modal,#pitcher-modal{border-left:1px solid var(--bd)!important}
 @media(max-width:768px){.twrap{margin:12px 0 32px;border-radius:0;border-left:0;border-right:0}.hdr{padding:0 16px}.hdr .status{display:none}.hdr-date{white-space:nowrap}.hdr .btn:first-of-type{margin-left:auto}}
+
+/* Evidence-first player panel */
+:root{--s1:#3987e5;--s1-quiet:rgba(57,135,229,.38);--s2:#d95926;--s3:#199e70;--grid:#222b42}
+#player-modal{width:480px;background:var(--bg)}
+#player-modal .pm-header{background:var(--bg);border-bottom:1px solid var(--bd);padding:18px 20px;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:2}
+#player-modal .pm-close{width:34px;height:34px;padding:0;border:1px solid var(--bd2);border-radius:var(--r-sm)}
+.pp-body{padding:18px 20px 32px}
+.pp-section{margin-bottom:24px}
+.pp-t{font-size:12.5px;font-weight:600;color:var(--t3);margin-bottom:10px}
+.pp-kv{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bd);border:1px solid var(--bd);border-radius:var(--r-sm);overflow:hidden}
+.pp-kv.four{grid-template-columns:repeat(4,1fr)}
+.pp-kv>div{background:var(--bg2);padding:10px 12px}
+.pp-kv .k{font-size:12px;color:var(--t3)}
+.pp-kv .v{font-size:16px;font-weight:600;margin-top:2px;color:var(--t1);display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.pp-kv .pct{font-size:11.5px;font-weight:500;color:var(--t3)}
+.pp-note{font-size:12.5px;color:var(--t3);margin-top:8px;line-height:1.55}
+.pp-chart{display:block;width:100%;overflow:visible}
+.pp-chart text{fill:var(--t3);font-size:11px;font-family:var(--sans)}
+.pp-chart text.pp-quiet{fill:#5f6a83}
+.pp-chart text.pp-lbl{fill:var(--t2);font-size:12px;font-weight:500}
+.pp-chart text.pp-strong{fill:var(--t1);font-weight:600;font-size:12px}
+.pp-legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--t2);margin-top:6px}
+.pp-legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:-1px}
+.pp-legend i.line{height:2px;width:14px;vertical-align:3px}
+.pp-legend i.dot{border-radius:50%}
+.pp-split{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pp-split>div{border:1px solid var(--bd);border-radius:var(--r-sm);padding:10px 12px;background:var(--bg2)}
+.pp-split>div.on{border-color:var(--s1)}
+.pp-split .k{font-size:12px;color:var(--t3)}
+.pp-split .v{font-size:14px;font-weight:600;color:var(--t1);margin:6px 0 2px}
+.pp-split .bar{height:6px;border-radius:3px;background:var(--bg4);margin-top:8px;overflow:hidden}
+.pp-split .bar i{display:block;height:100%;background:var(--s1-quiet)}
+.pp-split .on .bar i{background:var(--s1)}
+.pp-signal{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--bd)}
+.pp-signal:last-child{border-bottom:0}
+.pp-signal p{font-size:12.5px;color:var(--t2);line-height:1.5}
+.pp-tag{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:600;white-space:nowrap;color:var(--t3);border:1px solid var(--bd2)}
+.pp-tag.on{color:var(--green);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.1)}
+#pp-tip{position:fixed;z-index:2000;pointer-events:none;background:var(--bg4);border:1px solid var(--bd2);border-radius:8px;padding:8px 10px;font-size:12px;line-height:1.55;color:var(--t2);box-shadow:0 12px 40px rgba(0,0,0,.45);opacity:0;transition:opacity .1s;max-width:280px}
+#pp-tip.on{opacity:1}
+#pp-tip b{color:var(--t1)}
+@media(max-width:520px){.pp-signal{grid-template-columns:1fr}.pp-kv.four{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
@@ -5545,6 +5587,179 @@ function formBlock(game) {
   return `<div title="${tip}" style="min-width:22px;height:22px;border-radius:4px;background:${bg};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--mono);color:${tc};flex-shrink:0">${label}</div>`;
 }
 
+
+// ── Evidence-first player panel ────────────────────────────────────────────────────
+// Read-only view of what the model already computed: tiles, the model's own factor
+// breakdown (hrProbWithStreak re-run with one input neutral at a time), recent games,
+// pitch mix vs this batter, platoon split and signals with the numbers behind them.
+// Nothing here writes to SIGNAL_LOCK, history or any data store.
+const ppEsc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const ppAvg3 = v => (v == null || isNaN(v) ? '—' : '.' + Math.round(v * 1000).toString().padStart(3, '0'));
+const ppOrd = n => `${n}${(n % 100 > 10 && n % 100 < 14) ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' }[n % 10] || 'th')}`;
+const ppFair = pct => { const q = pct / 100; if (!q || q >= 1) return '—'; return q >= 0.5 ? `−${Math.round(100 * q / (1 - q))}` : `+${Math.round(100 * (1 - q) / q)}`; };
+const PP_PITCH = { FF: '4-seam', SI: 'Sinker', SL: 'Slider', CU: 'Curve', CH: 'Changeup', FC: 'Cutter', CT: 'Cutter', FS: 'Splitter', ST: 'Sweeper', KC: 'Knuckle curve', SV: 'Slurve', FA: 'Fastball' };
+
+// Cumulative walk from a league-average hitter in a neutral spot to this batter's number.
+function ppFactorSteps(r) {
+  const bs = { ...(getBatter(r.name) || { ev: 88.5, ba: 8, hh: 37, xw: 0.310, iso: 0.150, pa: 0 }), _name: r.name };
+  const lg = { ev: 88, ba: 8, hh: 37, xw: 0.310, iso: 0.150, pa: 400, bats: bs.bats };
+  const pk = r.park || { f: 1 }, nPk = { f: 1, elev: 500, roof: pk.roof, orient: pk.orient };
+  const pit = r.pit || {}, nPit = { hand: pit.hand || 'R' };
+  const f = (b, p, w, pi, o) => hrProbWithStreak(b, p, w, pi, o);
+  const v0 = f(lg, nPk, {}, nPit, 5), v1 = f(bs, nPk, {}, nPit, 5), v2 = f(bs, pk, {}, nPit, 5),
+        v3 = f(bs, pk, r.wx || {}, nPit, 5), v4 = f(bs, pk, r.wx || {}, pit, 5), v5 = f(bs, pk, r.wx || {}, pit, r.order);
+  return { start: v0, end: v5, steps: [
+    { label: 'Hitter profile', d: v1 - v0, note: `Barrel ${(bs.ba || 0).toFixed(1)}% · EV ${(bs.ev || 0).toFixed(1)} · xwOBA ${ppAvg3(bs.xw)}${r.name && STREAK[r.name]?.flame ? ' · recent form' : ''}` },
+    { label: 'Park', d: v2 - v1, note: `${pk.name || '—'} · factor ${(pk.f || 1).toFixed(2)}${pk.elev > 1500 ? ` · ${pk.elev} ft` : ''}` },
+    { label: 'Weather', d: v3 - v2, note: pk.roof === 'dome' ? 'Dome' : r.wx?.ws ? `${Math.round(r.wx.ws)} mph · ${Math.round(r.wx.t || 70)}°F` : 'No wind data' },
+    { label: 'Pitcher', d: v4 - v3, note: `${r.pitName || 'TBD'} · xERA ${(pit.xera || pit.era || 4.5).toFixed(2)} · HR/9 ${(pit.hr9 || 1.2).toFixed(2)}` },
+    { label: 'Lineup spot', d: v5 - v4, note: `Batting ${r.order || '?'}` },
+  ] };
+}
+
+function ppFactorChart(fs) {
+  const W = 420, rowH = 34, ml = 112, mr = 52, top = 26, H = top + rowH * (fs.steps.length + 2) + 6;
+  const vals = [fs.start]; let run = fs.start; for (const s of fs.steps) { run += s.d; vals.push(run); }
+  const max = Math.max(...vals) * 1.08, x = v => ml + (W - ml - mr) * (v / max);
+  let cur = fs.start, rows = '';
+  const bar = (i, a, b, color, label, val, tip) => {
+    const y = top + rowH * i, x0 = x(Math.min(a, b)), w = Math.max(2, Math.abs(x(b) - x(a)));
+    return `<g data-pp-tip="${ppEsc(tip)}"><rect x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>
+      <text x="0" y="${y + 21}" class="pp-lbl">${label}</text>
+      <rect x="${x0}" y="${y + 8}" width="${w}" height="18" rx="3" fill="${color}"/>
+      <text x="${Math.max(x(a), x(b)) + 6}" y="${y + 21}" class="pp-strong">${val}</text></g>`;
+  };
+  rows += bar(0, 0, fs.start, 'var(--s1-quiet)', 'League average', `${fs.start.toFixed(1)}%`, '<b>League-average hitter</b><br>Neutral park, no wind, average pitcher, batting 5th');
+  fs.steps.forEach((s, i) => {
+    const nxt = cur + s.d, pos = s.d >= 0;
+    rows += bar(i + 1, cur, nxt, pos ? 'var(--s3)' : 'var(--s2)', s.label, `${pos ? '+' : '−'}${Math.abs(s.d).toFixed(1)}`, `<b>${s.label}: ${pos ? '+' : '−'}${Math.abs(s.d).toFixed(1)} pts</b><br>${s.note}`);
+    if (i < fs.steps.length - 1) rows += `<line x1="${x(nxt)}" x2="${x(nxt)}" y1="${top + rowH * (i + 1) + 26}" y2="${top + rowH * (i + 2) + 8}" stroke="var(--t3)" stroke-dasharray="2 2"/>`;
+    cur = nxt;
+  });
+  rows += bar(fs.steps.length + 1, 0, fs.end, 'var(--s1)', 'This batter', `${fs.end.toFixed(1)}%`, '<b>Model HR probability</b><br>All of today’s inputs');
+  const ticks = [0, 5, 10, 15, 20, 25, 30].filter(t => t <= max);
+  return `<svg class="pp-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="What moves the number">
+    ${ticks.map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 4}" y2="${H - 4}" stroke="var(--grid)"/><text x="${x(t)}" y="${top - 10}" text-anchor="middle">${t}%</text>`).join('')}
+    ${rows}</svg>
+    <div class="pp-legend"><span><i style="background:var(--s3)"></i>Raises it</span><span><i style="background:var(--s2)"></i>Lowers it</span></div>`;
+}
+
+function ppGameLogChart(log) {
+  const games = [...log].slice(0, 10).reverse();
+  const W = 420, H = 160, ml = 24, mr = 6, mt = 16, mb = 32;
+  const max = Math.max(4, ...games.map(g => g.tb)) + 0.5, y = v => mt + (H - mt - mb) * (1 - v / max);
+  const band = (W - ml - mr) / games.length, bw = Math.min(22, band * 0.6);
+  const ticks = []; for (let t = 0; t <= max; t += 2) ticks.push(t);
+  const bars = games.map((g, i) => {
+    const xx = ml + band * i + (band - bw) / 2, h = y(0) - y(g.tb), r = Math.min(4, bw / 2, h);
+    const path = h > 0 ? `M${xx},${y(0)}V${y(g.tb) + r}Q${xx},${y(g.tb)} ${xx + r},${y(g.tb)}H${xx + bw - r}Q${xx + bw},${y(g.tb)} ${xx + bw},${y(g.tb) + r}V${y(0)}Z` : '';
+    const d = new Date(g.date + 'T12:00:00'), lbl = isNaN(d) ? '' : `${d.getMonth() + 1}/${d.getDate()}`;
+    const tip = `<b>${lbl} vs ${ppEsc(g.opponent)}</b><br>${g.h}-for-${g.ab}${g.hr ? `, ${g.hr} HR` : ''}<br>Total bases: ${g.tb}<br>BB ${g.bb} · K ${g.k} · RBI ${g.rbi}`;
+    return `<g data-pp-tip="${ppEsc(tip)}"><rect x="${ml + band * i}" y="${mt}" width="${band}" height="${H - mt - mb}" fill="transparent"/>
+      <path d="${path}" fill="${g.hr ? 'var(--s1)' : 'var(--s1-quiet)'}"/>
+      ${g.hr ? `<circle cx="${xx + bw / 2}" cy="${y(g.tb) - 9}" r="5" fill="var(--s2)" stroke="var(--bg)" stroke-width="2"/>` : ''}
+      ${!g.h ? `<text x="${xx + bw / 2}" y="${y(0) - 4}" text-anchor="middle" class="pp-quiet">0</text>` : ''}
+      <text x="${xx + bw / 2}" y="${H - 18}" text-anchor="middle">${lbl}</text><text x="${xx + bw / 2}" y="${H - 5}" text-anchor="middle" class="pp-quiet">${ppEsc(g.opponent)}</text></g>`;
+  }).join('');
+  return `<svg class="pp-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Recent games">
+    ${ticks.map(t => `<line x1="${ml}" x2="${W - mr}" y1="${y(t)}" y2="${y(t)}" stroke="var(--grid)"/><text x="${ml - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join('')}${bars}</svg>
+    <div class="pp-legend"><span><i style="background:var(--s1)"></i>Total bases · HR game</span><span><i style="background:var(--s1-quiet)"></i>No HR</span><span><i class="dot" style="background:var(--s2)"></i>Home run</span></div>`;
+}
+
+function ppPitchChart(rows) {
+  const W = 420, rowH = 30, ml = 96, mr = 50, top = 22, H = top + rowH * rows.length + 4;
+  const lo = 0.150, hi = 0.500, x = v => ml + (W - ml - mr) * ((Math.max(lo, Math.min(hi, v)) - lo) / (hi - lo));
+  const body = rows.map((p, i) => {
+    const y = top + rowH * i, c = p.xwoba == null ? 'var(--t3)' : p.xwoba >= 0.360 ? 'var(--s3)' : p.xwoba <= 0.260 ? 'var(--s2)' : 'var(--s1)';
+    return `<g data-pp-tip="${ppEsc(`<b>${p.pitchName}</b><br>Thrown ${p.pitchUsage.toFixed(0)}% of the time<br>Batter xwOBA vs it: ${p.xwoba == null ? 'no data' : ppAvg3(p.xwoba)}`)}">
+      <rect x="0" y="${y}" width="${W}" height="${rowH}" fill="transparent"/>
+      <text x="0" y="${y + 14}" class="pp-lbl">${p.pitchName}</text><text x="0" y="${y + 27}" class="pp-quiet">${p.pitchUsage.toFixed(0)}% thrown</text>
+      ${p.xwoba == null ? `<text x="${ml}" y="${y + 19}" class="pp-quiet">No data</text>` : `<line x1="${x(lo)}" x2="${x(p.xwoba)}" y1="${y + 15}" y2="${y + 15}" stroke="${c}" stroke-width="2" opacity=".5"/><circle cx="${x(p.xwoba)}" cy="${y + 15}" r="6" fill="${c}"/><text x="${x(p.xwoba) + 11}" y="${y + 19}" class="pp-strong">${ppAvg3(p.xwoba)}</text>`}</g>`;
+  }).join('');
+  return `<svg class="pp-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Pitch mix vs this batter">
+    ${[0.200, 0.300, 0.400].map(t => `<line x1="${x(t)}" x2="${x(t)}" y1="${top - 4}" y2="${H}" stroke="var(--grid)"/><text x="${x(t)}" y="${top - 9}" text-anchor="middle">${ppAvg3(t)}</text>`).join('')}
+    <line x1="${x(0.320)}" x2="${x(0.320)}" y1="${top - 4}" y2="${H}" stroke="var(--t3)" stroke-dasharray="3 3"/>
+    ${body}</svg>
+    <div class="pp-legend"><span><i style="background:var(--s3)"></i>Edge (.360+)</span><span><i style="background:var(--s1)"></i>Neutral</span><span><i style="background:var(--s2)"></i>Weak (≤.260)</span><span><i class="line" style="background:var(--t3)"></i>League avg .320</span></div>`;
+}
+
+function ppPlatoonChart(split, hand) {
+  const sides = [['vsRHP', 'vs RHP', 'R'], ['vsLHP', 'vs LHP', 'L']].filter(([k]) => split?.[k]?.ab >= 15);
+  if (!sides.length) return '';
+  const rate = s => (s.hrpa || s.hr / Math.max(1, s.ab)) * 100;
+  const max = Math.max(...sides.map(([k]) => rate(split[k]))) * 1.25 || 1;
+  return `<div class="pp-split">${sides.map(([k, lbl, h]) => { const s = split[k], on = h === hand;
+    return `<div class="${on ? 'on' : ''}"><div class="k">${lbl}${on ? ' · today' : ''}</div>
+      <div class="bar"><i style="width:${(rate(s) / max) * 100}%"></i></div>
+      <div class="v">${rate(s).toFixed(1)} HR per 100 PA</div><div class="k">ISO ${ppAvg3(s.iso)} · ${s.hr} HR in ${s.ab} AB</div></div>`; }).join('')}</div>`;
+}
+
+function ppSignalReason(label, ctx) {
+  const { b, pk, w, pit, streak, windOut, bestPitchEdge } = ctx;
+  switch (label) {
+    case 'Hitter Park': return `${pk.name || 'Park'} factor ${(pk.f || 1).toFixed(2)} (fires at 1.05+)`;
+    case 'Wind Out': return pk.roof === 'dome' ? 'Dome: no wind' : w.ws ? `${Math.round(w.ws)} mph, ${windOut ? 'blowing out' : 'not blowing out'} (fires at 6+ mph out)` : 'No wind data';
+    case 'Pitcher Matchup': return `xERA ${(pit.xera || pit.era || 4.5).toFixed(2)} · HR/9 ${(pit.hr9 || 1.2).toFixed(2)} (fires at 4.80+ or 1.40+)`;
+    case 'Hot Streak': return `${streak.hr || 0} HR in last 20 PA${streak.slg ? ` · SLG ${ppAvg3(streak.slg)}` : ''} (fires at 2+ HR)`;
+    case 'Confidence': return `${b.pa || 0} PA of Statcast data this season`;
+    case 'Pull Air Edge': return `Pull ${b.pull_pct ? b.pull_pct.toFixed(0) : '—'}% · fly ball ${b.fb_pct ? b.fb_pct.toFixed(0) : '—'}% (fires at 40% and 35%)`;
+    case 'Pitch Edge': {
+      // Mirrors getSignals(): pitches thrown 25%+, batter .360+ xwOBA or ≤15% whiff vs it.
+      const main = (ctx.pitchBreakdown || []).filter(p => p.pitchUsage >= 25);
+      if (!main.length) return 'No pitch thrown 25%+ with matchup data';
+      return main.map(p => `${p.xwoba == null ? 'no data' : ppAvg3(p.xwoba)} vs his ${p.pitchName.toLowerCase()} (${p.pitchUsage.toFixed(0)}%)`).join(' · ') + ' (fires at .360+ or ≤15% whiff)';
+    }
+    case 'Hot Contact': return `Barrel ${(b.ba || 0).toFixed(1)}% · hard-hit ${(b.hh || 0).toFixed(0)}%`;
+  }
+  return '';
+}
+
+function hrPlayerPanel(r, ctx) {
+  const { b, pk, w, pit, streak, badge, hrpPct, barrelPct, isoPct, l20Pct, pitchBreakdown, realSplit, pitHand, platoon, platoonColor, signals } = ctx;
+  const fs = ppFactorSteps(r);
+  const pctTxt = p => (p == null ? '' : `<span class="pct">${ppOrd(p)} pct</span>`);
+  const tiles = [
+    ['HR probability', `${r.hrp.toFixed(1)}%`, hrpPct == null ? '' : `<span class="pct">Top ${Math.max(1, 100 - hrpPct)}%</span>`],
+    ['Fair odds', ppFair(r.hrp), r.bookOdds ? `<span class="pct">Book ${r.bookOdds > 0 ? '+' : ''}${r.bookOdds}</span>` : ''],
+    ['Confidence', ppEsc((ctx.ci && ctx.ci.label) || '—'), ''],
+    ['Barrel rate', `${(b.ba ?? r.barrel ?? 0).toFixed(1)}%`, pctTxt(barrelPct)],
+    ['ISO', ppAvg3(b.iso ?? r.iso), pctTxt(isoPct)],
+    ['HR, last 20 PA', `${streak.hr || 0}`, pctTxt(l20Pct)],
+  ];
+  // Same fixed order in live and locked signals; label by position so both read the same.
+  const PP_SIG = ['Hitter Park', 'Wind Out', 'Pitcher Matchup', 'Hot Streak', 'Confidence', 'Pull Air Edge', 'Pitch Edge', 'Hot Contact'];
+  const sigRows = (signals || []).map((s, i) => { const lbl = PP_SIG[i] || s.label; return `<div class="pp-signal"><span class="pp-tag ${s.active ? 'on' : ''}">${s.active ? '✓' : '·'} ${ppEsc(lbl)}</span><p>${ppEsc(ppSignalReason(lbl, ctx))}</p></div>`; }).join('');
+  return `
+    <div class="pp-body">
+    <div class="pp-section"><div class="pp-kv">${tiles.map(([k, v, s]) => `<div><div class="k">${k}</div><div class="v">${v}${s}</div></div>`).join('')}</div>
+      <div class="pp-note">${badge ? `${ppEsc(badge.label)} · ` : ''}${ctx.count ?? 0} of 8 signals · vs ${ppEsc(r.pitName || 'TBD')} (${pitHand}HP) · <span style="color:${platoonColor}">${ppEsc(platoon)}</span>${b.k_pct >= 28 ? ` · <span style="color:var(--red)">K rate ${b.k_pct.toFixed(0)}%</span>` : ''}</div></div>
+    <div class="pp-section"><div class="pp-t">What moves the number (percentage points)</div>${ppFactorChart(fs)}</div>
+    <div class="pp-section"><div class="pp-t">Last 10 games: total bases, home runs marked</div>${streak.gameLog?.length ? ppGameLogChart(streak.gameLog) : '<div class="pp-note">Game log loading…</div>'}</div>
+    <div class="pp-section"><div class="pp-t">His pitch mix vs this batter (xwOBA)</div>${pitchBreakdown.length ? ppPitchChart(pitchBreakdown) : '<div class="pp-note">No pitch matchup data yet</div>'}</div>
+    ${realSplit ? `<div class="pp-section"><div class="pp-t">Platoon split</div>${ppPlatoonChart(SPLITS[r.name], pitHand)}</div>` : ''}
+    <div class="pp-section"><div class="pp-t">Signals</div>${sigRows || '<div class="pp-note">Signals loading…</div>'}</div>
+    <div class="pp-section"><div class="pp-t">Other props today</div>
+      <div class="pp-kv four"><div><div class="k">1+ hit</div><div class="v" id="pm-p-hit">—</div></div><div><div class="k">2+ total bases</div><div class="v" id="pm-p-tb">—</div></div><div><div class="k">1+ RBI</div><div class="v" id="pm-p-rbi">—</div></div><div><div class="k">1+ run</div><div class="v" id="pm-p-run">—</div></div></div></div>
+    <div class="pp-section"><div class="pp-t">Career vs ${ppEsc(r.pitName || 'this pitcher')}</div><div id="pm-h2h-inline" class="pp-note">Loading…</div></div>
+    </div>`;
+}
+
+// One shared hover tooltip for every panel chart.
+const ppTip = Object.assign(document.createElement('div'), { id: 'pp-tip' });
+document.body.appendChild(ppTip);
+document.addEventListener('scroll', () => ppTip.classList.remove('on'), true);
+document.addEventListener('mousemove', e => {
+  const el = e.target.closest && e.target.closest('[data-pp-tip]');
+  if (!el) { ppTip.classList.remove('on'); return; }
+  ppTip.innerHTML = el.getAttribute('data-pp-tip');
+  ppTip.classList.add('on');
+  const r = ppTip.getBoundingClientRect();
+  let x = e.clientX + 14, yy = e.clientY + 14;
+  if (x + r.width > innerWidth - 8) x = e.clientX - r.width - 14;
+  if (yy + r.height > innerHeight - 8) yy = e.clientY - r.height - 14;
+  ppTip.style.left = `${Math.max(8, x)}px`; ppTip.style.top = `${Math.max(8, yy)}px`;
+});
+
 function closePlayerModal() {
   document.getElementById('player-modal').style.display = 'none';
   document.body.style.overflow = '';
@@ -5594,10 +5809,10 @@ function openPlayerModal(name) {
   const batterId = STREAK_ID_CACHE[r.name] || null;
   const hsId = `pm-headshot-${Date.now()}`;
   const headshotHtml = `
-    <div id="${hsId}" style="width:72px;height:72px;border-radius:50%;background:var(--bg3);border:2px solid var(--teal);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden">
+    <div id="${hsId}" style="width:56px;height:56px;border-radius:50%;background:var(--bg3);border:1px solid var(--bd2);display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0;overflow:hidden">
       ${batterId
         ? `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${batterId}/headshot/67/current"
-            style="width:72px;height:72px;object-fit:cover"
+            style="width:56px;height:56px;object-fit:cover"
             onload="this.parentElement.style.fontSize='0'"
             onerror="this.remove()">`
         : '⚾'}
@@ -5731,196 +5946,12 @@ function openPlayerModal(name) {
     return `padding:7px 14px;border-radius:20px 20px 0 0;font-family:var(--mono);font-size:11px;font-weight:700;cursor:pointer;border:1px solid ${isOn?'rgba(45,212,191,0.35)':'transparent'};border-bottom:none;background:${isOn?'rgba(45,212,191,0.12)':'transparent'};color:${isOn?'var(--teal)':'var(--t3)'}`;
   };
 
-  document.getElementById('pm-body').innerHTML = `
-    <!-- Hero: HR probability + percentile vs today's slate -->
-    <div style="padding:16px 16px 14px;border-bottom:1px solid var(--bd);display:flex;align-items:center;gap:18px;flex-wrap:wrap">
-      <div style="flex-shrink:0">
-        <div style="font-size:34px;font-weight:700;font-family:var(--mono);color:${hc};line-height:1">${r.hrp.toFixed(1)}%</div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:4px">HR Probability</div>
-        <div style="margin-top:6px">${ciBadge(r.hrp, b.pa||0)}</div>
-      </div>
-      <div style="flex-grow:1;min-width:180px">
-        ${hrpPct===null ? '' : `
-        <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:4px">
-          <span>vs today's slate</span>
-          <span style="color:${hc};font-weight:700">Top ${100-hrpPct}%</span>
-        </div>
-        <div style="height:6px;background:var(--bd);border-radius:3px;overflow:hidden">
-          <div style="width:${hrpPct}%;height:100%;background:linear-gradient(90deg,var(--teal),${hc})"></div>
-        </div>`}
-      </div>
-    </div>
-
-    <!-- KPI row — real percentiles vs today's field, not bare numbers -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--bd)">
-      <div style="background:var(--bg2);padding:11px 12px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${r.barrel?.toFixed(1)||'—'}%</div>
-          ${barrelPct===null?'':`<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${barrelPct}th pct</div>`}
-        </div>
-        ${barrelPct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${barrelPct}%;height:100%;background:var(--teal)"></div></div>`}
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:5px">Barrel % · EV ${r.ev?.toFixed(1)||'—'}</div>
-      </div>
-      <div style="background:var(--bg2);padding:11px 12px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--t1)">${r.iso?.toFixed(3)||'—'}</div>
-          ${isoPct===null?'':`<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${isoPct}th pct</div>`}
-        </div>
-        ${isoPct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${isoPct}%;height:100%;background:var(--teal)"></div></div>`}
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:5px">ISO · xwOBA ${r.xwoba?.toFixed(3)||'—'}</div>
-      </div>
-      <div style="background:var(--bg2);padding:11px 12px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${streak.flame?'var(--amber)':'var(--t1)'}">${streak.hr||0} HR</div>
-          ${l20Pct===null?'':`<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${l20Pct}th pct</div>`}
-        </div>
-        ${l20Pct===null?'':`<div style="height:4px;background:var(--bd);border-radius:2px;margin-top:5px;overflow:hidden"><div style="width:${l20Pct}%;height:100%;background:var(--amber)"></div></div>`}
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:5px">Last 20 PA${streak.avg?' · .'+Math.round(streak.avg*1000).toString().padStart(3,'0'):''}</div>
-      </div>
-    </div>
-
-    <!-- Recent form — last 8 games at a glance -->
-    <div style="padding:10px 14px 0;display:flex;align-items:center;gap:5px;overflow-x:auto;-webkit-overflow-scrolling:touch">
-      <span style="font-size:11px;font-family:var(--mono);color:var(--t3);flex-shrink:0;margin-right:2px">Form</span>
-      ${streak.gameLog?.length ? streak.gameLog.slice(0,8).map(g=>formBlock(g)).join('') : '<span style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</span>'}
-    </div>
-
-    <!-- Signal icons — kept as a compact strip -->
-    <div class="pm-signals">
-      ${signalPanel(r, false)}
-      ${kHTML}
-      ${parkBadge(r.name, false)}
-    </div>
-
-    <!-- Tabs replace the flat 6-cell grid — one section visible at a time -->
-    <div style="padding:10px 14px 0;display:flex;gap:6px;border-bottom:1px solid var(--bd)">
-      <button onclick="_pmTab='matchup';openPlayerModal('${escName}')" style="${tabBtnStyle('matchup')}">Matchup</button>
-      <button onclick="_pmTab='pitchedge';openPlayerModal('${escName}')" style="${tabBtnStyle('pitchedge')}">⚔️ Pitch Edge</button>
-      <button onclick="_pmTab='contact';openPlayerModal('${escName}')" style="${tabBtnStyle('contact')}">Contact Profile</button>
-      <button onclick="_pmTab='environment';openPlayerModal('${escName}')" style="${tabBtnStyle('environment')}">Environment</button>
-    </div>
-
-    <div style="display:${_pmTab==='matchup'?'block':'none'}">
-      <div style="padding:14px 16px">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;gap:8px">
-          <div style="font-size:11.5px;font-family:var(--mono);color:var(--t3)">vs ${r.pitName||'—'} (${pitHand}HP)</div>
-          <div style="font-size:12px;font-weight:700;font-family:var(--mono);color:${vulnColor};white-space:nowrap">${vulnVerdict}</div>
-        </div>
-        <div style="height:6px;border-radius:3px;background:linear-gradient(90deg,var(--red),var(--amber),var(--green));position:relative">
-          <div style="position:absolute;top:-3px;left:${vulnPct}%;width:3px;height:12px;background:var(--t1);border-radius:2px"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:4px;margin-bottom:12px">
-          <span>Tough (ace)</span><span>Favorable (vulnerable)</span>
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
-          <span style="background:var(--bg3);border:1px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:11.5px;color:var(--t2)">xERA <strong style="color:var(--t1)">${(pit.xera||pit.era||4.5).toFixed(2)}</strong></span>
-          <span style="background:var(--bg3);border:1px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:11.5px;color:var(--t2)">HR/9 <strong style="color:var(--t1)">${(pit.hr9||1.2).toFixed(2)}</strong></span>
-          <span style="background:var(--bg3);border:1px solid rgba(255,255,255,0.11);border-radius:4px;padding:4px 9px;font-family:var(--mono);font-size:11.5px;color:var(--t2)">Whiff <strong style="color:var(--t1)">${(pit.whiff||22).toFixed(1)}%</strong></span>
-        </div>
-        <div style="border-top:0.5px dashed rgba(255,255,255,0.12);padding-top:10px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-          <span style="font-size:11.5px;font-weight:700;font-family:var(--mono);padding:3px 9px;border-radius:4px;background:${platoonColor==='var(--green)'?'rgba(74,222,128,.10)':platoonColor==='var(--red)'?'rgba(248,113,113,.10)':'var(--bg3)'};color:${platoonColor};border:1px solid ${platoonColor==='var(--green)'?'rgba(74,222,128,.25)':platoonColor==='var(--red)'?'rgba(248,113,113,.25)':'rgba(255,255,255,0.11)'}">${platoon}</span>
-          ${platoonChips ? platoonChips.map(c=>`<span style="background:var(--bg3);border:1px solid rgba(255,255,255,0.11);border-radius:4px;padding:3px 8px;font-family:var(--mono);font-size:11px;color:var(--t2)">${c}</span>`).join('') : `<span style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading splits…</span>`}
-        </div>
-        <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--bd)">
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:6px">H2H vs ${r.pitName||'—'} (Career)</div>
-          <div id="pm-h2h-inline" style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading…</div>
-        </div>
-      </div>
-    </div>
-
-    <div style="display:${_pmTab==='pitchedge'?'block':'none'}">
-      <div style="padding:14px 16px">
-        ${!pitArsenalFull ? `<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">Loading pitch data…</div>`
-          : pitchBreakdown.length === 0 ? `<div style="font-size:11px;font-family:var(--mono);color:var(--t3)">No pitch matchup data available</div>`
-          : `${bestPitchEdge ? `<div style="background:rgba(52,211,153,.06);border:1px solid rgba(52,211,153,.2);border-radius:6px;padding:8px 10px;margin-bottom:12px">
-              <div style="font-size:11px;font-family:var(--mono);color:var(--green);margin-bottom:2px">⚔️ ${bestPitchEdge.pitchName} (${bestPitchEdge.pitchUsage.toFixed(0)}% usage)</div>
-              <div style="font-size:12px;font-family:var(--mono);color:var(--t1)">xwOBA <strong style="color:var(--green)">.${Math.round(bestPitchEdge.xwoba*1000)}</strong> vs ${bestPitchEdge.pitchName}</div>
-            </div>` : ''}
-            ${pitchBreakdown.map(p => {
-              const barPct = p.xwoba !== null ? Math.min(100, Math.max(0, ((p.xwoba-0.200)/0.250)*100)) : null;
-              const isEdge = p.xwoba !== null && p.xwoba >= 0.360;
-              const isWeak = p.xwoba !== null && p.xwoba <= 0.260;
-              const barColor = isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--bd)';
-              const xwobaDisplay = p.xwoba !== null ? '.'+Math.round(p.xwoba*1000).toString().padStart(3,'0') : 'N/A';
-              const xwobaC = p.noData ? 'var(--t3)' : isEdge ? 'var(--green)' : isWeak ? 'var(--red)' : 'var(--t3)';
-              return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-                <div style="width:78px;flex-shrink:0">
-                  <div style="font-size:11.5px;font-weight:700;font-family:var(--mono);color:var(--t2)">${p.pitchName}</div>
-                  <div style="font-size:11px;font-family:var(--mono);color:var(--t3)">${p.pitchUsage.toFixed(0)}%${p.noData?' · no data':''}</div>
-                </div>
-                <div style="flex-grow:1;background:var(--bg3);border-radius:3px;height:7px;overflow:hidden">
-                  ${barPct!==null?`<div style="height:100%;border-radius:3px;background:${barColor};width:${barPct}%"></div>`:''}
-                </div>
-                <div style="width:42px;flex-shrink:0;text-align:right;font-size:11.5px;font-weight:700;font-family:var(--mono);color:${xwobaC}">${xwobaDisplay}</div>
-              </div>`;
-            }).join('')}`
-        }
-      </div>
-    </div>
-
-    <div style="display:${_pmTab==='contact'?'block':'none'}">
-      <div style="padding:14px 16px">
-        <div style="display:flex;gap:24px;margin-bottom:12px;flex-wrap:wrap">
-          <div>
-            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:var(--teal)">${b.pull_pct?b.pull_pct.toFixed(0)+'%':'—'}</div>
-            <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:2px">🏏 Pull rate</div>
-          </div>
-          <div>
-            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${b.sweet_spot_pct>=38?'var(--green)':b.sweet_spot_pct<=28?'var(--red)':'var(--t1)'}">${b.sweet_spot_pct?b.sweet_spot_pct.toFixed(0)+'%':'—'}</div>
-            <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:2px">Sweet spot</div>
-          </div>
-          <div>
-            <div style="font-size:18px;font-weight:700;font-family:var(--mono);color:${b.ev50>=98?'var(--green)':b.ev50<=89?'var(--red)':'var(--t1)'}">${b.ev50?.toFixed(1)||'—'}</div>
-            <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:2px">EV50</div>
-          </div>
-        </div>
-        <div style="font-size:11px;font-family:var(--mono);color:var(--t2);line-height:1.6">
-          FB ${b.fb_pct?.toFixed(0)||'—'}% · GB ${b.gb_pct?.toFixed(0)||'—'}%${pullNote}
-        </div>
-      </div>
-    </div>
-
-    <div style="display:${_pmTab==='environment'?'block':'none'}">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--bd)">
-        <div style="background:var(--bg2);padding:14px 16px">
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:8px">Park</div>
-          <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:${(pk.f||1)>=1.05?'var(--green)':(pk.f||1)<=0.95?'var(--red)':'var(--t1)'};margin-bottom:6px">${parkEdge}</div>
-          <div style="font-size:11.5px;font-family:var(--mono);color:var(--t3);line-height:1.6">${pk.name||'—'} · ${pk.elev||0}ft elev${parkHistHTML}</div>
-        </div>
-        <div style="background:var(--bg2);padding:14px 16px">
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:8px">Weather</div>
-          <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:${windOut?'var(--teal)':'var(--t1)'};margin-bottom:6px">${windEdge}</div>
-          <div style="font-size:11.5px;font-family:var(--mono);color:var(--t3);line-height:1.6">${w.t?Math.round(w.t)+'°F':'—'} · ${pk.roof==='dome'?'Dome':'Open air'}</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- HITTING PROPS -->
-    <div style="border-top:1px solid rgba(255,255,255,0.10);padding:14px 16px">
-      <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-bottom:10px">Prop Probabilities · Today</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px" id="pm-props">
-        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--green)" id="pm-p-hit">—</div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:3px">1+ Hit</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--teal)" id="pm-p-tb">—</div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:3px">2+ Total Bases</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--amber)" id="pm-p-rbi">—</div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:3px">1+ RBI</div>
-        </div>
-        <div style="background:var(--bg3);border-radius:6px;padding:10px 12px;text-align:center">
-          <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--purple)" id="pm-p-run">—</div>
-          <div style="font-size:11px;font-family:var(--mono);color:var(--t3);margin-top:3px">1+ Run</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- H2H -->
-    <!-- H2H shown in grid cell above -->
-  `;
+  const sigState = getSignalsLocked(r);
+  document.getElementById('pm-body').innerHTML = hrPlayerPanel(r, {
+    b, pk, w, pit, streak, badge, hrpPct, barrelPct, isoPct, l20Pct, pitchBreakdown, bestPitchEdge,
+    realSplit, pitHand, platoon, platoonColor, windOut,
+    signals: sigState.signals, count: sigState.count, ci: sigState.ci,
+  });
 
   document.getElementById('player-modal').style.display = 'block';
   document.getElementById('player-modal').scrollTop = 0;
@@ -5943,7 +5974,7 @@ function openPlayerModal(name) {
       const el = document.getElementById(hsId);
       if (el) {
         el.innerHTML = `<img src="https://img.mlbstatic.com/mlb-photos/image/upload/d_people:generic:headshot:67:current.png/w_120,q_auto:best/v1/people/${id}/headshot/67/current"
-          style="width:72px;height:72px;object-fit:cover"
+          style="width:56px;height:56px;object-fit:cover"
           onload="this.parentElement.style.fontSize='0'"
           onerror="this.remove()">`;
       }
