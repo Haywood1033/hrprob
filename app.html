@@ -554,6 +554,10 @@ tbody tr:hover td{background:var(--bg2)}
 .pp-split .on .bar i{background:var(--s1)}
 .pp-signal{display:grid;grid-template-columns:150px 1fr;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid var(--bd)}
 .pp-signal:last-child{border-bottom:0}
+.pp-signal.off p{color:var(--t3)}
+.pp-signal.off .pp-tag{opacity:.7}
+.pp-sig-h{font-size:12px;font-weight:600;color:var(--green);margin:4px 0 2px}
+.pp-sig-h.off{color:var(--t3);margin-top:16px}
 .pp-signal p{font-size:12.5px;color:var(--t2);line-height:1.5}
 .pp-tag{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:4px;font-size:11.5px;font-weight:600;white-space:nowrap;color:var(--t3);border:1px solid var(--bd2)}
 .pp-tag.on{color:var(--green);border-color:rgba(74,222,128,.3);background:rgba(74,222,128,.1)}
@@ -5728,7 +5732,11 @@ function hrPlayerPanel(r, ctx) {
   ];
   // Same fixed order in live and locked signals; label by position so both read the same.
   const PP_SIG = ['Hitter Park', 'Wind Out', 'Pitcher Matchup', 'Hot Streak', 'Confidence', 'Pull Air Edge', 'Pitch Edge', 'Hot Contact'];
-  const sigRows = (signals || []).map((s, i) => { const lbl = PP_SIG[i] || s.label; return `<div class="pp-signal"><span class="pp-tag ${s.active ? 'on' : ''}">${s.active ? '✓' : '·'} ${ppEsc(lbl)}</span><p>${ppEsc(ppSignalReason(lbl, ctx))}</p></div>`; }).join('');
+  const sigRow = ({ s, lbl }) => `<div class="pp-signal${s.active ? '' : ' off'}"><span class="pp-tag ${s.active ? 'on' : ''}">${s.active ? '✓' : '·'} ${ppEsc(lbl)}</span><p>${ppEsc(ppSignalReason(lbl, ctx))}</p></div>`;
+  const sigAll = (signals || []).map((s, i) => ({ s, lbl: PP_SIG[i] || s.label }));
+  const sigOn = sigAll.filter(x => x.s.active), sigOff = sigAll.filter(x => !x.s.active);
+  const sigRows = sigAll.length ? `<div class="pp-sig-h">Firing · ${sigOn.length} of ${sigAll.length}</div>${sigOn.map(sigRow).join('') || '<div class="pp-note">None today</div>'}
+    ${sigOff.length ? `<div class="pp-sig-h off">Not firing</div>${sigOff.map(sigRow).join('')}` : ''}` : '';
   return `
     <div class="pp-body">
     <div class="pp-section"><div class="pp-kv">${tiles.map(([k, v, s]) => `<div><div class="k">${k}</div><div class="v">${v}${s}</div></div>`).join('')}</div>
@@ -5907,8 +5915,8 @@ function openPlayerModal(name) {
   // Pitch-type edge — was previously duplicated on a standalone Edge tab;
   // now lives only here, scoped to this matchup.
   const PITCH_NAMES = {
-    FF:'4-Seam FB', SI:'2-Seam FB', SL:'Slider', CU:'Curveball', CH:'Changeup',
-    CT:'Cutter', FS:'Splitter', ST:'Sweeper', KC:'Knuckle Curve', SV:'Slurve', FA:'Fastball',
+    FF:'4-Seam', SI:'Sinker', SL:'Slider', CU:'Curveball', CH:'Changeup',
+    FC:'Cutter', CT:'Cutter', FS:'Splitter', ST:'Sweeper', KC:'Knuckle Curve', SV:'Slurve', FA:'Fastball',
   };
   const pitArsenalFull = PITCHER_ARSENAL[r.pitName] || PITCHER_ARSENAL[normName(r.pitName)];
   const batVsPitchFull = BATTER_VS_PITCH[r.name] || BATTER_VS_PITCH[normName(r.name)];
