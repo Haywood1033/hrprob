@@ -2012,7 +2012,17 @@ async function saveToHistory() {
           hrp:      +r.hrp.toFixed(1),
           tier:     r.hrp>=20?'20%+':r.hrp>=15?'15-19%':r.hrp>=10?'10-14%':'5-9%',
           bookOdds: r.bookOdds||null,
+          // Why this row is in the tracked set. The set is top 40 by
+          // probability plus 4+ signal plays, so tier hit rates are for a
+          // selected group; 'sel' lets the two be read separately.
+          sel:      top40Names.has(r.name)?'top40':'signal',
+          raw:      r.hrpRaw!=null?+r.hrpRaw.toFixed(1):null,
+          order:    r.order, gamePk: r.gamePk,
+          confirmed: r.source==='confirmed',
         })),
+        // Every batter on the slate with the inputs the model saw, stored
+        // in its own table so the model can be refit and re-graded later.
+        features: buildFeatureLog(),
         signalLock: SIGNAL_LOCK,
         // Save today's game leans for accuracy tracking
         gameLeans: games.map(g => {
@@ -2055,6 +2065,32 @@ async function saveToHistory() {
   } catch(e) {
     console.warn('History save failed:', e.message);
   }
+}
+
+// One row per batter on today's slate: the model's inputs and outputs as
+// they stood at save time. Unlike `predictions` this is the whole slate,
+// not a selected subset, so it can be graded without selection bias.
+function buildFeatureLog() {
+  const best = new Map();
+  for (const r of allRows) if (!best.has(r.name) || r.hrp > best.get(r.name).hrp) best.set(r.name, r);
+  const n = v => (v == null || Number.isNaN(+v)) ? null : +(+v).toFixed(3);
+  return [...best.values()].map(r => {
+    const b = getBatter(r.name) || {}, pit = r.pit || {}, wx = r.wx || {}, park = r.park || {};
+    const sig = getSignalsLocked(r);
+    return {
+      name: r.name, team: r.team, gamePk: r.gamePk, order: r.order, bats: r.bats,
+      confirmed: r.source === 'confirmed',
+      hrp: n(r.hrp), raw: n(r.hrpRaw), odds: r.bookOdds || null,
+      signals: (sig.signals || []).filter(x => x.active).map(x => x.key),
+      b: { pa: n(b.pa), ba: n(b.ba), ev: n(b.ev), xw: n(b.xw), iso: n(b.iso), hh: n(b.hh), la: n(b.la),
+           pull: n(b.pull_pct), fb: n(b.fb_pct), gb: n(b.gb_pct), bb: n(b.bb_pct), whiff: n(b.whiff_pct), ss: n(b.sweet_spot_pct) },
+      p: { name: r.pitName || pit.name || null, hand: pit.hand || null, xera: n(pit.xera), hr9: n(pit.hr9),
+           hh: n(pit.hh), whiff: n(pit.whiff), gb: n(pit.gb_pct) },
+      park: { f: n(park.f), roof: park.roof || null },
+      wx: { t: n(wx.t), ws: n(wx.ws), wd: n(wx.wd), pres: n(wx.pres), hum: n(wx.hum) },
+      flame: STREAK[r.name]?.flame || '',
+    };
+  });
 }
 
 // Load history records from API
@@ -2101,8 +2137,12 @@ async function autoFetchResults() {
   const etStr = new Date().toLocaleString('en-US',{timeZone:'America/New_York'});
   const today = new Date(etStr).toLocaleDateString('en-CA');
 
-  // Find ALL records without results
-  const missing = historyRecords.filter(r => r.date < today && !r.resultsAdded);
+  // Records without results, plus a few per visit that were graded under
+  // the old rules (players who never batted counted as misses) and need
+  // regrading. Capped so one page load never fans out into dozens of calls.
+  const ungraded = historyRecords.filter(r => r.date < today && !r.resultsAdded);
+  const stale    = historyRecords.filter(r => r.date < today && r.resultsAdded && (r.gradeV||1) < 2 && r.predictions?.length).slice(0, 4);
+  const missing  = [...ungraded, ...stale];
   if (!missing.length) return;
 
   let anyUpdated = false;
@@ -2111,9 +2151,10 @@ async function autoFetchResults() {
       const r = await fetch('/api/history', {
         method: 'POST',
         headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ action: 'results', date: record.date })
+        body: JSON.stringify({ action: 'results', date: record.date, force: !!record.resultsAdded })
       });
       const d = await r.json();
+      if (d.retry) continue; // box scores not all in yet -- try again next visit
       if (d.ok || d.alreadyAdded) {
         anyUpdated = true;
       } else if (r.status === 404) {
@@ -2816,10 +2857,10 @@ function renderHistory() {
           if(!ps.length) return '';
           return `<div style="font-size:11.5px;font-family:var(--mono);color:var(--t3);padding:4px 0;border-bottom:1px solid var(--bg3)">${tier}</div>`+
           ps.map(p=>`<div class="hday-row">
-            <div class="hrow-name" style="color:${p.hit===true?'var(--green)':p.hit===false?'var(--t3)':'var(--t2)'}">${p.name} <span style="color:var(--t3)">(${p.team})</span></div>
+            <div class="hrow-name" style="color:${(p.hit===1||p.hit===true)?'var(--green)':(p.hit===0||p.hit===false)?'var(--t3)':'var(--t2)'}">${p.name} <span style="color:var(--t3)">(${p.team})</span></div>
             <div class="hrow-prob">${p.hrp}%</div>
-            <div class="hrow-result" style="color:${p.hit===true?'var(--green)':p.hit===false?'var(--red)':'var(--t3)'}">
-              ${p.hit===true?'✓ HR':p.hit===false?'✗':'—'}
+            <div class="hrow-result" style="color:${(p.hit===1||p.hit===true)?'var(--green)':(p.hit===0||p.hit===false)?'var(--red)':'var(--t3)'}">
+              ${(p.hit===1||p.hit===true)?'✓ HR':(p.hit===0||p.hit===false)?'✗':p.dnp?'did not bat':'—'}
             </div>
           </div>`).join('');
         }).join('')}
@@ -3271,7 +3312,7 @@ function rebuild(){
       batters.forEach((p,i)=>{
         const bs = {...(getBatter(p.name)||{ev:88.5,ba:8,hh:37,xw:0.310,iso:0.150,pa:0})};
         const canonName = (!p.name.includes('Jr.') && BATTER[p.name+' Jr.']) ? p.name+' Jr.' : p.name;
-        bs._name=canonName; const hrp=hrProbWithStreak(bs,park,wx,pit,p.battingOrder||(i+1));
+        bs._name=canonName; const hrpRaw=hrProbUncalibrated(bs,park,wx,pit,p.battingOrder||(i+1)); const hrp=Math.min(35,calibrateHR(hrpRaw));
         const bookOdds = HR_ODDS[p.name] || null;
         const ev = calcEV(hrp, bookOdds);
         const gameOdds = GAME_ODDS[g.away+'@'+g.home] || null;
@@ -3282,7 +3323,7 @@ function rebuild(){
           _name:canonName,
           _team:team,
           ev:bs.ev||88.5,barrel:bs.ba||8,hh:bs.hh||37,
-          xwoba:bs.xw||0.310,iso:bs.iso||0.150,hrp,
+          xwoba:bs.xw||0.310,iso:bs.iso||0.150,hrp,hrpRaw,
           park,wx,pit,
           pitName:g.home===team?g.ap.name:g.hp.name,
           time:g.time,game:g,gamePk:g.pk,

@@ -9,7 +9,37 @@ async function query(text, params) {
   finally { client.release(); }
 }
 
-module.exports = async function handler(req, res) {
+// Names differ between sources in accents, punctuation and suffixes
+// ("Ronald Acuña Jr." vs "Ronald Acuna Jr"), so compare a normalised form.
+function normName(n) {
+  return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[.'`’]/g, '').replace(/\b(jr|sr|ii|iii|iv)\b/g, '').replace(/[^a-z ]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+// A game only counts toward grading once it is final. Postponed and
+// cancelled games are settled (nobody batted); anything else is pending.
+function gameState(g) {
+  const s = g.status || {};
+  if (s.codedGameState === 'F' || s.codedGameState === 'O' || s.abstractGameState === 'Final') {
+    return /postponed|cancel/i.test(s.detailedState || '') ? 'off' : 'final';
+  }
+  if (/postponed|cancel|suspended/i.test(s.detailedState || '')) return 'off';
+  return 'pending';
+}
+
+// played: normName -> { hr, pa } for everyone who came to the plate.
+// A prediction is a hit or a miss only if the player batted; otherwise it
+// is void (hit: null, dnp: true) and stays out of every hit rate.
+function gradeRow(p, played) {
+  const line = played.get(normName(p.name));
+  if (!line) return { ...p, hit: null, dnp: true };
+  const { dnp, ...rest } = p;
+  return { ...rest, hit: line.hr > 0 ? 1 : 0, pa: line.pa };
+}
+
+const GRADE_VERSION = 2;
+
+async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   // This serves the signal lock (mutable, must reflect the latest DB write
@@ -34,15 +64,38 @@ module.exports = async function handler(req, res) {
     `);
     await query(`ALTER TABLE daily_predictions ADD COLUMN IF NOT EXISTS signal_lock JSONB`);
     await query(`ALTER TABLE daily_predictions ADD COLUMN IF NOT EXISTS game_leans JSONB`);
+    await query(`ALTER TABLE daily_predictions ADD COLUMN IF NOT EXISTS grade_v INT DEFAULT 1`);
+    // Full-slate model inputs, one row per date. Kept out of
+    // daily_predictions so the history GET stays small.
+    await query(`
+      CREATE TABLE IF NOT EXISTS prediction_features (
+        date      VARCHAR(10) PRIMARY KEY,
+        rows      JSONB,
+        graded    BOOLEAN DEFAULT FALSE,
+        saved_at  TIMESTAMP DEFAULT NOW()
+      )
+    `);
 
     if (req.method === 'GET') {
+      // ?features=YYYY-MM-DD -> that date's full feature log;
+      // ?features=index -> which dates have one.
+      const fq = req.query?.features;
+      if (fq === 'index') {
+        const { rows } = await query(`SELECT date, graded, jsonb_array_length(rows) AS n FROM prediction_features ORDER BY date DESC`);
+        return res.status(200).json({ dates: rows });
+      }
+      if (fq) {
+        const { rows } = await query(`SELECT date, rows, graded FROM prediction_features WHERE date=$1`, [fq]);
+        if (!rows[0]) return res.status(404).json({ error: 'No feature log for ' + fq });
+        return res.status(200).json(rows[0]);
+      }
       const { rows } = await query(`SELECT * FROM daily_predictions ORDER BY date DESC LIMIT 200`);
       return res.status(200).json({
         records: rows.map(r => ({
           date: r.date, predictions: r.predictions,
           signalLock: r.signal_lock,
           gameLeans: r.game_leans,
-          resultsAdded: r.results_added, summary: r.summary,
+          resultsAdded: r.results_added, gradeV: r.grade_v || 1, summary: r.summary,
           savedAt: r.saved_at, fetchedAt: r.fetched_at,
         })),
         count: rows.length,
@@ -51,7 +104,7 @@ module.exports = async function handler(req, res) {
 
     if (req.method === 'POST') {
       const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-      const { action, date, predictions, signalLock, gameLeans } = body;
+      const { action, date, predictions, signalLock, gameLeans, features, force } = body;
 
       if (action === 'save_leans') {
         if (!date || !gameLeans?.length) return res.status(400).json({ error: 'Missing date or gameLeans' });
@@ -79,6 +132,12 @@ module.exports = async function handler(req, res) {
       if (action === 'save') {
         if (!date || !predictions?.length)
           return res.status(400).json({ error: 'Missing date or predictions' });
+
+        // First write wins, same as predictions: the log is a pre-game snapshot.
+        if (Array.isArray(features) && features.length) {
+          await query(`INSERT INTO prediction_features (date, rows) VALUES ($1, $2::jsonb) ON CONFLICT (date) DO NOTHING`,
+            [date, JSON.stringify(features)]);
+        }
 
         const existing = await query(`SELECT results_added, saved_at, predictions FROM daily_predictions WHERE date=$1`, [date]);
         if (existing.rows[0]) {
@@ -114,7 +173,7 @@ module.exports = async function handler(req, res) {
         const { rows } = await query(`SELECT * FROM daily_predictions WHERE date=$1`, [date]);
         const record = rows[0];
         if (!record) return res.status(404).json({ error: 'No predictions for ' + date });
-        if (record.results_added) return res.status(200).json({ ok: true, record: {
+        if (record.results_added && !force) return res.status(200).json({ ok: true, record: {
           ...record,
           predictions: record.predictions,
           gameLeans: record.game_leans,
@@ -132,8 +191,11 @@ module.exports = async function handler(req, res) {
         );
         if (!mlbR.ok) return res.status(502).json({ error: 'MLB API error' });
 
-        const games = (await mlbR.json()).dates?.[0]?.games || [];
-        const hrPlayers = new Set();
+        const allGames = (await mlbR.json()).dates?.[0]?.games || [];
+        const games = allGames.filter(g => gameState(g) === 'final');
+        const pending = allGames.filter(g => gameState(g) === 'pending').length;
+        const played = new Map();   // normName -> { hr, pa }
+        let failed = 0;
         const gameResults = {}; // gamePk → { winner, awayScore, homeScore, awayF5, homeF5, firstInningRuns }
 
         await Promise.allSettled(games.map(async g => {
@@ -141,13 +203,20 @@ module.exports = async function handler(req, res) {
             // Get box score for HR data
             const gr = await fetch(`https://statsapi.mlb.com/api/v1/game/${g.gamePk}/boxscore`,
               { headers: { 'User-Agent': 'Mozilla/5.0' } });
-            if (!gr.ok) return;
+            if (!gr.ok) { failed++; return; }
             const gd = await gr.json();
 
-            // HR players
+            // Everyone who came to the plate, with their HR count. Summed
+            // across games so a doubleheader counts as one day.
             for (const side of ['away','home'])
-              for (const p of Object.values(gd.teams?.[side]?.players||{}))
-                if ((p.stats?.batting?.homeRuns||0) > 0) hrPlayers.add(p.person?.fullName);
+              for (const p of Object.values(gd.teams?.[side]?.players||{})) {
+                const bat = p.stats?.batting || {};
+                const pa = bat.plateAppearances || 0;
+                if (pa < 1) continue;
+                const key = normName(p.person?.fullName);
+                const cur = played.get(key) || { hr: 0, pa: 0 };
+                played.set(key, { hr: cur.hr + (bat.homeRuns||0), pa: cur.pa + pa });
+              }
 
             // Game score + winner
             const awayScore = gd.teams?.away?.teamStats?.batting?.runs ?? null;
@@ -181,12 +250,29 @@ module.exports = async function handler(req, res) {
               nrfi: firstInningRuns === 0,
               awayTeam, homeTeam,
             };
-          } catch(e) {}
+          } catch(e) { failed++; }
         }));
+
+        // A missing box score used to grade that whole game as misses and
+        // lock the date for good. Now the date stays open and the client
+        // retries -- unless it is over three days old, when whatever MLB
+        // has is taken as final so a dead game cannot block grading forever.
+        const ageDays = (Date.now() - new Date(date + 'T12:00:00Z').getTime()) / 864e5;
+        if ((failed > 0 || pending > 0) && ageDays < 3) {
+          return res.status(200).json({ ok: false, retry: true, date,
+            reason: `${failed} box score(s) failed, ${pending} game(s) not final` });
+        }
 
         // Update HR predictions
         const existing_preds = record.predictions || [];
-        const updated = existing_preds.map(p => ({ ...p, hit: hrPlayers.has(p.name) ? 1 : 0 }));
+        const updated = existing_preds.map(p => gradeRow(p, played));
+
+        // Grade the full-slate feature log the same way.
+        const feat = await query(`SELECT rows FROM prediction_features WHERE date=$1`, [date]);
+        if (feat.rows[0]?.rows) {
+          await query(`UPDATE prediction_features SET rows=$2::jsonb, graded=TRUE WHERE date=$1`,
+            [date, JSON.stringify(feat.rows[0].rows.map(p => gradeRow(p, played)))]);
+        }
 
         // Update game leans with results
         const updatedLeans = (record.game_leans || []).map(lean => {
@@ -230,17 +316,19 @@ module.exports = async function handler(req, res) {
         });
 
         const hits = updated.filter(p => p.hit === 1).length;
+        const graded = updated.filter(p => p.hit !== null).length;
+        const voided = updated.length - graded;
         const summary = updated.length > 0
-          ? `${hits}/${updated.length} HR · ${((hits/updated.length)*100).toFixed(1)}% hit rate`
+          ? `${hits}/${graded} HR · ${graded ? ((hits/graded)*100).toFixed(1) : '0.0'}% hit rate${voided ? ` · ${voided} did not bat` : ''}`
           : `No predictions saved for ${date}`;
 
         await query(`
           UPDATE daily_predictions
-          SET predictions=$2::jsonb, game_leans=$3::jsonb, results_added=TRUE, summary=$4, fetched_at=NOW()
+          SET predictions=$2::jsonb, game_leans=$3::jsonb, results_added=TRUE, summary=$4, fetched_at=NOW(), grade_v=$5
           WHERE date=$1
-        `, [date, JSON.stringify(updated), JSON.stringify(updatedLeans), summary]);
+        `, [date, JSON.stringify(updated), JSON.stringify(updatedLeans), summary, GRADE_VERSION]);
 
-        return res.status(200).json({ ok: true, date, summary, hits, total: updated.length,
+        return res.status(200).json({ ok: true, date, summary, hits, total: graded, voided,
           leanResults: updatedLeans.filter(l=>l.fgMLResult!==null||l.nrfiResult!==null).length });
       }
     }
@@ -248,4 +336,9 @@ module.exports = async function handler(req, res) {
     console.error('History API error:', e.message, e.stack);
     return res.status(500).json({ error: e.message });
   }
-};
+}
+
+module.exports = handler;
+module.exports.normName = normName;
+module.exports.gameState = gameState;
+module.exports.gradeRow = gradeRow;
