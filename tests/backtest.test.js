@@ -86,3 +86,26 @@ test('isotonicKnots: output is monotone and repairs an overconfident top end', (
   assert.ok(M.applyKnots(k, 0.26) < 0.20, 'top end is pulled down');
   assert.ok(M.applyKnots(k, 0.27) >= M.applyKnots(k, 0.20), 'never inverts the ranking');
 });
+
+test('aggregateDay: pull uses the 0.75-scaled spray angle (thirds of a 90-degree field)', () => {
+  // Raw hc_x/hc_y angles of 18 and 22 degrees to left field scale to 13.5
+  // and 16.5: only the second is in the pull third for a right-handed batter.
+  const at = deg => ({ hx: +(125.42 - Math.tan(deg * Math.PI / 180) * 100).toFixed(2), hy: 98.27 });
+  const bip = (batter, ab, stand, xy) => pitch({ date: '2026-04-01', batter, top: false, ab, stand, events: 'field_out',
+    description: 'hit_into_play', ls: 90, la: 10, lsa: 3, bb: 'line_drive', ...xy, xw: 0.3, wv: 0 });
+  const mirror = xy => ({ hx: +(250.84 - xy.hx).toFixed(2), hy: xy.hy });
+  const csv = [HEAD, bip(1, 1, 'R', at(18)), bip(2, 2, 'R', at(22)), bip(3, 3, 'L', mirror(at(22))), bip(4, 4, 'L', at(22))].join('\n');
+  const [g] = aggregateDay(parseCSV(csv));
+  assert.equal(g.batters[1].pull, 0); assert.equal(g.batters[1].sprayN, 1);
+  assert.equal(g.batters[2].pull, 1);
+  assert.equal(g.batters[3].pull, 1, 'left-handed batter pulls to right field');
+  assert.equal(g.batters[4].pull, 0, 'left field is the opposite field for a left-handed batter');
+});
+
+test('buildRows: roster bat side overrides the side seen in the game (switch hitters)', () => {
+  const days = [day('2026-04-01', 1, false)];
+  assert.equal(buildRows(days).find(x => x.batter === 1).b.bats, 'R');
+  const rows = buildRows(days, () => null, id => id === 1 ? 'S' : null);
+  assert.equal(rows.find(x => x.batter === 1).b.bats, 'S');
+  assert.equal(rows.find(x => x.batter === 2).b.bats, 'R', 'falls back to the game when the roster has no entry');
+});

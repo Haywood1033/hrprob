@@ -68,7 +68,11 @@ function addPitch(line, r) {
     const hx = num(r.hc_x), hy = num(r.hc_y);
     if (hx !== null && hy !== null) {
       // Spray angle: negative = left field. Pulled = RHB to left, LHB to right.
-      const ang = Math.atan2(hx - 125.42, 198.27 - hy) * 180 / Math.PI;
+      // The raw hc_x/hc_y angle runs wider than the 90-degree field; the
+      // standard 0.75 scale maps the foul lines to +/-45 so that thirds of
+      // the field (cut at +/-15) reproduce Savant's pull/straight/oppo split
+      // (~38/37/25 league-wide). Without it league pull% reads ~44%.
+      const ang = Math.atan2(hx - 125.42, 198.27 - hy) * 180 / Math.PI * 0.75;
       line.sprayN++;
       if ((r.stand === 'R' && ang < -15) || (r.stand === 'L' && ang > 15)) line.pull++;
     }

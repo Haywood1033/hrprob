@@ -28,7 +28,9 @@ function loadSeason(season) {
     .map(f => JSON.parse(fs.readFileSync(path.join(CACHE, 'days', f), 'utf8')));
   const wf = path.join(CACHE, `weather-${season}.json`);
   const wx = fs.existsSync(wf) ? JSON.parse(fs.readFileSync(wf, 'utf8')) : {};
-  return buildRows(days, pk => wx[pk]);
+  const pf = path.join(CACHE, 'people.json');
+  const people = fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : {};
+  return buildRows(days, pk => wx[pk], id => people[id]);
 }
 
 // Runs inside the app's sandbox so hrProb sees its own globals.
