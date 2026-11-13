@@ -3,9 +3,9 @@
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { parseCSV, aggregateDay } = require('../scripts/backtest/savant.js');
-const { buildRows, streakFeatures } = require('../scripts/backtest/features.js');
-const M = require('../scripts/backtest/metrics.js');
+const { parseCSV, aggregateDay } = require('../lib/backtest/savant.js');
+const { buildRows, streakFeatures } = require('../lib/backtest/features.js');
+const M = require('../lib/backtest/metrics.js');
 
 const HEAD = 'game_date,game_pk,batter,pitcher,player_name,events,description,stand,p_throws,home_team,away_team,inning_topbot,at_bat_number,pitch_number,launch_speed,launch_angle,launch_speed_angle,bb_type,hc_x,hc_y,estimated_woba_using_speedangle,woba_value,woba_denom,game_type';
 const pitch = (o) => [o.date, o.pk || 1, o.batter, o.pitcher || 900, '"Doe, John"', o.events || '', o.description || 'ball', o.stand || 'R', 'R', 'NYY', 'BOS',
@@ -108,4 +108,12 @@ test('buildRows: roster bat side overrides the side seen in the game (switch hit
   const rows = buildRows(days, () => null, id => id === 1 ? 'S' : null);
   assert.equal(rows.find(x => x.batter === 1).b.bats, 'S');
   assert.equal(rows.find(x => x.batter === 2).b.bats, 'R', 'falls back to the game when the roster has no entry');
+});
+
+test('packDay/unpackDay: database form round-trips to the same rows', () => {
+  const { packDay, unpackDay } = require('../lib/backtest/savant.js');
+  const days = [day('2026-04-01', 1, true), day('2026-04-02', 2, false)];
+  const viaDb = days.map(d => unpackDay(JSON.parse(JSON.stringify(packDay(d)))));
+  assert.deepEqual(buildRows(viaDb), buildRows(days));
+  assert.ok(JSON.stringify(packDay(days[0])).length < JSON.stringify(days[0]).length / 2);
 });
