@@ -1039,21 +1039,34 @@ function hrProb(b,park,wx,pit,order){
   p += Math.min(0.025, ((pk.elev||0) - 500) / 95000);
 
   // ── WEATHER ───────────────────────────────────────────────────
-  if (!['dome','retractable'].includes(pk.roof) && wx.ws) {
-    const o = pk.orient || 180;
-    const d = ((wx.wd - o) % 360 + 360) % 360;
-    // wx.wd is meteorological wind direction (where the wind comes FROM).
-    // orient is the home-plate-to-center-field bearing. Wind sourced from
-    // near that same bearing (d near 0) is blowing FROM center field
-    // TOWARD home plate — i.e. blowing IN, not out. Wind sourced from
-    // roughly the opposite bearing (d near 180, from behind home plate)
-    // is what carries fly balls OUT toward center field. This was
-    // inverted — d<45 was scored as "out" — since the wind feature was
-    // first added; see PR for the real-world case that surfaced it.
-    if      (d < 45  || d > 315) p -= wx.ws * 0.0007;   // in
-    else if (d > 135 && d < 225) p += wx.ws * 0.0009;   // out
-    // Temperature: ball travels further in heat
-    p += ((wx.t || 70) - 70) * 0.00022;
+  // Applies to open-air parks, and to a retractable park only when the
+  // roof is known to be open (wx.roofOpen === true). No data source
+  // reports roof state before first pitch yet, so retractable parks
+  // stay weather-neutral rather than guessing.
+  const openAir = wx && pk.roof !== 'dome' && (pk.roof !== 'retractable' || wx.roofOpen === true);
+  if (openAir) {
+    // Wind: continuous carry along the home-plate-to-center-field line.
+    // wx.wd is the meteorological direction (where the wind comes FROM)
+    // and orient is the plate-to-CF bearing, so a wind from the CF
+    // bearing (d = 0) blows straight IN and one from behind the plate
+    // (d = 180) blows straight OUT. -cos(d) is +1 out, -1 in, 0 across.
+    if (wx.ws > 0 && wx.wd != null && pk.orient != null) {
+      const d = ((wx.wd - pk.orient) % 360 + 360) % 360;
+      p += -Math.cos(d * Math.PI / 180) * wx.ws * 0.0008;
+    }
+    // Temperature: ball travels further in heat. Independent of wind --
+    // this used to sit inside the wind check and vanished on calm days.
+    if (wx.t != null) p += (wx.t - 70) * 0.00022;
+    // Air density beyond temperature. Sized against the temperature term:
+    // 10 hPa of pressure thins the air about as much as 5.3F of heat.
+    // Pressure is compared with the park's own standard pressure, because
+    // altitude is already priced in by the park factor and elevation bonus.
+    if (wx.pres != null) {
+      const stdPres = 1013.25 * Math.pow(1 - 2.25577e-5 * (pk.elev || 0) * 0.3048, 5.25588);
+      p += Math.max(-25, Math.min(25, stdPres - wx.pres)) * 0.000117;
+    }
+    // Humid air is slightly thinner: 50 points of humidity ~ 3F.
+    if (wx.hum != null) p += (wx.hum - 50) * 0.000013;
   }
 
   // ── PITCHER MATCHUP ───────────────────────────────────────────
@@ -1284,8 +1297,9 @@ function hrProb(b,park,wx,pit,order){
   return Math.max(minFloor, Math.min(32, p * 100));
 }
 
-// Apply streak multiplier after base hrProb calculation
-function hrProbWithStreak(batter, park, wx, pit, order) {
+// Model output with the streak multiplier, before calibration. Logged
+// alongside the calibrated number so the curve can be refit later.
+function hrProbUncalibrated(batter, park, wx, pit, order) {
   let p = hrProb(batter, park, wx, pit, order);
   const name = batter._name;
   if (name && STREAK[name]) {
@@ -1298,18 +1312,34 @@ function hrProbWithStreak(batter, park, wx, pit, order) {
     if (s.slg > 0.600 && s.ab >= 15) p *= 1.05;
   }
 
-  // ── CALIBRATION CORRECTION (based on 28-day accuracy data, 1893 predictions) ──
-  // 20%+ tier: model avg 22.4% but actual 15.7% → still overconfident, reduce further
-  // ── CALIBRATION — 54-day, 3,727 predictions ──────────────────
-  // 20%+:   model avg 22.2% → actual 16.4% → ×0.74 corrects
-  // 15-19%: model avg 17.3% → actual 17.6% → accurate, no adjustment
-  // 10-14%: model avg 12.4% → actual 12.9% → accurate, no adjustment
-  // 5-9%:   model avg  7.7% → actual  9.2% → statistically higher but
-  //         removing boost — signal play hit rate more predictive than raw tier
-  const pRaw = p;
-  if (pRaw >= 20) p *= 0.74; // brings 22.2% → 16.4% ✓
+  return p;
+}
 
-  return Math.min(35, p);
+// ── CALIBRATION ───────────────────────────────────────────────
+// One smooth, monotone curve applied to every probability: piecewise
+// linear between [model %, calibrated %] knots.
+// It replaces a flat x0.74 that applied only at 20%+, which sent a 20.0%
+// hitter to 14.8% while a 19.9% hitter stayed at 19.9% -- the best bats
+// ranked below the second tier.
+// HR_CALIB_KNOTS is written by scripts/backtest/run.js (isotonic fit on
+// the backfilled seasons); see data/backtest/results.json for the fit.
+const HR_CALIB_KNOTS = [[0,0],[17,17],[22.2,17.8]];
+function calibrateHR(p) {
+  const k = HR_CALIB_KNOTS;
+  if (!(p > k[0][0])) return k[0][0] > 0 ? k[0][1] * p / k[0][0] : k[0][1];
+  for (let i = 1; i < k.length; i++) {
+    if (p <= k[i][0]) {
+      const [x0, y0] = k[i-1], [x1, y1] = k[i];
+      return y0 + (y1 - y0) * (p - x0) / (x1 - x0);
+    }
+  }
+  // Past the last knot keep the final slope, so the top bats stay ranked.
+  const [xa, ya] = k[k.length-2], [xb, yb] = k[k.length-1];
+  return yb + (yb - ya) / (xb - xa) * (p - xb);
+}
+
+function hrProbWithStreak(batter, park, wx, pit, order) {
+  return Math.min(35, calibrateHR(hrProbUncalibrated(batter, park, wx, pit, order)));
 }
 
 // ── SAFE FETCH with timeout ──
@@ -2267,7 +2297,7 @@ function renderForecast(silent=false) {
     const exp  = rows.reduce((s,r) => s+r.hrp/100, 0);
     const park = getPark(g.home)||{};
     const wx   = WX[g.home]||{};
-    const diff = wx.wd ? ((wx.wd-(park.orient||180))%360+360)%360 : 180;
+    const diff = wx.wd != null ? ((wx.wd-(park.orient||180))%360+360)%360 : 180;
     const windOut = diff>135&&diff<225;
     const ou   = GAME_ODDS[g.away+'@'+g.home]?.ou||0;
     return { g, exp, park, windOut, ou, rows };
@@ -2883,8 +2913,11 @@ function getSignals(r) {
   // plate (blowing in); diff near 180 (sourced from behind home plate) is
   // what carries the ball OUT toward center field.
   const orient  = park.orient || 180;
-  const diff    = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
-  const windOut = diff>135 && diff<225;
+  // wx.wd === 0 is a real reading (due north); only a missing direction
+  // or a park with no known orientation means "no wind signal".
+  const hasWind = wx.wd != null && park.orient != null;
+  const diff    = hasWind ? ((wx.wd-orient)%360+360)%360 : 0;
+  const windOut = hasWind && diff>135 && diff<225;
 
   // ── SIGNAL 1: Park (hitter park PF≥1.05 OR career park boost) ──
   const parkActive = (park.f||1) >= 1.05 || ps?.flag === 'boost';
@@ -3677,7 +3710,7 @@ function expand(i){
   // (just "12mph · 75°F"), so windEdge always fell through to "Neutral
   // wind" regardless of real conditions.
   const wOrient = pk.orient || 180;
-  const wDiff = w.wd ? ((w.wd - wOrient) % 360 + 360) % 360 : null;
+  const wDiff = w.wd != null ? ((w.wd - wOrient) % 360 + 360) % 360 : null;
   const windState = wDiff===null ? null : (wDiff>135&&wDiff<225 ? 'out' : wDiff<45||wDiff>315 ? 'in' : 'cross');
   const wxd=pk.roof==='dome'?'Dome (climate controlled)':w.ws?`${Math.round(w.ws)}mph${windState&&windState!=='cross'?' '+windState:''} · ${Math.round(w.t||70)}°F`:'—';
   const pitHand = pit.hand||'R';
@@ -5231,7 +5264,7 @@ function calcHRWeather(team, wx, park) {
   const orient   = park?.orient;
   let windCarry  = 0;
   const windSpeed = wx.ws || wx.w || 0;
-  const windDir   = wx.wd || wx.d || 180;
+  const windDir   = wx.wd ?? wx.d ?? 180;
   if (orient !== undefined && windSpeed > 0) {
     const diff = ((windDir - orient) % 360 + 360) % 360;
     // diff near 0 means wind is sourced from near the park's own CF
@@ -5876,7 +5909,7 @@ function openPlayerModal(name) {
   const parkEdge = (pk.f||1)>=1.05?`📈 +${(((pk.f||1)-1)*100).toFixed(0)}% hitter park`:(pk.f||1)<=0.95?`📉 ${(((pk.f||1)-1)*100).toFixed(0)}% pitcher park`:'— Neutral';
   const wxd = pk.roof==='dome'?'Dome':w.ws?`${Math.round(w.ws)}mph`:null;
   const orient = pk.orient||180;
-  const diff = w.wd ? ((w.wd-orient)%360+360)%360 : 180;
+  const diff = w.wd != null ? ((w.wd-orient)%360+360)%360 : 180;
   const windOut = diff>135&&diff<225;
   const windEdge = pk.roof==='dome'?'🏟 Dome':w.ws?(windOut?`💨 ${Math.round(w.ws)}mph out`:`${Math.round(w.ws)}mph cross/in`):'— No wind data';
   const hc = r.hrp>=15?'var(--green)':r.hrp>=10?'var(--teal)':r.hrp>=7?'var(--amber)':'var(--t2)';
@@ -6101,7 +6134,7 @@ function calcGameRunProjection(g) {
 
     // Wind blowing out — small bonus
     const orient = park.orient || 180;
-    const diff   = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : 180;
+    const diff   = wx.wd != null ? ((wx.wd - orient) % 360 + 360) % 360 : 180;
     const windOut = diff > 135 && diff < 225;
     if (park.roof !== 'dome' && wx.ws && windOut && wx.ws >= 8) {
       runs += Math.min(0.3, wx.ws * 0.015); // max +0.3 for wind
@@ -6141,7 +6174,7 @@ function openGameModal(gamePk) {
 
   // Wind
   const orient = park.orient || 180;
-  const windDiff = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : null;
+  const windDiff = wx.wd != null ? ((wx.wd - orient) % 360 + 360) % 360 : null;
   const windDir = windDiff !== null
     ? (windDiff > 135 && windDiff < 225 ? '↑ out' : windDiff < 45 || windDiff > 315 ? '↓ in' : '→ cross')
     : null;
@@ -6439,7 +6472,7 @@ function renderToday() {
 
       // Park + weather icons
       const orient = park.orient||180;
-      const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+      const diff   = wx.wd != null ? ((wx.wd-orient)%360+360)%360 : 180;
       const windOut = diff>135&&diff<225;
       const icons  = [(park.f||1)>=1.05?'📈':'', park.roof==='dome'?'🏟':'', windOut&&(wx.ws||0)>=8?'💨':''].filter(Boolean).join('');
 
@@ -6824,7 +6857,7 @@ function calcF5Projection(pit, side, g, oppTeam) {
 
   // Wind adjustment
   const orient = park.orient || 180;
-  const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+  const diff   = wx.wd != null ? ((wx.wd-orient)%360+360)%360 : 180;
   const windOut = diff>135&&diff<225;
   if (park.roof!=='dome' && wx.ws && windOut && wx.ws>=8) runsAllowed += 0.15;
 
@@ -6876,7 +6909,7 @@ function calcFullGameProjection(pit, side, g, oppTeam) {
 
   // Wind effect carries through full game
   const orient = park.orient || 180;
-  const diff   = wx.wd ? ((wx.wd-orient)%360+360)%360 : 180;
+  const diff   = wx.wd != null ? ((wx.wd-orient)%360+360)%360 : 180;
   const windOut = diff>135&&diff<225;
   if (park.roof!=='dome' && wx.ws && windOut && wx.ws>=8) totalRuns += 0.20;
 
@@ -7255,7 +7288,7 @@ function renderGames(){
     const hasLU=g.awayLineup.length||g.homeLineup.length;
     const pill=hasLU?'<span class="gpill plive">✓ Lineup</span>':'<span class="gpill ppend">⏳ Projected</span>';
     const orient = park.orient || 180;
-    const windDiff = wx.wd ? ((wx.wd - orient) % 360 + 360) % 360 : null;
+    const windDiff = wx.wd != null ? ((wx.wd - orient) % 360 + 360) % 360 : null;
     const windDir = windDiff !== null
       ? (windDiff > 135 && windDiff < 225 ? '↑ out' : windDiff < 45 || windDiff > 315 ? '↓ in' : '→ cross')
       : null;

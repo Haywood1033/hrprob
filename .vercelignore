@@ -1,0 +1,5 @@
+scripts/
+tests/
+_archive/
+data/backtest/cache/
+data/backtest/rows.jsonl.gz
