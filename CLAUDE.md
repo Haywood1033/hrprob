@@ -21,8 +21,11 @@ A full-stack MLB home run probability engine deployed at **hrprob-9rx8.vercel.ap
 │   ├── statcast.js       # Baseball Savant CSV fetch and parse
 │   ├── streaks.js        # MLB Stats API game logs and streak calculation
 │   ├── splits.js         # Platoon splits, pitcher splits, park splits
-│   └── bullpen.js        # Team bullpen ERA and HR/9
+│   ├── bullpen.js        # Team bullpen ERA and HR/9
+│   └── backtest.js       # Resumable backfill + scoring on the deployed site (see Backtest)
 ├── lib/
+│   ├── appSandbox.js     # Loads app.html's script in a vm (tests, backtest)
+│   ├── backtest/         # sources, savant (aggregation), features (leak-free), score, metrics
 │   ├── weather.js        # Open-Meteo weather fetch — temp, wind, pressure, humidity
 │   └── statcast.js       # Statcast data builder (CSV parsing, batter/pitcher stats)
 └── vercel.json           # Rewrite rules — /app → app.html
@@ -37,7 +40,7 @@ A full-stack MLB home run probability engine deployed at **hrprob-9rx8.vercel.ap
 ### Deployment
 - **Vercel** — auto-deploys from GitHub main branch
 - **Supabase** — `daily_predictions` table stores predictions, signal lock, results
-- Environment variables needed: `SUPABASE_URL`, `SUPABASE_KEY`
+- Environment variables: `DATABASE_URL` (Postgres connection string, required); `BACKTEST_KEY` (optional — when set, POST /api/backtest needs it in `x-backtest-key`)
 
 ---
 
@@ -54,11 +57,15 @@ Base probability from Statcast metrics, then adjusted for:
 - Launch angle (22-32° HR corridor = bonus)
 - Bullpen exposure
 
-**Calibration** (54-day, 3,727 predictions):
-- 20%+: ×0.74
-- 15-19%: no adjustment
-- 10-14%: no adjustment
-- 5-9%: no adjustment
+**Calibration** (`calibrateHR()`, knots in `HR_CALIB_KNOTS`):
+One smooth monotone curve applied to every probability, fitted on the
+backtest (87,462 batter-games, 2025 + 2026). The uncalibrated model averaged
+6.2% against an 11.6% actual rate — far too low for ordinary hitters, about
+right from 17% up — so the curve lifts the bottom and middle and barely moves
+the top. `hrProbUncalibrated()` is the pre-curve number; rows carry both
+(`hrp`, `hrpRaw`). Refit with `node scripts/backtest/run.js --apply`; never
+reintroduce a per-tier multiplier (the old 20%+ ×0.74 inverted rankings).
+Sharp Plays bars moved with the scale: 18% (was 14%) and 17% fades (was 12%).
 
 ### Signal System (8 signals, `getSignals()` ~line 2687)
 1. 🏟 Hitter Park — park factor ≥1.05
@@ -184,7 +191,36 @@ historyLoaded     // Flag: history has been loaded from DB
 
 ---
 
+## Backtest
+`lib/backtest/` rebuilds every starting batter's inputs from Statcast data
+dated before each game and scores them with the app's own `hrProb()`.
+- Local: `node scripts/backtest/fetch.js 2025 2026` then `run.js` (file cache
+  under `data/backtest/cache`, gitignored). Writes `data/backtest/results.json`
+  and `rows.jsonl.gz`.
+- Deployed: Accuracy tab → Refresh backtest, which loops POST `/api/backtest`
+  `{action:'refresh'}` until done, then `{action:'run'}`. Cache lives in the
+  `backtest_cache` table.
+- Not replayed: platoon/pitcher splits, H2H, bullpen, pitch-type edge. xERA is
+  a proxy from xwOBA allowed.
+- Findings so far: AUC ~0.60; daily top-5 hit rate ~22% vs 11.6% base;
+  weather adds almost nothing measurable; the ❄️ ×0.90 cold penalty points the
+  wrong way (cold batters homer 10.9% vs 11.1% unflagged).
+
+## Results grading (api/history.js)
+A prediction is a hit or miss only if the player came to the plate; otherwise
+it is void (`hit: null, dnp: true`). A date is not finalised while a box score
+failed or a game is not final (retried; forced after 3 days). Names match on
+`normName()`. `prediction_features` stores the full slate with model inputs
+(`GET /api/history?features=YYYY-MM-DD`). Records with `gradeV < 2` were graded
+under the old rules and are regraded a few per visit.
+
 ## Weather System
+In `hrProb()`: wind is a continuous carry term (−cos of wind-vs-CF bearing),
+temperature applies regardless of wind, pressure is compared with the park's
+standard pressure for its elevation, humidity is a small term. Retractable
+parks are weather-neutral unless `wx.roofOpen === true` (nothing sets it yet).
+`wx.wd === 0` is due north — never test wind direction for truthiness.
+
 Two separate weather fetch paths (known inconsistency):
 1. **`lib/weather.js`** — called from `api/slate.js`, returns `{ t, w, d, c, l, s, dome, pres, hum }`
 2. **Frontend `loadWeather()`** in app.html — fetches Open-Meteo directly, returns `{ t, ws, wd, dome, pres, hum, c }`
@@ -212,12 +248,12 @@ daily_predictions (
 ## Sharp Plays Filter (buildSharpPlaysHTML, rendered on Today)
 Triple convergence — all three must be true:
 - 5+ signals
-- 14%+ HR probability (locked)
+- 18%+ HR probability (locked, calibrated scale)
 - xERA ≥4.80 OR HR/9 ≥1.40
 
 Max 5 plays shown. Sorted: Elite → All-Star → Value → conviction score within tier.
 
-Fades section: players with 4+ signals / 12%+ HR who almost qualified but have a red flag (3+ consecutive HR days, pitcher whiff% ≥30%, facing ace with <6 signals).
+Fades section: players with 4+ signals / 17%+ HR who almost qualified but have a red flag (3+ consecutive HR days, pitcher whiff% ≥30%, facing ace with <6 signals).
 
 ---
 
