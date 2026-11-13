@@ -65,9 +65,12 @@ function add(tot, line) { for (const k of SUM_KEYS) tot[k] += line[k] || 0; }
 /**
  * days: [{ date, games:[aggregateDay() output] }] for ONE season, any order.
  * weather: optional (pk) => wx object or null.
+ * batSide: optional (batterId) => 'L' | 'R' | 'S' from the roster. Without
+ *   it the side the batter hit from in that game is used, which mislabels
+ *   switch hitters (they then get a platoon multiplier the live app skips).
  * Returns rows sorted by date.
  */
-function buildRows(days, weather = () => null) {
+function buildRows(days, weather = () => null, batSide = () => null) {
   const bat = new Map(), pit = new Map(), logs = new Map(), rows = [];
   const sorted = [...days].sort((a, b) => a.date < b.date ? -1 : 1);
   for (const day of sorted) {
@@ -81,7 +84,7 @@ function buildRows(days, weather = () => null) {
           rows.push({
             date: day.date, pk: g.pk, home: g.home, away: g.away, team: g[side], side,
             batter: id, pitcher: spId, order: i + 1,
-            b: batterFeatures(bat.get(id), b.stand),
+            b: batterFeatures(bat.get(id), batSide(id) || b.stand),
             p: pitcherFeatures(pit.get(spId), sp && sp.hand),
             streak: streakFeatures(logs.get(id) || []),
             wx: weather(g.pk) || null,
